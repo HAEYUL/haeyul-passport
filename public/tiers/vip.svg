@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="해율 VIP 등급 아이콘">
+  <circle cx="50" cy="50" r="48" fill="#FDF6E3"/>
+  <circle cx="50" cy="50" r="46" fill="none" stroke="#B8860B" stroke-width="3"/>
+  <rect x="46" y="64" width="8" height="18" rx="3" fill="#8B6A4A"/>
+  <circle cx="50" cy="48" r="24" fill="#2D5A3D"/>
+  <circle cx="39" cy="42" r="13" fill="#3D7A55"/>
+  <circle cx="62" cy="44" r="11" fill="#3D7A55"/>
+  <path d="M50 14 L53.5 22.5 L62.5 23.3 L55.7 29.4 L57.8 38.2 L50 33.3 L42.2 38.2 L44.3 29.4 L37.5 23.3 L46.5 22.5 Z" fill="#B8860B"/>
+</svg>

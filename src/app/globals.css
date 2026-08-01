@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FAFAF5;
+  --foreground: #2C2C2C;
+  --primary: #2D5A3D;
+  --primary-hover: #245032;
+  --accent: #B8860B;
+  --border: #D4D0C8;
+  --muted: #8C8C80;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-noto-sans-kr);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* 다크 모드 비활성화 — 50~70대 고객을 위해 밝은 화면만 사용 */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Noto Sans KR', Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 모바일 입력 필드 확대 방지 */
+input, select, textarea {
+  font-size: 17px;
+}
+
+/* 버튼 터치 영역 최소 크기 */
+button {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+
+/* 스크롤바 숨기기 (모바일 UX) */
+::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
+}
+
+/* 포커스 스타일 */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* 체크박스 크기 */
+input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
 }

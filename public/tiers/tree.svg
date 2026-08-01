@@ -1,0 +1,7 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="나무 등급 아이콘">
+  <circle cx="50" cy="50" r="48" fill="#DDEBE0"/>
+  <rect x="46" y="62" width="8" height="20" rx="3" fill="#8B6A4A"/>
+  <circle cx="50" cy="46" r="26" fill="#2D5A3D"/>
+  <circle cx="36" cy="40" r="14" fill="#3D7A55"/>
+  <circle cx="64" cy="42" r="12" fill="#3D7A55"/>
+</svg>

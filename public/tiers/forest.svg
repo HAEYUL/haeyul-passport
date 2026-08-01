@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="숲 등급 아이콘">
+  <circle cx="50" cy="50" r="48" fill="#D6E6DA"/>
+  <rect x="24" y="58" width="6" height="16" rx="2" fill="#8B6A4A"/>
+  <circle cx="27" cy="44" r="16" fill="#6FA37F"/>
+  <rect x="70" y="58" width="6" height="16" rx="2" fill="#8B6A4A"/>
+  <circle cx="73" cy="44" r="16" fill="#6FA37F"/>
+  <rect x="46" y="64" width="8" height="20" rx="3" fill="#7A5638"/>
+  <circle cx="50" cy="44" r="22" fill="#2D5A3D"/>
+</svg>

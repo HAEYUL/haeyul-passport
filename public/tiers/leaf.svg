@@ -1,0 +1,8 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="푸른잎 등급 아이콘">
+  <circle cx="50" cy="50" r="48" fill="#E3F0E6"/>
+  <ellipse cx="50" cy="78" rx="16" ry="4" fill="#D9CBB0"/>
+  <line x1="50" y1="76" x2="50" y2="38" stroke="#2D5A3D" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="34" cy="54" rx="16" ry="9" fill="#3D7A55" transform="rotate(-30 34 54)"/>
+  <ellipse cx="66" cy="54" rx="16" ry="9" fill="#3D7A55" transform="rotate(30 66 54)"/>
+  <ellipse cx="50" cy="36" rx="12" ry="16" fill="#2D5A3D"/>
+</svg>
