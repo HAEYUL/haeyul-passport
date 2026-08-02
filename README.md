@@ -118,11 +118,15 @@ npm run dev
 
 ## Vercel 배포 방법
 
+현재 운영 주소: **[haeyul-passport.vercel.app](https://haeyul-passport.vercel.app)**
+
 1. GitHub에 이 저장소를 푸시합니다.
 2. [vercel.com](https://vercel.com)에서 **New Project**를 클릭합니다.
 3. GitHub 저장소를 연결합니다.
 4. 환경변수를 설정합니다 (`.env.example` 참고).
 5. **Deploy**를 클릭합니다.
+
+> `vercel.json`에 `"framework": "nextjs"`를 명시해뒀습니다. Vercel 프로젝트를 새로 만들 때 프레임워크가 자동으로 "Next.js"로 인식되지 않으면(예: "Other"로 잡히면) 정적 파일로만 서빙되어 모든 페이지가 404가 나므로, 대시보드의 Project Settings > General > Framework Preset이 "Next.js"인지 꼭 확인하세요.
 
 ---
 
