@@ -307,6 +307,14 @@ export default function PassportHome() {
               내 정보
             </button>
             <button
+              onClick={() => {
+                window.location.href = '/guide';
+              }}
+              className="text-sm text-[#AAA] underline"
+            >
+              여권 설명서
+            </button>
+            <button
               onClick={handleLogout}
               className="text-sm text-[#AAA] underline"
               id="btn-logout"
