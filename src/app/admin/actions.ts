@@ -1,7 +1,8 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getTodayKST } from '@/lib/utils';
+import { getTodayKST, normalizePhone, isValidPhone } from '@/lib/utils';
+import { AUDIT_ACTION } from '@/lib/constants';
 import {
   setAdminSession,
   getAdminSession,
@@ -344,6 +345,138 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
     };
   } catch (error) {
     console.error('getCustomerDetail 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 고객 정보 수정 / 삭제
+// ============================================================
+
+export interface UpdateCustomerInput {
+  name: string;
+  phone: string;
+  birthDate: string | null;
+  marketingConsent: boolean;
+  visitCount: number;
+}
+
+/**
+ * 고객 정보 수정
+ * visit_count를 바꾸면 DB 트리거가 자동으로 등급/선물 재계산을 처리합니다.
+ */
+export async function updateCustomer(
+  customerId: string,
+  input: UpdateCustomerInput
+): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const name = input.name.trim();
+    if (!name) {
+      return { success: false, error: '성함을 입력해 주세요.' };
+    }
+
+    if (!isValidPhone(input.phone)) {
+      return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+    const phone = normalizePhone(input.phone);
+
+    if (!Number.isInteger(input.visitCount) || input.visitCount < 0) {
+      return { success: false, error: '방문 횟수는 0 이상의 정수여야 합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before, error: fetchError } = await supabase
+      .from('customers')
+      .select()
+      .eq('id', customerId)
+      .single();
+
+    if (fetchError || !before) {
+      return { success: false, error: '고객 정보를 찾을 수 없습니다.' };
+    }
+
+    const { data: updated, error } = await supabase
+      .from('customers')
+      .update({
+        name,
+        phone,
+        birth_date: input.birthDate || null,
+        marketing_consent: input.marketingConsent,
+        visit_count: input.visitCount,
+      })
+      .eq('id', customerId)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: '이미 다른 회원이 사용 중인 전화번호입니다.' };
+      }
+      return { success: false, error: '수정 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.CUSTOMER_UPDATE,
+      target_type: 'customer',
+      target_id: customerId,
+      before_data: before,
+      after_data: updated,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('updateCustomer 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 고객 삭제 — 방문기록/선물/동의기록도 함께 삭제됩니다(CASCADE).
+ */
+export async function deleteCustomer(customerId: string): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before, error: fetchError } = await supabase
+      .from('customers')
+      .select()
+      .eq('id', customerId)
+      .single();
+
+    if (fetchError || !before) {
+      return { success: false, error: '고객 정보를 찾을 수 없습니다.' };
+    }
+
+    const { error } = await supabase.from('customers').delete().eq('id', customerId);
+
+    if (error) {
+      return { success: false, error: '삭제 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.CUSTOMER_DELETE,
+      target_type: 'customer',
+      target_id: customerId,
+      before_data: before,
+      after_data: null,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('deleteCustomer 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
