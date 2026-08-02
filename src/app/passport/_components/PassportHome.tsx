@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
@@ -18,7 +18,6 @@ export default function PassportHome() {
   const [newRewards, setNewRewards] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
-  const autoRegisterAttempted = useRef(false);
 
   const refreshPassportData = useCallback(async () => {
     const result = await getPassportData();
@@ -57,22 +56,11 @@ export default function PassportHome() {
 
   useEffect(() => {
     async function init() {
-      const result = await refreshPassportData();
+      await refreshPassportData();
       setLoading(false);
-
-      // 로그인 상태에서 QR로 들어왔을 때, 오늘 첫 방문이면 버튼 없이 바로 기록합니다.
-      if (
-        result.success &&
-        result.data &&
-        !result.data.todayVisited &&
-        !autoRegisterAttempted.current
-      ) {
-        autoRegisterAttempted.current = true;
-        handleVisit();
-      }
     }
     init();
-  }, [refreshPassportData, handleVisit]);
+  }, [refreshPassportData]);
 
   async function handleLogout() {
     await logout();
@@ -229,20 +217,46 @@ export default function PassportHome() {
           </div>
         )}
 
-        {/* 방문 기록 상태 (버튼 없이 자동으로 기록됩니다) */}
-        {visitLoading && (
-          <div className="text-center py-3 px-4 bg-[#F5F5EC] rounded-2xl">
-            <p className="text-[15px] text-[#8C8C80] flex items-center justify-center gap-2">
-              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              오늘의 방문을 기록하는 중...
-            </p>
-          </div>
+        {/* 방문 확인 및 기록 */}
+        {!data.todayVisited && !visitMessage && (
+          data.qrVerified ? (
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center space-y-4">
+              <p className="text-[15px] text-[#2D5A3D] leading-relaxed">
+                해율 매장 방문이 확인되었습니다.<br />
+                오늘의 방문을 기록하시겠습니까?
+              </p>
+              <button
+                onClick={handleVisit}
+                disabled={visitLoading}
+                className="w-full py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
+                           shadow-md hover:bg-[#245032] active:scale-[0.98]
+                           transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
+                id="btn-visit"
+              >
+                {visitLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    기록 중...
+                  </span>
+                ) : (
+                  '해율 방문 기록하기'
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="text-center py-4 px-4 bg-[#F5F5EC] rounded-2xl">
+              <p className="text-[15px] text-[#8C8C80] leading-relaxed">
+                매장 방문 확인이 필요합니다.<br />
+                매장의 QR코드를 다시 스캔해 주세요.
+              </p>
+            </div>
+          )
         )}
 
-        {!visitLoading && data.todayVisited && !visitMessage && (
+        {data.todayVisited && !visitMessage && (
           <div className="text-center py-3 px-4 bg-[#F5F5EC] rounded-2xl">
             <p className="text-[15px] text-[#8C8C80]">
               ✅ 오늘의 방문이 이미 기록되었습니다.

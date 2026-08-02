@@ -52,6 +52,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | Supabase 대시보드 > Settings > API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | 같은 위치 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | 같은 위치 (비공개) |
+| `VISIT_QR_KEY` | 매장 QR 전용 값 (직접 정하는 임의의 문자열) | "매장 QR" 절 참고 |
 
 ### 4. Supabase 데이터베이스 설정
 
@@ -83,6 +84,20 @@ npm run dev
 5. 지역(Region): **Northeast Asia (Tokyo)** 또는 가장 가까운 지역을 선택하세요.
 6. **Create new project**를 클릭하면 1~2분 내에 생성됩니다.
 7. 프로젝트가 생성되면 **Settings > API**에서 URL과 키를 확인합니다.
+
+---
+
+## 매장 QR
+
+`VISIT_QR_KEY`에 설정한 값을 QR 주소에 `?key=값`으로 붙여서 인쇄합니다.
+
+```
+https://haeyul-passport.vercel.app/visit?key=여기에_VISIT_QR_KEY_값
+```
+
+- `key`가 맞으면(`src/middleware.ts`가 확인) 10분짜리 쿠키를 남기고, 전자여권 홈에 "해율 매장 방문이 확인되었습니다 / 오늘의 방문을 기록하시겠습니까?"와 함께 **"해율 방문 기록하기"** 버튼이 나타납니다. 이 버튼을 눌러야 방문이 기록됩니다.
+- `key`가 없거나 만료됐으면(예: QR 없이 예전 링크로 직접 접속) 버튼 대신 "매장의 QR코드를 다시 스캔해 주세요" 안내만 표시되고, 방문 기록 자체가 서버에서 거부됩니다(`registerVisit`에서 재검증).
+- 이건 완벽한 보안 장치는 아니라 "그냥 URL을 검색해서 들어오는 경우"를 걸러주는 정도입니다 — QR을 사진 찍어간 사람은 여전히 우회할 수 있습니다. 값을 바꾸려면 `VISIT_QR_KEY`를 새로 정하고, QR 이미지를 다시 만들어서 매장에 붙은 실물을 교체해야 합니다.
 
 ---
 

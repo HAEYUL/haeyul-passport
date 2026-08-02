@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizePhone, isValidPhone, getTodayKST } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
+import { isQrVerified } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
 
@@ -232,6 +233,7 @@ export interface PassportData {
   availableRewards: number;
   hasRewardToUse: boolean;
   tier: VisitTierInfo;
+  qrVerified: boolean;
 }
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
@@ -293,6 +295,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         availableRewards,
         hasRewardToUse: availableRewards > 0,
         tier: getVisitTierInfo(customer.visit_count),
+        qrVerified: await isQrVerified(),
       },
     };
   } catch (error) {
@@ -319,6 +322,13 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
     const session = await getSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    if (!(await isQrVerified())) {
+      return {
+        success: false,
+        error: '매장 방문 확인이 필요합니다.\nQR코드를 다시 스캔해 주세요.',
+      };
     }
 
     const supabase = createAdminClient();
