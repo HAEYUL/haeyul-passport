@@ -109,7 +109,7 @@ export default function PassportHome() {
       <div className="w-full max-w-sm mx-auto space-y-6">
         {/* 헤더 */}
         <header className="text-center space-y-3">
-          <BrandLogo height={56} textClassName="text-xl" />
+          <BrandLogo height={56} textClassName="text-2xl" />
           <p className="text-sm text-[#AAA]">해율 자연의 흐름 전자여권</p>
         </header>
 
@@ -121,7 +121,7 @@ export default function PassportHome() {
                 {data.customer.name} 고객님
               </h1>
               <p className="text-sm text-[#AAA] mt-1">
-                {data.customer.customer_number}
+                [해율 여권번호] {data.customer.customer_number}
               </p>
             </div>
             <Image
@@ -145,6 +145,11 @@ export default function PassportHome() {
                 {data.customer.visit_count}회
               </span>
             </div>
+            {data.rewardProgressMessage && (
+              <p className="text-right text-xs text-[#AAA] -mt-2">
+                {data.rewardProgressMessage}
+              </p>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-[15px] text-[#8C8C80]">최근 방문일</span>
               <span className="text-base font-medium text-[#555]">
@@ -172,7 +177,7 @@ export default function PassportHome() {
             <div className="pt-2">
               <div className="flex justify-between text-xs text-[#AAA] mb-1">
                 <span>{data.tier.label}</span>
-                <span>다음 등급까지 {data.tier.visitsUntilNext}회</span>
+                <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회 남았습니다.</span>
               </div>
               <div className="w-full h-3 bg-[#F0EDE6] rounded-full overflow-hidden">
                 <div
@@ -259,7 +264,10 @@ export default function PassportHome() {
         {data.todayVisited && !visitMessage && (
           <div className="text-center py-3 px-4 bg-[#F5F5EC] rounded-2xl">
             <p className="text-[15px] text-[#8C8C80]">
-              ✅ 오늘의 방문이 이미 기록되었습니다.
+              ✅ 오늘의 자연이 이미 기록되었습니다.
+            </p>
+            <p className="text-sm text-[#AAA] mt-1">
+              방문 기록은 하루에 한 번만 가능합니다.
             </p>
           </div>
         )}
@@ -296,8 +304,10 @@ export default function PassportHome() {
         {/* 하단 문구 + 로그아웃 */}
         <footer className="pt-4 border-t border-[#E8E4DA] space-y-4">
           <p className="text-center text-sm text-[#B0B0A0] leading-relaxed">
-            한 번의 방문이 한 장의 기록이 되고,<br />
-            그 기록들이 모여 자연의 흐름이 됩니다.
+            봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
+            가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
+            해율을 찾아주시는 한 걸음 한 걸음이<br />
+            자연의 흐름을 이어갑니다. 감사합니다.
           </p>
           <div className="flex justify-center gap-4">
             <button

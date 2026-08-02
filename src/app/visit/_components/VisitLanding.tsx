@@ -26,7 +26,7 @@ export default function VisitLanding() {
       <div className="w-full max-w-sm text-center space-y-8">
         {/* 상단: 로고 + 타이틀 */}
         <header className="space-y-4">
-          <BrandLogo height={72} textClassName="text-2xl" />
+          <BrandLogo height={72} textClassName="text-3xl" />
           <div>
             <h1 className="text-2xl font-bold text-[#2D5A3D] leading-tight">
               해율 자연의 흐름 전자여권

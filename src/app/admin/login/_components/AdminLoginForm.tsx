@@ -30,7 +30,7 @@ export default function AdminLoginForm() {
     <main className="flex flex-col items-center justify-center min-h-screen px-6 py-12">
       <div className="w-full max-w-sm space-y-8">
         <header className="text-center space-y-3">
-          <BrandLogo height={48} textClassName="text-lg" />
+          <BrandLogo height={48} textClassName="text-xl" />
           <h1 className="text-xl font-bold text-[#2D5A3D]">관리자 로그인</h1>
         </header>
 

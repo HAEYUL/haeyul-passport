@@ -10,15 +10,16 @@ export interface TierDefinition {
   label: string;
   minVisits: number;
   iconSrc: string;
+  description: string;
 }
 
 // 낮은 등급부터 순서대로 정의합니다.
 const TIER_DEFINITIONS: TierDefinition[] = [
-  { key: 'sprout', label: '새싹', minVisits: 1, iconSrc: '/tiers/sprout.svg' },
-  { key: 'leaf', label: '푸른잎', minVisits: 5, iconSrc: '/tiers/leaf.svg' },
-  { key: 'tree', label: '나무', minVisits: 10, iconSrc: '/tiers/tree.svg' },
-  { key: 'forest', label: '숲', minVisits: 20, iconSrc: '/tiers/forest.svg' },
-  { key: 'vip', label: '해율 VIP', minVisits: 30, iconSrc: '/tiers/vip.svg' },
+  { key: 'sprout', label: '새싹', minVisits: 1, iconSrc: '/tiers/sprout.svg', description: '자연과 첫 인연을 시작한 고객' },
+  { key: 'leaf', label: '푸른잎', minVisits: 5, iconSrc: '/tiers/leaf.svg', description: '해율을 다시 찾아주시는 고객' },
+  { key: 'tree', label: '나무', minVisits: 10, iconSrc: '/tiers/tree.svg', description: '해율과 함께 자라가는 단골 고객' },
+  { key: 'forest', label: '숲', minVisits: 20, iconSrc: '/tiers/forest.svg', description: '해율의 소중한 동행' },
+  { key: 'vip', label: '해율 VIP', minVisits: 30, iconSrc: '/tiers/vip.svg', description: '가장 오랜 시간 자연을 함께한 고객' },
 ];
 
 export const VIP_MESSAGE =
@@ -39,6 +40,8 @@ export interface VisitTierInfo {
   minVisits: number;
   /** 다음 등급까지 남은 방문 횟수. 최고 등급(해율 VIP)이면 null. */
   visitsUntilNext: number | null;
+  /** 다음 등급 이름. 최고 등급(해율 VIP)이면 null. */
+  nextTierLabel: string | null;
   /** 현재 등급 구간 내 진행률(0~100). 최고 등급이면 100. */
   progressPercent: number;
   isMaxTier: boolean;
@@ -68,6 +71,7 @@ export function getVisitTierInfo(visitCount: number): VisitTierInfo {
       iconSrc: current.iconSrc,
       minVisits: current.minVisits,
       visitsUntilNext: null,
+      nextTierLabel: null,
       progressPercent: 100,
       isMaxTier: true,
     };
@@ -86,6 +90,7 @@ export function getVisitTierInfo(visitCount: number): VisitTierInfo {
     iconSrc: current.iconSrc,
     minVisits: current.minVisits,
     visitsUntilNext: Math.max(0, next.minVisits - safeVisits),
+    nextTierLabel: next.label,
     progressPercent,
     isMaxTier: false,
   };

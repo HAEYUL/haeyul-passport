@@ -4,16 +4,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { getRewards, confirmRewardUse, type RewardItem } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 
-function StatusBadge({ status }: { status: RewardItem['status'] }) {
+function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isExpired: boolean }) {
   if (status === 'used') {
     return (
-      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#8C8C80] border border-[#E0E0D0]">
+      <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#8C8C80] border border-[#E0E0D0]">
         사용 완료
       </span>
     );
   }
+  if (isExpired) {
+    return (
+      <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#AAA] border border-[#E0E0D0]">
+        유효기간경과
+      </span>
+    );
+  }
   return (
-    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFFDF0] text-[#B8860B] border border-[#E8D88C]">
+    <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFFDF0] text-[#B8860B] border border-[#E8D88C]">
       사용 가능
     </span>
   );
@@ -119,7 +126,7 @@ export default function RewardsList() {
                       </p>
                     )}
                   </div>
-                  <StatusBadge status={reward.status} />
+                  <StatusBadge status={reward.status} isExpired={reward.isExpired} />
                 </div>
 
                 <div className="text-xs text-[#AAA] space-y-0.5">
@@ -129,7 +136,7 @@ export default function RewardsList() {
                   )}
                 </div>
 
-                {reward.status !== 'used' && (
+                {reward.status !== 'used' && !reward.isExpired && (
                   <button
                     onClick={() => handleConfirm(reward.id)}
                     disabled={actionLoadingId === reward.id}

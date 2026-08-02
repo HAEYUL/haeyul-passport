@@ -38,7 +38,7 @@ export default function PassportGuide() {
 
         {/* 타이틀 */}
         <header className="text-center space-y-3">
-          <BrandLogo height={48} textClassName="text-lg" />
+          <BrandLogo height={48} textClassName="text-xl" />
           <div>
             <h1 className="text-xl font-bold text-[#2D5A3D]">해율 여권 설명서</h1>
             <p className="mt-1 text-[15px] text-[#8C8C80]">
@@ -60,7 +60,10 @@ export default function PassportGuide() {
                 <div key={tier.key} className="flex items-center gap-3 px-4 py-3">
                   <Image src={tier.iconSrc} alt={tier.label} width={36} height={36} className="flex-shrink-0" />
                   <div className="flex-1">
-                    <p className="text-[15px] font-semibold text-[#333]">{tier.label}</p>
+                    <p className="text-[15px] font-semibold text-[#333]">
+                      {tier.label}
+                      <span className="ml-2 text-xs font-normal text-[#999]">{tier.description}</span>
+                    </p>
                     <p className="text-xs text-[#AAA]">누적 방문 {rangeText}</p>
                   </div>
                 </div>
@@ -68,7 +71,7 @@ export default function PassportGuide() {
             })}
           </div>
           <p className="text-xs text-[#AAA] leading-relaxed">
-            해율 VIP 혜택은 앞으로 추가되거나 변경될 수 있습니다.
+            해율 VIP 가족이 되시면 별도 관리되며, 최고 등급에 맞는 혜택을 지속적으로 늘려나갈 예정입니다.
           </p>
         </section>
 
@@ -94,7 +97,7 @@ export default function PassportGuide() {
                   <div>
                     <p className="text-[15px] font-medium text-[#333]">{r.name}</p>
                     {r.description && (
-                      <p className="mt-0.5 text-xs text-[#8C8C80] leading-relaxed">{r.description}</p>
+                      <p className="mt-0.5 text-xs text-[#8C8C80] leading-relaxed whitespace-pre-line">{r.description}</p>
                     )}
                   </div>
                 </li>
@@ -103,7 +106,8 @@ export default function PassportGuide() {
           )}
           <p className="text-xs text-[#AAA] leading-relaxed">
             선물은 해당 방문 횟수를 달성하면 자동으로 선물함에 담깁니다. 사용하지 않으면 선물함에 계속
-            남아있으니, 매장에서 언제든 직원에게 보여주고 사용하실 수 있습니다.
+            남아있으니, 매장에서 언제든 직원에게 보여주고 사용하실 수 있습니다. 선물의 유효기간은
+            발급일로부터 6개월입니다.
           </p>
         </section>
 

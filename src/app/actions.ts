@@ -5,7 +5,17 @@ import { normalizePhone, isValidPhone, getTodayKST } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { isQrVerified } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
+import { REWARD_EXPIRY_MONTHS } from '@/lib/constants';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
+
+/**
+ * 선물 발급일(issuedAt) 기준 유효기간(6개월)이 지났는지 확인합니다.
+ */
+function isRewardExpired(issuedAt: string): boolean {
+  const expiry = new Date(issuedAt);
+  expiry.setMonth(expiry.getMonth() + REWARD_EXPIRY_MONTHS);
+  return Date.now() >= expiry.getTime();
+}
 
 interface RegisterResult {
   customer: Customer;
@@ -234,6 +244,47 @@ export interface PassportData {
   hasRewardToUse: boolean;
   tier: VisitTierInfo;
   qrVerified: boolean;
+  rewardProgressMessage: string;
+}
+
+/**
+ * 다음 선물까지 남은 횟수 안내 문구를 계산합니다.
+ * - 아직 선물을 한 번도 받지 못했으면 "첫 번째 선물까지"
+ * - 마지막 선물(해율 VIP 승급 시점)까지 남았으면 "해율의 VIP까지는"
+ * - 그 사이 구간이면 "다음 선물까지"
+ * - 이미 해율 VIP면 축하 문구
+ */
+async function getRewardProgressMessage(
+  supabase: ReturnType<typeof createAdminClient>,
+  visitCount: number,
+  tier: VisitTierInfo
+): Promise<string> {
+  if (tier.isMaxTier) {
+    return '가장 오랜 시간 자연을 함께한 해율 VIP 입니다.';
+  }
+
+  const { data: rewards } = await supabase
+    .from('rewards')
+    .select('required_visits')
+    .eq('is_active', true)
+    .order('required_visits', { ascending: true });
+
+  const thresholds = (rewards || []).map((r) => r.required_visits);
+  const nextIndex = thresholds.findIndex((t) => t > visitCount);
+
+  if (nextIndex === -1) {
+    return '';
+  }
+
+  const remaining = thresholds[nextIndex] - visitCount;
+
+  if (nextIndex === 0) {
+    return `첫 번째 선물까지 ${remaining}회 남았습니다.`;
+  }
+  if (nextIndex === thresholds.length - 1) {
+    return `해율의 VIP까지는 ${remaining}회 남았습니다.`;
+  }
+  return `다음 선물까지 ${remaining}회 남았습니다.`;
 }
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
@@ -277,14 +328,15 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
       .limit(1)
       .single();
 
-    // 사용 가능한 선물 수 (아직 사용하지 않은 선물)
+    // 사용 가능한 선물 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 선물)
     const { data: rewards } = await supabase
       .from('customer_rewards')
-      .select('id, status')
+      .select('id, status, issued_at')
       .eq('customer_id', customer.id)
       .neq('status', 'used');
 
-    const availableRewards = rewards?.length || 0;
+    const availableRewards = (rewards || []).filter((r) => !isRewardExpired(r.issued_at)).length;
+    const tier = getVisitTierInfo(customer.visit_count);
 
     return {
       success: true,
@@ -294,8 +346,9 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         recentVisitDate: recentVisit?.visit_date || null,
         availableRewards,
         hasRewardToUse: availableRewards > 0,
-        tier: getVisitTierInfo(customer.visit_count),
+        tier,
         qrVerified: await isQrVerified(),
+        rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
       },
     };
   } catch (error) {
@@ -465,6 +518,8 @@ export interface RewardItem {
   issuedAt: string;
   requestedAt: string | null;
   usedAt: string | null;
+  /** 미사용 상태로 발급일로부터 6개월이 지나 더 이상 사용할 수 없는 선물인지 여부 */
+  isExpired: boolean;
 }
 
 /**
@@ -512,6 +567,7 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       issuedAt: cr.issued_at,
       requestedAt: cr.requested_at,
       usedAt: cr.used_at,
+      isExpired: cr.status !== 'used' && isRewardExpired(cr.issued_at),
     }));
 
     return { success: true, data: result };
@@ -538,7 +594,7 @@ export async function confirmRewardUse(
 
     const { data: cr } = await supabase
       .from('customer_rewards')
-      .select('id, status, customer_id')
+      .select('id, status, customer_id, issued_at')
       .eq('id', customerRewardId)
       .single();
 
@@ -548,6 +604,10 @@ export async function confirmRewardUse(
 
     if (cr.status === 'used') {
       return { success: false, error: '이미 사용된 선물입니다.' };
+    }
+
+    if (isRewardExpired(cr.issued_at)) {
+      return { success: false, error: '유효기간이 지난 선물입니다.\n사용하실 수 없습니다.' };
     }
 
     const { error } = await supabase

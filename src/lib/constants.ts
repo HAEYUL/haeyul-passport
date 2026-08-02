@@ -19,6 +19,9 @@ export const REWARD_STATUS = {
   USED: 'used',
 } as const;
 
+// 선물 유효기간 (발급일로부터, 개월)
+export const REWARD_EXPIRY_MONTHS = 6;
+
 // 동의 유형
 export const CONSENT_TYPE = {
   PRIVACY: 'privacy',
