@@ -33,12 +33,14 @@ export const AUDIT_ACTION = {
   VISIT_CANCEL: 'visit_cancel',
   VISIT_ADD: 'visit_add',
   REWARD_RESTORE: 'reward_restore',
+  REWARD_CATALOG_UPDATE: 'reward_catalog_update',
   EMPLOYEE_CREATE: 'employee_create',
   EMPLOYEE_UPDATE: 'employee_update',
   TABLE_CREATE: 'table_create',
   TABLE_UPDATE: 'table_update',
   CUSTOMER_UPDATE: 'customer_update',
   CUSTOMER_DELETE: 'customer_delete',
+  QR_REISSUE: 'qr_reissue',
 } as const;
 
 // 매장 정보

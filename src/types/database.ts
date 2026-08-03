@@ -34,6 +34,7 @@ export interface Customer {
   marketing_consent: boolean;
   visit_count: number;
   is_active: boolean;
+  admin_note: string | null;
   created_at: string;
   updated_at: string;
 }

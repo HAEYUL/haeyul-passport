@@ -2,55 +2,246 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { getCustomerList, type CustomerListItem } from '@/app/admin/actions';
-import { formatDateKR } from '@/lib/utils';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  getCustomerList,
+  getTierBreakdown,
+  type CustomerListItem,
+  type CustomerListFilter,
+  type TierBreakdownItem,
+} from '@/app/admin/actions';
+import { formatDateKR, getTodayKST } from '@/lib/utils';
+import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import AdminNav from '../../_components/AdminNav';
 
+const FILTER_INFO: Record<CustomerListFilter, { title: string; description: string }> = {
+  all: {
+    title: '고객관리',
+    description: '이름, 전화번호로 검색할 수 있습니다.',
+  },
+  todayVisits: {
+    title: '오늘 방문 고객',
+    description: '오늘 매장을 방문한 고객 목록입니다.',
+  },
+  newThisMonth: {
+    title: '이번달 신규가입 고객',
+    description: '이번 달에 새로 가입한 고객 목록입니다.',
+  },
+  unclaimedRewards: {
+    title: '미사용 선물 보유 고객',
+    description: '아직 사용하지 않은 선물을 가지고 있는 고객 목록입니다.',
+  },
+  todayRewardsUsed: {
+    title: '오늘 선물 사용 고객',
+    description: '오늘 선물을 사용한 고객 목록입니다.',
+  },
+  vip: {
+    title: '해율 VIP 고객',
+    description: '해율 VIP 등급(최고 등급)에 도달한 고객 목록입니다.',
+  },
+  longAbsent: {
+    title: '장기 미방문 고객',
+    description: '기준 일수 이상 매장을 방문하지 않은 고객 목록입니다.',
+  },
+  tier: {
+    title: '등급별 고객',
+    description: '등급을 선택하면 해당 등급 고객 목록을 볼 수 있습니다.',
+  },
+  birthdayThisMonth: {
+    title: '이번달 생일 고객',
+    description: '이번 달이 생일인 고객 목록입니다.',
+  },
+};
+
+const LONG_ABSENT_DAY_OPTIONS = [30, 60, 90] as const;
+const TIER_KEYS: VisitTierKey[] = ['sprout', 'leaf', 'tree', 'forest', 'vip'];
+
+function isCustomerListFilter(value: string | null): value is CustomerListFilter {
+  return (
+    value === 'todayVisits' ||
+    value === 'newThisMonth' ||
+    value === 'unclaimedRewards' ||
+    value === 'todayRewardsUsed' ||
+    value === 'vip' ||
+    value === 'longAbsent' ||
+    value === 'tier' ||
+    value === 'birthdayThisMonth'
+  );
+}
+
+function isVisitTierKey(value: string | null): value is VisitTierKey {
+  return !!value && TIER_KEYS.includes(value as VisitTierKey);
+}
+
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+// CSV를 엑셀에서 열 때 한글이 깨지지 않도록 붙이는 UTF-8 BOM
+const BOM = String.fromCharCode(0xfeff);
+
+function exportCustomersCsv(customers: CustomerListItem[]) {
+  const headers = ['성함', '여권번호', '연락처', '방문 횟수', '등급', '가입일', '최근 방문일'];
+  const rows = customers.map((c) => [
+    c.name,
+    c.customerNumber,
+    c.phone,
+    `${c.visitCount}회`,
+    getVisitTierInfo(c.visitCount).label,
+    formatDateKR(c.createdAt),
+    c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-',
+  ]);
+
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `고객명단_${getTodayKST()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function CustomerList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const filter: CustomerListFilter = isCustomerListFilter(searchParams.get('filter'))
+    ? (searchParams.get('filter') as CustomerListFilter)
+    : 'all';
+
+  const tierKey = isVisitTierKey(searchParams.get('tierKey')) ? (searchParams.get('tierKey') as VisitTierKey) : undefined;
+  const isTierMenu = filter === 'tier' && !tierKey;
+
+  const parsedDays = Number(searchParams.get('days'));
+  const longAbsentDays = LONG_ABSENT_DAY_OPTIONS.includes(parsedDays as 30 | 60 | 90)
+    ? parsedDays
+    : LONG_ABSENT_DAY_OPTIONS[0];
+
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
+  const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
 
   const fetchCustomers = useCallback(async (q: string) => {
-    const result = await getCustomerList(q);
+    setCustomers(null);
+    const result = await getCustomerList(q, filter, longAbsentDays, tierKey);
     if (result.success && result.data) {
       setCustomers(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '고객 목록을 불러올 수 없습니다.');
     }
+  }, [filter, longAbsentDays, tierKey]);
+
+  const fetchTierBreakdown = useCallback(async () => {
+    setTierBreakdown(null);
+    const result = await getTierBreakdown();
+    if (result.success && result.data) {
+      setTierBreakdown(result.data);
+      setError('');
+    } else if (!result.success) {
+      setError(result.error || '등급 정보를 불러올 수 없습니다.');
+    }
   }, []);
 
   useEffect(() => {
-    fetchCustomers('');
-  }, [fetchCustomers]);
+    if (isTierMenu) {
+      fetchTierBreakdown();
+    } else {
+      fetchCustomers('');
+    }
+  }, [isTierMenu, fetchTierBreakdown, fetchCustomers]);
 
   useEffect(() => {
+    if (isTierMenu) return;
     const timer = setTimeout(() => {
       fetchCustomers(query);
     }, 300);
     return () => clearTimeout(timer);
-  }, [query, fetchCustomers]);
+  }, [query, fetchCustomers, isTierMenu]);
+
+  let title = FILTER_INFO[filter].title;
+  let description = FILTER_INFO[filter].description;
+  if (filter === 'tier' && tierKey) {
+    const tierDef = getAllTiers().find((t) => t.key === tierKey);
+    if (tierDef) {
+      title = `${tierDef.label} 등급 고객`;
+      description = `현재 ${tierDef.label} 등급인 고객 목록입니다.`;
+    }
+  }
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
-      <div className="w-full max-w-2xl mx-auto space-y-6">
+      <div className="w-full max-w-4xl mx-auto space-y-6">
         <header className="space-y-1">
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">고객관리</h1>
-          <p className="text-sm text-[#8C8C80]">이름, 전화번호, 회원번호로 검색할 수 있습니다.</p>
+          <h1 className="text-2xl font-bold text-[#2D5A3D]">{title}</h1>
+          <p className="text-sm text-[#8C8C80]">{description}</p>
+          {filter !== 'all' && (
+            <Link href="/admin/customers" className="inline-block text-sm text-[#2D5A3D] underline">
+              전체 고객 보기
+            </Link>
+          )}
         </header>
 
         <AdminNav active="customers" />
 
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="이름 / 전화번호 / 회원번호 검색"
-          className="w-full px-4 py-3.5 text-[17px] border-2 border-[#D4D0C8] rounded-xl
-                     bg-white placeholder-[#B0B0A0]
-                     focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
-        />
+        {!isTierMenu && (
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/customers?filter=tier"
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                filter === 'tier'
+                  ? 'bg-[#2D5A3D] text-white'
+                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+              }`}
+            >
+              등급
+            </Link>
+            <Link
+              href="/admin/customers?filter=birthdayThisMonth"
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                filter === 'birthdayThisMonth'
+                  ? 'bg-[#2D5A3D] text-white'
+                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+              }`}
+            >
+              이번달 생일고객
+            </Link>
+          </div>
+        )}
+
+        {filter === 'longAbsent' && (
+          <div className="flex gap-2">
+            {LONG_ABSENT_DAY_OPTIONS.map((days) => (
+              <Link
+                key={days}
+                href={`/admin/customers?filter=longAbsent&days=${days}`}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                  longAbsentDays === days
+                    ? 'bg-[#2D5A3D] text-white'
+                    : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                }`}
+              >
+                {days}일 이상
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {!isTierMenu && (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="이름 · 전화번호 검색"
+            className="w-full px-4 py-3.5 text-[17px] border-2 border-[#D4D0C8] rounded-xl
+                       bg-white placeholder-[#B0B0A0]
+                       focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+          />
+        )}
 
         {error && (
           <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
@@ -58,39 +249,107 @@ export default function CustomerList() {
           </div>
         )}
 
-        {!customers ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
-            ))}
-          </div>
-        ) : customers.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-            <p className="text-[15px] text-[#8C8C80]">검색 결과가 없습니다.</p>
-          </div>
+        {isTierMenu ? (
+          !tierBreakdown ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {tierBreakdown.map((t) => (
+                <li key={t.key}>
+                  <Link
+                    href={`/admin/customers?filter=tier&tierKey=${t.key}`}
+                    className="flex items-center justify-between bg-white rounded-xl px-5 py-4
+                               border border-[#E8E4DA] hover:bg-[#F5F5EC] transition-colors duration-200"
+                  >
+                    <span className="text-base font-semibold text-[#2D5A3D]">{t.label}</span>
+                    <span className="text-lg font-bold text-[#2D5A3D]">{t.count}명</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )
         ) : (
-          <ul className="space-y-2">
-            {customers.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/admin/customers/${c.id}`}
-                  className="flex items-center justify-between bg-white rounded-xl px-5 py-4
-                             border border-[#E8E4DA] hover:bg-[#F5F5EC] transition-colors duration-200"
-                >
-                  <div>
-                    <p className="text-base font-semibold text-[#2D5A3D]">{c.name}</p>
-                    <p className="text-sm text-[#8C8C80]">
-                      {c.customerNumber} · {c.phone}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-[#2D5A3D]">{c.visitCount}회</p>
-                    <p className="text-xs text-[#AAA]">{formatDateKR(c.createdAt)} 가입</p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers)}
+                disabled={!customers || customers.length === 0}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#2D5A3D] text-white
+                           hover:bg-[#245032] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                엑셀로 저장
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
+                           border-2 border-[#D4D0C8]"
+              >
+                문자보내기
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
+                           border-2 border-[#D4D0C8]"
+              >
+                톡보내기
+              </button>
+            </div>
+
+            {!customers ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-12 rounded-xl bg-[#E8E8E0] animate-pulse" />
+                ))}
+              </div>
+            ) : customers.length === 0 ? (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
+                <p className="text-[15px] text-[#8C8C80]">검색 결과가 없습니다.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
+                <table className="w-full text-sm min-w-[760px]">
+                  <thead>
+                    <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+                      <th className="px-4 py-3 font-medium">성함</th>
+                      <th className="px-4 py-3 font-medium">여권번호</th>
+                      <th className="px-4 py-3 font-medium">연락처</th>
+                      <th className="px-4 py-3 font-medium text-right">방문 횟수</th>
+                      <th className="px-4 py-3 font-medium">등급</th>
+                      <th className="px-4 py-3 font-medium">가입일</th>
+                      <th className="px-4 py-3 font-medium">최근 방문일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((c) => (
+                      <tr
+                        key={c.id}
+                        onClick={() => router.push(`/admin/customers/${c.id}`)}
+                        className="border-b border-[#F0EDE6] last:border-0 cursor-pointer
+                                   hover:bg-[#F5F5EC] transition-colors duration-200"
+                      >
+                        <td className="px-4 py-3 font-medium text-[#2D5A3D] whitespace-nowrap">{c.name}</td>
+                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.customerNumber}</td>
+                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.phone}</td>
+                        <td className="px-4 py-3 text-right text-[#555] whitespace-nowrap">{c.visitCount}회</td>
+                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">
+                          {getVisitTierInfo(c.visitCount).label}
+                        </td>
+                        <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">{formatDateKR(c.createdAt)}</td>
+                        <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">
+                          {c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>

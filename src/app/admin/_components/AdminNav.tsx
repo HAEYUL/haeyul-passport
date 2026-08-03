@@ -4,13 +4,16 @@ import Link from 'next/link';
 import { adminLogout } from '@/app/admin/actions';
 
 interface AdminNavProps {
-  active: 'dashboard' | 'customers' | 'rewards';
+  active: 'dashboard' | 'customers' | 'visits' | 'rewards' | 'vip' | 'settings';
 }
 
 const TABS: { key: AdminNavProps['active']; href: string; label: string }[] = [
   { key: 'dashboard', href: '/admin', label: '대시보드' },
   { key: 'customers', href: '/admin/customers', label: '고객관리' },
-  { key: 'rewards', href: '/admin/rewards', label: '선물현황' },
+  { key: 'visits', href: '/admin/visits', label: '방문관리' },
+  { key: 'rewards', href: '/admin/rewards', label: '선물관리' },
+  { key: 'vip', href: '/admin/vip', label: 'VIP관리' },
+  { key: 'settings', href: '/admin/settings', label: '설정' },
 ];
 
 export default function AdminNav({ active }: AdminNavProps) {
@@ -20,8 +23,8 @@ export default function AdminNav({ active }: AdminNavProps) {
   }
 
   return (
-    <nav className="flex items-center justify-between border-b border-[#E8E4DA] pb-4">
-      <div className="flex gap-2">
+    <nav className="flex flex-wrap items-center justify-between gap-y-3 border-b border-[#E8E4DA] pb-4">
+      <div className="flex flex-wrap gap-2">
         {TABS.map((tab) => (
           <Link
             key={tab.key}

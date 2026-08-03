@@ -52,7 +52,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | Supabase 대시보드 > Settings > API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | 같은 위치 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | 같은 위치 (비공개) |
-| `VISIT_QR_KEY` | 매장 QR 전용 값 (직접 정하는 임의의 문자열) | "매장 QR" 절 참고 |
+| `NEXT_PUBLIC_APP_URL` | 매장 QR 생성 시 사용할 절대주소 | 배포 후에는 실제 운영 도메인으로 설정 |
 
 ### 4. Supabase 데이터베이스 설정
 
@@ -89,15 +89,16 @@ npm run dev
 
 ## 매장 QR
 
-`VISIT_QR_KEY`에 설정한 값을 QR 주소에 `?key=값`으로 붙여서 인쇄합니다.
+매장 QR은 더 이상 환경변수로 관리하지 않습니다. 토큰이 Supabase `app_settings` 테이블에 저장되고, 관리자 화면(`/admin/settings` > QR 관리)에서 발급·재발급·다운로드·인쇄를 모두 처리합니다.
 
 ```
-https://haeyul-passport.vercel.app/visit?key=여기에_VISIT_QR_KEY_값
+https://haeyul-passport.vercel.app/visit?key=현재_발급된_토큰
 ```
 
-- `key`가 맞으면(`src/middleware.ts`가 확인) 10분짜리 쿠키를 남기고, 전자여권 홈에 "해율 매장 방문이 확인되었습니다 / 오늘의 방문을 기록하시겠습니까?"와 함께 **"해율 방문 기록하기"** 버튼이 나타납니다. 이 버튼을 눌러야 방문이 기록됩니다.
-- `key`가 없거나 만료됐으면(예: QR 없이 예전 링크로 직접 접속) 버튼 대신 "매장의 QR코드를 다시 스캔해 주세요" 안내만 표시되고, 방문 기록 자체가 서버에서 거부됩니다(`registerVisit`에서 재검증).
-- 이건 완벽한 보안 장치는 아니라 "그냥 URL을 검색해서 들어오는 경우"를 걸러주는 정도입니다 — QR을 사진 찍어간 사람은 여전히 우회할 수 있습니다. 값을 바꾸려면 `VISIT_QR_KEY`를 새로 정하고, QR 이미지를 다시 만들어서 매장에 붙은 실물을 교체해야 합니다.
+- `key`가 맞으면(`src/proxy.ts`가 확인) 10분짜리 쿠키를 남기고, 전자여권 홈에 "해율 매장 방문이 확인되었습니다 / 오늘의 방문을 기록하시겠습니까?"와 함께 **"해율 방문 기록하기"** 버튼이 나타납니다. 이 버튼을 눌러야 방문이 기록됩니다. 신규 가입도 이 확인이 있어야 가능합니다.
+- `key`가 없거나 유효하지 않으면(예: QR 없이 예전 링크로 직접 접속, 재발급되어 무효화된 옛 QR) 버튼 대신 "매장의 QR코드를 다시 스캔해 주세요" 안내만 표시되고, 방문 기록/가입 자체가 서버에서 거부됩니다.
+- 관리자가 "QR 재발급"을 누르면 새 토큰이 즉시 발급되고 기존 QR은 그 순간부터 작동하지 않습니다. **재발급 직후에는 반드시 새 QR을 다운로드하거나 인쇄해서 매장에 붙은 실물을 교체하세요.**
+- 이건 완벽한 보안 장치는 아니라 "그냥 URL을 검색해서 들어오는 경우"를 걸러주는 정도입니다 — QR을 사진 찍어간 사람은 여전히 우회할 수 있습니다.
 
 ---
 
@@ -149,7 +150,7 @@ https://haeyul-passport.vercel.app/visit?key=여기에_VISIT_QR_KEY_값
 
 ### 관리자
 
-`/admin` 접속 시 로그인이 안 되어 있으면 `/admin/login`으로 이동합니다. 로그인하면 대시보드(오늘 방문/신규가입/미사용 선물 등 통계), 고객관리(검색, 방문·선물 이력 조회), 선물현황(선물 종류별 발급·사용·미사용 집계)을 이용할 수 있습니다.
+`/admin` 접속 시 로그인이 안 되어 있으면 `/admin/login`으로 이동합니다. 로그인하면 대시보드, 고객관리, 방문관리, 선물관리, VIP관리, 설정(QR 관리·통계) 6개 메뉴를 이용할 수 있습니다.
 
 | 항목 | 값 |
 |---|---|
@@ -184,10 +185,14 @@ haeyul-passport/
 │   │   ├── guide/                # 해율 여권 설명서 (등급/방문 선물 안내, 로그인 불필요)
 │   │   ├── passport/            # 전자여권 홈 / 방문기록 / 선물함
 │   │   │   └── rewards/         # 내 선물함 (직원확인으로 즉시 사용 처리)
-│   │   ├── admin/                # 관리자 로그인 / 대시보드 / 고객관리 / 선물현황
+│   │   ├── admin/                # 관리자 로그인 / 대시보드 / 고객관리 / 방문관리 / 선물관리 / VIP관리 / 설정
 │   │   │   ├── login/            # 관리자 로그인
 │   │   │   ├── customers/        # 고객 목록·검색 / 상세
-│   │   │   ├── rewards/          # 선물 발급·사용 집계
+│   │   │   ├── visits/           # 방문 기록 관리 (오늘 방문, 중복/비정상 확인, 수동 추가·취소)
+│   │   │   ├── rewards/          # 선물 발급·사용 집계 / 선물 기준 관리
+│   │   │   ├── vip/              # 해율 VIP 고객 관리
+│   │   │   ├── settings/         # QR 관리 / 통계
+│   │   │   │   └── qr-print/     # QR 인쇄용 A4 화면
 │   │   │   └── actions.ts       # 관리자용 Server Actions
 │   │   └── api/                 # API 라우트 (추후)
 │   ├── lib/
@@ -197,9 +202,11 @@ haeyul-passport/
 │   │   │   └── admin.ts        # 관리자용 클라이언트
 │   │   ├── session.ts          # 고객 세션 (쿠키)
 │   │   ├── adminSession.ts     # 관리자 세션 (쿠키)
+│   │   ├── qrSettings.ts       # 매장 QR 토큰 발급·재발급 (app_settings 테이블)
 │   │   ├── tiers.ts            # 방문 등급 계산 (새싹~해율 VIP)
 │   │   ├── constants.ts        # 상수
 │   │   └── utils.ts            # 유틸리티 함수
+│   ├── proxy.ts                 # QR 토큰 확인 후 방문 확인 쿠키 발급
 │   └── types/
 │       └── database.ts         # 타입 정의
 ├── supabase/
@@ -207,7 +214,9 @@ haeyul-passport/
 │       ├── 001_initial_schema.sql
 │       ├── 002_verify_employee_pin.sql
 │       ├── 003_verify_admin_password.sql
-│       └── 004_reward_tiers.sql
+│       ├── 004_reward_tiers.sql
+│       ├── 005_reward_restore.sql
+│       └── 006_customer_admin_note.sql
 ├── public/
 │   ├── tiers/                  # 등급별 아이콘 (sprout/leaf/tree/forest/vip.svg)
 │   └── manifest.json           # PWA 매니페스트
@@ -241,8 +250,8 @@ haeyul-passport/
 | 6단계 | 방문기록 화면 | ✅ 완료 |
 | 7단계 | 방문 등급(새싹~해율 VIP) + 3/5/10/20/30회 선물 자동 발급 | ✅ 완료 |
 | 8단계 | 선물함 "직원확인" 버튼으로 즉시 사용 처리 | ✅ 완료 |
-| 9단계 | 관리자 화면 | 🟡 부분 완료 (로그인/대시보드/고객관리, 직원관리는 대기) |
-| 10단계 | 개인정보 + 권한 보안 | ⬜ 대기 |
+| 9단계 | 관리자 화면 (대시보드/고객관리/방문관리/선물관리/VIP관리/설정) | ✅ 완료 |
+| 10단계 | 개인정보 + 권한 보안 (QR 토큰 로테이션 포함) | ✅ 완료 |
 | 11단계 | 모바일 최적화 | ⬜ 대기 |
-| 12단계 | 전체 테스트 | ⬜ 대기 |
-| 13단계 | GitHub + Vercel 배포 | ⬜ 대기 |
+| 12단계 | 전체 테스트 | 🟡 진행 중 |
+| 13단계 | GitHub + Vercel 배포 | ✅ 완료 |

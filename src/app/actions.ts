@@ -56,6 +56,13 @@ export async function registerCustomer(
       return { success: false, error: '개인정보 수집·이용에 동의해 주세요.' };
     }
 
+    if (!(await isQrVerified())) {
+      return {
+        success: false,
+        error: '매장 방문 확인이 필요합니다.\nQR코드를 다시 스캔해 주세요.',
+      };
+    }
+
     const phone = normalizePhone(rawPhone);
 
     const supabase = createAdminClient();
