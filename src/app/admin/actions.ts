@@ -16,6 +16,7 @@ import {
 import { AUDIT_ACTION } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import { getOrCreateQrSettings, reissueQrToken } from '@/lib/qrSettings';
+import { sendSms } from '@/lib/sms';
 import {
   setAdminSession,
   getAdminSession,
@@ -546,6 +547,8 @@ export interface CustomerListItem {
   createdAt: string;
   /** 최근 방문일 (방문 기록이 없으면 null) */
   recentVisitDate: string | null;
+  /** 마케팅(광고성 문자 등) 수신동의 여부 */
+  marketingConsent: boolean;
 }
 
 /**
@@ -635,7 +638,7 @@ export async function getCustomerList(
 
     let request = supabase
       .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at')
+      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(idFilter ? 1000 : 100);
@@ -685,6 +688,7 @@ export async function getCustomerList(
       visitCount: c.visit_count,
       createdAt: c.created_at,
       recentVisitDate: latestVisitMap.get(c.id) ?? null,
+      marketingConsent: c.marketing_consent,
     }));
 
     if (filter === 'longAbsent') {
@@ -2042,6 +2046,121 @@ export async function getLongAbsentCustomers(
     return { success: true, data: result };
   } catch (error) {
     console.error('getLongAbsentCustomers 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 문자 발송
+// ============================================================
+
+export interface SmsSendResult {
+  successCount: number;
+  errorCount: number;
+  /** 광고 발송 시 마케팅 수신동의를 하지 않아 대상에서 제외된 인원 수 */
+  excludedCount: number;
+}
+
+/**
+ * 선택한 고객들에게 문자를 발송합니다.
+ * messageType이 'ad'(광고)이면 문구 앞에 "(광고)", 끝에 무료수신거부 안내를 자동으로 붙이고,
+ * marketing_consent가 false인 고객은 발송 대상에서 자동 제외합니다.
+ */
+export async function sendSmsToCustomers(
+  customerIds: string[],
+  message: string,
+  messageType: 'info' | 'ad'
+): Promise<ApiResponse<SmsSendResult>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) {
+      return { success: false, error: '문자 내용을 입력해 주세요.' };
+    }
+    if (!customerIds || customerIds.length === 0) {
+      return { success: false, error: '받는 사람을 선택해 주세요.' };
+    }
+    if (customerIds.length > 1000) {
+      return { success: false, error: '한 번에 최대 1,000명까지 발송할 수 있습니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data: customers, error } = await supabase
+      .from('customers')
+      .select('id, phone, marketing_consent')
+      .in('id', customerIds)
+      .eq('is_active', true);
+
+    if (error || !customers) {
+      return { success: false, error: '고객 정보를 불러올 수 없습니다.' };
+    }
+
+    let targets = customers;
+    let excludedCount = 0;
+    if (messageType === 'ad') {
+      targets = customers.filter((c) => c.marketing_consent);
+      excludedCount = customers.length - targets.length;
+    }
+
+    const validTargets = targets.filter((c) => isValidPhone(c.phone));
+    if (validTargets.length === 0) {
+      return {
+        success: false,
+        error:
+          messageType === 'ad'
+            ? '발송 가능한 대상이 없습니다. (마케팅 수신동의 고객이 없습니다)'
+            : '발송 가능한 대상이 없습니다.',
+      };
+    }
+
+    const finalMessage =
+      messageType === 'ad'
+        ? `(광고) ${trimmedMessage}\n무료수신거부 ${normalizePhone(process.env.ALIGO_SENDER || '')}`
+        : trimmedMessage;
+
+    const receivers = validTargets.map((c) => c.phone.replace(/\D/g, ''));
+
+    let sendResult;
+    try {
+      sendResult = await sendSms({ receivers, message: finalMessage });
+    } catch (smsError) {
+      console.error('sendSms 오류:', smsError);
+      return {
+        success: false,
+        error: smsError instanceof Error ? smsError.message : '문자 발송에 실패했습니다.',
+      };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.SMS_SEND,
+      target_type: 'customers',
+      target_id: null,
+      before_data: null,
+      after_data: {
+        messageType,
+        requestedCount: customerIds.length,
+        excludedCount,
+        successCount: sendResult.successCount,
+        errorCount: sendResult.errorCount,
+        message: finalMessage,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        successCount: sendResult.successCount,
+        errorCount: sendResult.errorCount,
+        excludedCount,
+      },
+    };
+  } catch (error) {
+    console.error('sendSmsToCustomers 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

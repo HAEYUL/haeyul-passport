@@ -41,6 +41,7 @@ export const AUDIT_ACTION = {
   CUSTOMER_UPDATE: 'customer_update',
   CUSTOMER_DELETE: 'customer_delete',
   QR_REISSUE: 'qr_reissue',
+  SMS_SEND: 'sms_send',
 } as const;
 
 // 매장 정보

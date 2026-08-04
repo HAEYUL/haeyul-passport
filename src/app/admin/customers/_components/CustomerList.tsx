@@ -13,6 +13,7 @@ import {
 import { formatDateKR, getTodayKST } from '@/lib/utils';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import AdminNav from '../../_components/AdminNav';
+import SmsComposeModal from './SmsComposeModal';
 
 const FILTER_INFO: Record<CustomerListFilter, { title: string; description: string }> = {
   all: {
@@ -124,6 +125,8 @@ export default function CustomerList() {
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
   const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showSmsModal, setShowSmsModal] = useState(false);
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
@@ -162,6 +165,30 @@ export default function CustomerList() {
     }, 300);
     return () => clearTimeout(timer);
   }, [query, fetchCustomers, isTierMenu]);
+
+  // 새 목록이 로드되면 기본값으로 전체 선택 상태로 만듭니다.
+  useEffect(() => {
+    if (customers) {
+      setSelectedIds(new Set(customers.map((c) => c.id)));
+    }
+  }, [customers]);
+
+  function toggleSelectAll() {
+    if (!customers) return;
+    setSelectedIds((prev) => (prev.size === customers.length ? new Set() : new Set(customers.map((c) => c.id))));
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   let title = FILTER_INFO[filter].title;
   let description = FILTER_INFO[filter].description;
@@ -286,15 +313,20 @@ export default function CustomerList() {
               </button>
               <button
                 type="button"
+                onClick={() => setShowSmsModal(true)}
+                disabled={selectedIds.size === 0}
                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
-                           border-2 border-[#D4D0C8]"
+                           border-2 border-[#D4D0C8] hover:bg-[#F5F5EC] transition-colors duration-200
+                           disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                문자보내기
+                문자보내기 ({selectedIds.size})
               </button>
               <button
                 type="button"
+                disabled
+                title="추후 지원 예정입니다."
                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
-                           border-2 border-[#D4D0C8]"
+                           border-2 border-[#D4D0C8] opacity-40 cursor-not-allowed"
               >
                 톡보내기
               </button>
@@ -312,9 +344,18 @@ export default function CustomerList() {
               </div>
             ) : (
               <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-                <table className="w-full text-sm min-w-[760px]">
+                <table className="w-full text-sm min-w-[800px]">
                   <thead>
                     <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+                      <th className="px-4 py-3 font-medium w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.size === customers.length}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 accent-[#2D5A3D]"
+                          aria-label="전체 선택"
+                        />
+                      </th>
                       <th className="px-4 py-3 font-medium">성함</th>
                       <th className="px-4 py-3 font-medium">여권번호</th>
                       <th className="px-4 py-3 font-medium">연락처</th>
@@ -332,6 +373,15 @@ export default function CustomerList() {
                         className="border-b border-[#F0EDE6] last:border-0 cursor-pointer
                                    hover:bg-[#F5F5EC] transition-colors duration-200"
                       >
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(c.id)}
+                            onChange={() => toggleSelect(c.id)}
+                            className="w-4 h-4 accent-[#2D5A3D]"
+                            aria-label={`${c.name} 선택`}
+                          />
+                        </td>
                         <td className="px-4 py-3 font-medium text-[#2D5A3D] whitespace-nowrap">{c.name}</td>
                         <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.customerNumber}</td>
                         <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.phone}</td>
@@ -352,6 +402,14 @@ export default function CustomerList() {
           </>
         )}
       </div>
+
+      {showSmsModal && customers && (
+        <SmsComposeModal
+          customerIds={[...selectedIds]}
+          consentedCount={customers.filter((c) => selectedIds.has(c.id) && c.marketingConsent).length}
+          onClose={() => setShowSmsModal(false)}
+        />
+      )}
     </main>
   );
 }

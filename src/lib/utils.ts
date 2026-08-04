@@ -184,3 +184,17 @@ export function isValidPhone(phone: string): boolean {
   const digits = phone.replace(/\D/g, '');
   return digits.length === 10 || digits.length === 11;
 }
+
+/** SMS(단문) 최대 바이트. 초과 시 LMS(장문)로 전환됩니다. */
+export const SMS_BYTE_LIMIT = 90;
+
+/**
+ * 문자 메시지의 바이트 수를 추정합니다 (한글/특수문자 2바이트, 영숫자 1바이트 기준).
+ */
+export function estimateSmsByteLength(text: string): number {
+  let bytes = 0;
+  for (const ch of text) {
+    bytes += ch.charCodeAt(0) > 127 ? 2 : 1;
+  }
+  return bytes;
+}
