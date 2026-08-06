@@ -372,6 +372,8 @@ export interface VisitResult {
   visitCount: number;
   newRewardNames: string[];
   tier: VisitTierInfo;
+  /** 이번 방문으로 방문 등급이 올랐는지 여부 */
+  tierUpgraded: boolean;
 }
 
 /**
@@ -436,6 +438,11 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
 
     const visitCount = updatedCustomer?.visit_count || 0;
 
+    // 이번 방문으로 방문 등급이 올랐는지 확인 (방문 1회당 visit_count가 정확히 1 증가하므로 -1이 방문 전 등급)
+    const tierBefore = getVisitTierInfo(Math.max(0, visitCount - 1));
+    const tierAfter = getVisitTierInfo(visitCount);
+    const tierUpgraded = tierBefore.key !== tierAfter.key;
+
     // 방금 이 방문으로 새로 발급된 선물 확인 (DB 트리거가 방문 횟수 임계값 달성 시 자동 발급)
     const recentThreshold = new Date(Date.now() - 10000).toISOString();
     const { data: justIssued } = await supabase
@@ -456,7 +463,7 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
 
     return {
       success: true,
-      data: { visitCount, newRewardNames, tier: getVisitTierInfo(visitCount) },
+      data: { visitCount, newRewardNames, tier: tierAfter, tierUpgraded },
       message: '오늘도 자연의 흐름이 여권에 기록되었습니다.',
     };
   } catch (error) {

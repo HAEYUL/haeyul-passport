@@ -16,6 +16,7 @@ export default function PassportHome() {
   const [visitMessage, setVisitMessage] = useState('');
   const [visitError, setVisitError] = useState('');
   const [newRewards, setNewRewards] = useState<string[]>([]);
+  const [tierUpMessage, setTierUpMessage] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
 
@@ -37,7 +38,7 @@ export default function PassportHome() {
     setVisitLoading(false);
 
     if (result.success && result.data) {
-      const { visitCount, newRewardNames, tier } = result.data;
+      const { visitCount, newRewardNames, tier, tierUpgraded } = result.data;
       const tierLine = tier.isMaxTier
         ? VIP_MESSAGE
         : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
@@ -46,6 +47,9 @@ export default function PassportHome() {
       );
       if (newRewardNames.length > 0) {
         setNewRewards(newRewardNames);
+      }
+      if (tierUpgraded) {
+        setTierUpMessage(`${tier.label}(으)로 자라나셨습니다. 자연의 흐름을 함께해 주셔서 감사합니다.`);
       }
       // 데이터 새로고침
       refreshPassportData();
@@ -208,6 +212,21 @@ export default function PassportHome() {
                 다시 시도
               </button>
             )}
+          </div>
+        )}
+
+        {tierUpMessage && (
+          <div className="bg-[#F0F7F2] border border-[#C4DCC9] px-5 py-5 rounded-2xl text-center space-y-2">
+            <Image
+              src={data.tier.iconSrc}
+              alt={data.tier.label}
+              width={40}
+              height={40}
+              className="mx-auto"
+            />
+            <p className="text-[15px] text-[#2D5A3D] leading-relaxed font-medium">
+              {tierUpMessage}
+            </p>
           </div>
         )}
 
