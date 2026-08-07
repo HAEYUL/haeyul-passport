@@ -20,9 +20,9 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 개인정보 동의 체크
-  const [privacyConsent, setPrivacyConsent] = useState(false);
-  const [marketingConsent, setMarketingConsent] = useState(false);
+  // 개인정보 동의 체크 (기본 동의 상태로 시작하며, 원하지 않으면 직접 체크를 해제합니다)
+  const [privacyConsent, setPrivacyConsent] = useState(true);
+  const [marketingConsent, setMarketingConsent] = useState(true);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -150,33 +150,73 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
                 onChange={(e) => setPrivacyConsent(e.target.checked)}
                 className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
-              <label htmlFor="check-privacy" className="text-[15px] text-[#333] leading-snug cursor-pointer">
-                <span className="text-red-500">[필수]</span>{' '}
-                개인정보 수집·이용에 동의합니다.
+              <div className="flex-1">
+                <label htmlFor="check-privacy" className="text-[15px] text-[#333] leading-snug cursor-pointer">
+                  <span className="text-red-500">[필수]</span>{' '}
+                  개인정보 수집·이용에 동의합니다.
+                </label>
                 <button
                   type="button"
                   onClick={() => setShowPrivacyDetail(!showPrivacyDetail)}
                   className="ml-1 text-[#2D5A3D] underline text-sm"
                 >
-                  내용 보기
+                  상세내용보기
                 </button>
-              </label>
+                <ul className="mt-2 space-y-0.5 text-sm text-[#666] leading-relaxed list-disc list-inside">
+                  <li>수집 항목: 이름, 연락처, 생일</li>
+                  <li>수집 목적: 방문 기록 관리 및 선물·생일 혜택 제공</li>
+                  <li>보유 기간: 회원 탈퇴 시까지</li>
+                  <li>동의를 거부할 수 있으며, 거부 시 전자여권 서비스 이용이 제한됩니다.</li>
+                </ul>
+              </div>
             </div>
 
             {/* 개인정보 동의 상세 */}
             {showPrivacyDetail && (
-              <div className="bg-[#F5F5EC] rounded-xl p-4 text-sm text-[#666] leading-relaxed">
-                <p className="font-semibold text-[#333] mb-2">개인정보 수집·이용 안내</p>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li>수집 항목: 성함, 휴대전화 번호, 방문 기록</li>
-                  <li>수집 목적: 방문 기록 관리 및 선물 제공</li>
-                  <li>보유 기간: 회원 탈퇴 시까지</li>
-                  <li>동의를 거부할 수 있으며, 거부 시 서비스 이용이 제한됩니다.</li>
-                </ul>
-                <p className="mt-3 text-xs text-[#999]">
-                  ※ 본 내용은 시험 운영용 임시 문구입니다.<br />
-                  실제 운영 전 법률 전문가의 검토가 필요합니다.
-                </p>
+              <div className="bg-[#F5F5EC] rounded-xl p-4 text-sm text-[#666] leading-relaxed space-y-3">
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">1. 수집하는 개인정보</p>
+                  <p className="mb-1">해율 전자여권은 다음의 개인정보를 수집합니다.</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>이름</li>
+                    <li>연락처</li>
+                    <li>생일</li>
+                    <li>방문 기록</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">2. 개인정보 이용 목적</p>
+                  <p className="mb-1">수집한 개인정보는 다음의 목적으로 이용합니다.</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>방문 기록 및 회원 등급 관리</li>
+                    <li>방문 선물 및 생일 혜택 제공</li>
+                    <li>고객 서비스 운영</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">3. 보유 및 이용 기간</p>
+                  <p>개인정보는 회원 탈퇴 시까지 보관하며, 관련 법령에 따라 보관이 필요한 경우를 제외하고는 지체 없이 파기합니다.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">4. 개인정보 제3자 제공</p>
+                  <p>해율은 고객의 개인정보를 고객의 동의 없이 제3자에게 제공하지 않습니다. 다만, 관련 법령에 따라 제공이 필요한 경우는 예외로 합니다.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">5. 이용자의 권리</p>
+                  <p>고객은 언제든지 자신의 개인정보에 대한 조회, 수정, 삭제 및 회원 탈퇴를 요청할 수 있습니다.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">6. 개인정보 보호</p>
+                  <p>해율은 개인정보의 분실, 도난, 유출 및 훼손을 방지하기 위해 필요한 보호조치를 시행하고 있습니다.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#333] mb-1">7. 문의처</p>
+                  <p>개인정보와 관련한 문의는 아래로 연락해 주시기 바랍니다.</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>상호: 해율만두전골</li>
+                    <li>전화: 031-261-8000</li>
+                  </ul>
+                </div>
               </div>
             )}
 
