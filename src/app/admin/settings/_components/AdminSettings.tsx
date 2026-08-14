@@ -4,11 +4,13 @@ import { useState } from 'react';
 import AdminNav from '../../_components/AdminNav';
 import QrManagement from './QrManagement';
 import StatsOverview from './StatsOverview';
+import StoreLocationSettings from './StoreLocationSettings';
 
-type Section = 'qr' | 'stats';
+type Section = 'qr' | 'location' | 'stats';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'qr', label: 'QR 관리' },
+  { key: 'location', label: '매장 위치' },
   { key: 'stats', label: '통계' },
 ];
 
@@ -58,6 +60,11 @@ export default function AdminSettings() {
         {section === 'qr' && (
           <div className="max-w-2xl">
             <QrManagement />
+          </div>
+        )}
+        {section === 'location' && (
+          <div className="max-w-2xl">
+            <StoreLocationSettings />
           </div>
         )}
         {section === 'stats' && <StatsOverview />}

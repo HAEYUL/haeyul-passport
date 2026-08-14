@@ -44,6 +44,7 @@ export const AUDIT_ACTION = {
   CUSTOMER_UPDATE: 'customer_update',
   CUSTOMER_DELETE: 'customer_delete',
   QR_REISSUE: 'qr_reissue',
+  STORE_LOCATION_UPDATE: 'store_location_update',
   SMS_SEND: 'sms_send',
 } as const;
 

@@ -12,6 +12,9 @@ export type ConsentType = 'privacy' | 'marketing';
 /** 매장 코드 (store_code) */
 export type StoreCode = 'haeyul' | 'gondre' | 'jeongdam';
 
+/** 방문 등록 시 위치 확인 결과 */
+export type LocationVerifiedStatus = 'success' | 'failed' | 'unavailable';
+
 // ============================================================
 // 테이블 타입
 // ============================================================
@@ -23,6 +26,9 @@ export interface Store {
   name: string;
   brand_name: string;
   is_active: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  radius_meters: number;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +81,8 @@ export interface Visit {
   cancelled_at: string | null;
   cancelled_by: string | null;
   cancel_reason: string | null;
+  location_verified: LocationVerifiedStatus;
+  distance_meters: number | null;
   created_at: string;
 }
 

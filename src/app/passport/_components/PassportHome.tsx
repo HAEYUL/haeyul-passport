@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 import { VIP_MESSAGE } from '@/lib/tiers';
+import { getCurrentPosition } from '@/lib/geolocation';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import BrandLogo from '@/components/BrandLogo';
@@ -40,7 +41,8 @@ export default function PassportHome() {
     setVisitMessage('');
     setVisitError('');
 
-    const result = await registerVisit();
+    const { coords } = await getCurrentPosition();
+    const result = await registerVisit(coords?.latitude ?? null, coords?.longitude ?? null);
 
     setVisitLoading(false);
 

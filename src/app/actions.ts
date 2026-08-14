@@ -7,7 +7,29 @@ import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
 import { REWARD_EXPIRY_MONTHS } from '@/lib/constants';
+import { verifyLocation } from '@/lib/geo';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
+
+const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
+
+/**
+ * QR로 확인된 매장의 좌표를 조회하고, 클라이언트 좌표와 비교해 위치 확인 결과를 판정합니다.
+ * 반경 밖으로 확인된 경우(status: 'failed') 호출부에서 등록 자체를 막아야 합니다.
+ */
+async function checkStoreLocation(
+  supabase: ReturnType<typeof createAdminClient>,
+  storeId: string,
+  clientLat: number | null,
+  clientLng: number | null
+) {
+  const { data: store } = await supabase
+    .from('stores')
+    .select('latitude, longitude, radius_meters')
+    .eq('id', storeId)
+    .single();
+
+  return verifyLocation(clientLat, clientLng, store ?? { latitude: null, longitude: null, radius_meters: 100 });
+}
 
 /**
  * 선물 발급일(issuedAt) 기준 유효기간(6개월)이 지났는지 확인합니다.
@@ -68,6 +90,17 @@ export async function registerCustomer(
     const phone = normalizePhone(rawPhone);
 
     const supabase = createAdminClient();
+
+    // ─── 위치 확인 (QR 부정 스캔 방지) ─────────────────
+    const rawLat = formData.get('latitude') as string | null;
+    const rawLng = formData.get('longitude') as string | null;
+    const clientLat = rawLat ? Number(rawLat) : null;
+    const clientLng = rawLng ? Number(rawLng) : null;
+    const locationResult = await checkStoreLocation(supabase, storeId, clientLat, clientLng);
+
+    if (locationResult.status === 'failed') {
+      return { success: false, error: LOCATION_REJECTED_ERROR };
+    }
 
     // ─── 중복 전화번호 확인 ─────────────────────────
     const { data: existing } = await supabase
@@ -135,6 +168,8 @@ export async function registerCustomer(
       customer_id: customer.id,
       visit_date: todayKST,
       store_id: storeId,
+      location_verified: locationResult.status,
+      distance_meters: locationResult.distanceMeters,
     });
 
     if (visitError) {
@@ -422,7 +457,10 @@ export interface VisitResult {
 /**
  * 오늘의 방문 기록하기
  */
-export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
+export async function registerVisit(
+  latitude?: number | null,
+  longitude?: number | null
+): Promise<ApiResponse<VisitResult>> {
   try {
     const session = await getSession();
     if (!session) {
@@ -439,6 +477,12 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
 
     const supabase = createAdminClient();
     const todayKST = getTodayKST();
+
+    // ─── 위치 확인 (QR 부정 스캔 방지) ─────────────────
+    const locationResult = await checkStoreLocation(supabase, storeId, latitude ?? null, longitude ?? null);
+    if (locationResult.status === 'failed') {
+      return { success: false, error: LOCATION_REJECTED_ERROR };
+    }
 
     // 오늘 이 매장에 이미 방문했는지 확인 (다른 매장은 같은 날에도 별도로 방문 가능)
     const { data: existing } = await supabase
@@ -462,6 +506,8 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
       customer_id: session.customerId,
       visit_date: todayKST,
       store_id: storeId,
+      location_verified: locationResult.status,
+      distance_meters: locationResult.distanceMeters,
     });
 
     if (visitError) {

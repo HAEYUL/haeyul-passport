@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { registerCustomer } from '@/app/actions';
+import type { GeoCoords } from '@/lib/geolocation';
 
 interface RegisterFormProps {
   onBack: () => void;
+  /** VisitLanding에서 접속 시점에 미리 요청해둔 위치 정보. 없으면 null(확인 안 됨으로 처리) */
+  geoCoords: GeoCoords | null;
 }
 
 /**
@@ -16,7 +19,7 @@ interface RegisterFormProps {
  * 세션이 생긴 것을 감지한 /visit의 리다이렉트 로직에 의해 화면이 곧바로
  * /passport로 덮여버립니다. 그래서 성공 화면은 별도 라우트로 분리했습니다.
  */
-export default function RegisterForm({ onBack }: RegisterFormProps) {
+export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -82,6 +85,8 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
 
         {/* 가입 폼 */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          <input type="hidden" name="latitude" value={geoCoords?.latitude ?? ''} />
+          <input type="hidden" name="longitude" value={geoCoords?.longitude ?? ''} />
           {/* 성함 (필수) */}
           <div>
             <label htmlFor="input-name" className="block text-base font-medium text-[#333] mb-2">

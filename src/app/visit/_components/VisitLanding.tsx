@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import RegisterForm from './RegisterForm';
 import LoginForm from './LoginForm';
 import BrandLogo from '@/components/BrandLogo';
+import { getCurrentPosition, type GeoCoords } from '@/lib/geolocation';
 
 interface VisitLandingProps {
   /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
@@ -17,9 +18,17 @@ interface VisitLandingProps {
  */
 export default function VisitLanding({ storeName }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
+  const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
+
+  // 접속하자마자 위치 정보 권한을 요청합니다 (QR 부정 스캔 방지용).
+  // 거부/미지원이어도 이 화면 자체는 그대로 진행됩니다 — 실제 등록 차단 여부는
+  // 서버에서 좌표 유무에 따라 판단합니다.
+  useEffect(() => {
+    getCurrentPosition().then((result) => setGeoCoords(result.coords));
+  }, []);
 
   if (mode === 'register') {
-    return <RegisterForm onBack={() => setMode('landing')} />;
+    return <RegisterForm onBack={() => setMode('landing')} geoCoords={geoCoords} />;
   }
 
   if (mode === 'login') {

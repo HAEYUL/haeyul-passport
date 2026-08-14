@@ -22,7 +22,7 @@ import {
   getAdminSession,
   clearAdminSession,
 } from '@/lib/adminSession';
-import type { ApiResponse, Customer, RewardStatus, Store } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, Store, LocationVerifiedStatus } from '@/types/database';
 
 /**
  * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
@@ -928,6 +928,8 @@ export interface VisitRecordItem {
   visitTime: string;
   isCancelled: boolean;
   cancelReason: string | null;
+  locationVerified: LocationVerifiedStatus;
+  distanceMeters: number | null;
 }
 
 async function fetchVisitRecords(
@@ -948,7 +950,7 @@ async function fetchVisitRecords(
 
   let request = supabase
     .from('visits')
-    .select('id, customer_id, visit_date, visit_time, is_cancelled, cancel_reason')
+    .select('id, customer_id, visit_date, visit_time, is_cancelled, cancel_reason, location_verified, distance_meters')
     .order('visit_date', { ascending: false })
     .order('visit_time', { ascending: false })
     .limit(opts.limit ?? 300);
@@ -994,6 +996,8 @@ async function fetchVisitRecords(
       visitTime: v.visit_time,
       isCancelled: v.is_cancelled,
       cancelReason: v.cancel_reason,
+      locationVerified: v.location_verified,
+      distanceMeters: v.distance_meters,
     };
   });
 }
@@ -1512,6 +1516,81 @@ export async function getStores(): Promise<ApiResponse<Store[]>> {
     return { success: true, data: data || [] };
   } catch (error) {
     console.error('getStores 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface StoreLocationInput {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
+/**
+ * 매장 위치 좌표와 허용 반경을 수정합니다. (QR 부정 스캔 방지용 위치 확인 기능에서 사용)
+ */
+export async function updateStoreLocation(
+  storeId: string,
+  input: StoreLocationInput
+): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    if (
+      !Number.isFinite(input.latitude) ||
+      input.latitude < -90 ||
+      input.latitude > 90
+    ) {
+      return { success: false, error: '위도 값이 올바르지 않습니다.' };
+    }
+    if (
+      !Number.isFinite(input.longitude) ||
+      input.longitude < -180 ||
+      input.longitude > 180
+    ) {
+      return { success: false, error: '경도 값이 올바르지 않습니다.' };
+    }
+    if (!Number.isInteger(input.radiusMeters) || input.radiusMeters <= 0) {
+      return { success: false, error: '허용 반경은 0보다 큰 정수여야 합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase.from('stores').select('*').eq('id', storeId).single();
+    if (!before) {
+      return { success: false, error: '매장 정보를 찾을 수 없습니다.' };
+    }
+
+    const { data: after, error: updateError } = await supabase
+      .from('stores')
+      .update({
+        latitude: input.latitude,
+        longitude: input.longitude,
+        radius_meters: input.radiusMeters,
+      })
+      .eq('id', storeId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return { success: false, error: '매장 위치 저장 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.STORE_LOCATION_UPDATE,
+      target_type: 'store',
+      target_id: storeId,
+      before_data: before,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('updateStoreLocation 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

@@ -133,6 +133,24 @@ function CancelVisitControl({
   );
 }
 
+function LocationBadge({ status, distanceMeters }: { status: VisitRecordItem['locationVerified']; distanceMeters: number | null }) {
+  if (status === 'success') {
+    return (
+      <span className="text-xs text-[#2D5A3D] font-semibold whitespace-nowrap">
+        확인됨{distanceMeters != null && ` (${distanceMeters}m)`}
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-bold text-white bg-[#D4442A] whitespace-nowrap">
+        ⚠ 반경 밖{distanceMeters != null && ` (${distanceMeters}m)`}
+      </span>
+    );
+  }
+  return <span className="text-xs text-[#AAA] whitespace-nowrap">확인 안 됨</span>;
+}
+
 function VisitRecordTable({
   records,
   onChanged,
@@ -150,7 +168,7 @@ function VisitRecordTable({
 
   return (
     <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-      <table className="w-full text-sm min-w-[680px]">
+      <table className="w-full text-sm min-w-[760px]">
         <thead>
           <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
             <th className="px-4 py-3 font-medium">방문일</th>
@@ -159,12 +177,18 @@ function VisitRecordTable({
             <th className="px-4 py-3 font-medium">여권번호</th>
             <th className="px-4 py-3 font-medium">연락처</th>
             <th className="px-4 py-3 font-medium">상태</th>
+            <th className="px-4 py-3 font-medium">위치확인</th>
             <th className="px-4 py-3 font-medium text-right">관리</th>
           </tr>
         </thead>
         <tbody>
           {records.map((r) => (
-            <tr key={r.id} className="border-b border-[#F0EDE6] last:border-0">
+            <tr
+              key={r.id}
+              className={`border-b border-[#F0EDE6] last:border-0 ${
+                r.locationVerified === 'failed' && !r.isCancelled ? 'bg-[#FFF0EC]' : ''
+              }`}
+            >
               <td className="px-4 py-3 whitespace-nowrap text-[#333]">{formatDateKR(r.visitDate)}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#555]">{formatTimeKR(r.visitTime)}</td>
               <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{r.customerName}</td>
@@ -178,6 +202,9 @@ function VisitRecordTable({
                 ) : (
                   <span className="text-xs text-[#2D5A3D] font-semibold">정상</span>
                 )}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <LocationBadge status={r.locationVerified} distanceMeters={r.distanceMeters} />
               </td>
               <td className="px-4 py-3 text-right">
                 {!r.isCancelled && <CancelVisitControl visitId={r.id} onCancelled={onChanged} />}
