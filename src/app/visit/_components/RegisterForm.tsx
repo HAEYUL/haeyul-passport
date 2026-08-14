@@ -166,6 +166,7 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
                   <li>수집 항목: 이름, 연락처, 생일</li>
                   <li>수집 목적: 방문 기록 관리 및 선물·생일 혜택 제공</li>
                   <li>보유 기간: 회원 탈퇴 시까지</li>
+                  <li>해율만두전골·곤드레밥집·정담명가 남원추어탕에서 함께 이용됩니다.</li>
                   <li>동의를 거부할 수 있으며, 거부 시 전자여권 서비스 이용이 제한됩니다.</li>
                 </ul>
               </div>
@@ -176,7 +177,10 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
               <div className="bg-[#F5F5EC] rounded-xl p-4 text-sm text-[#666] leading-relaxed space-y-3">
                 <div>
                   <p className="font-semibold text-[#333] mb-1">1. 수집하는 개인정보</p>
-                  <p className="mb-1">해율 전자여권은 다음의 개인정보를 수집합니다.</p>
+                  <p className="mb-1">
+                    해율 전자여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
+                    통합 회원 서비스이며, 다음의 개인정보를 수집합니다.
+                  </p>
                   <ul className="space-y-1 list-disc list-inside">
                     <li>이름</li>
                     <li>연락처</li>
@@ -213,8 +217,8 @@ export default function RegisterForm({ onBack }: RegisterFormProps) {
                   <p className="font-semibold text-[#333] mb-1">7. 문의처</p>
                   <p>개인정보와 관련한 문의는 아래로 연락해 주시기 바랍니다.</p>
                   <ul className="space-y-1 list-disc list-inside">
-                    <li>상호: 해율만두전골</li>
-                    <li>전화: 031-261-8000</li>
+                    <li>상호: 해율만두전골, 곤드레밥집, 정담명가 남원추어탕</li>
+                    <li>연락처: 여권관리자 010-5346-3333</li>
                   </ul>
                 </div>
               </div>

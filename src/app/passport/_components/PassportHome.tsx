@@ -9,6 +9,13 @@ import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import BrandLogo from '@/components/BrandLogo';
 
+// 매장 주소 (매장별 방문 횟수 카드의 매장명과 매칭)
+const STORE_ADDRESSES: Record<string, string> = {
+  '해율만두전골': '용인시 수지구 고기로 173번길 5',
+  '곤드레밥집': '용인시 수지구 고기로 114',
+  '정담명가 남원추어탕': '용인시 수지구 고기로 129번길 12',
+};
+
 export default function PassportHome() {
   const [data, setData] = useState<PassportData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -194,21 +201,6 @@ export default function PassportHome() {
               </div>
             </div>
           )}
-
-          {/* 매장별 방문 횟수 */}
-          {data.storeVisitBreakdown.length > 0 && (
-            <div className="border-t border-[#F0EDE6] pt-4 space-y-2">
-              <p className="text-xs text-[#AAA]">매장별 방문 횟수</p>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                {data.storeVisitBreakdown.map((s) => (
-                  <div key={s.storeName} className="bg-[#F5F5EC] rounded-xl py-2 px-1">
-                    <p className="text-xs text-[#8C8C80] leading-tight">{s.storeName}</p>
-                    <p className="text-base font-bold text-[#2D5A3D]">{s.count}회</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* 오늘의 방문 / 메시지 영역 */}
@@ -309,6 +301,23 @@ export default function PassportHome() {
           </div>
         )}
 
+        {/* 매장별 방문 횟수 */}
+        {data.storeVisitBreakdown.length > 0 && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-2">
+            <p className="text-xs text-[#AAA]">매장별 방문 횟수</p>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {data.storeVisitBreakdown.map((s) => (
+                <div key={s.storeName} className="bg-[#F5F5EC] rounded-xl py-2 px-1">
+                  <p className="text-xs text-[#8C8C80] leading-tight whitespace-nowrap">
+                    {s.storeName.replace('남원', '')}
+                  </p>
+                  <p className="text-base font-bold text-[#2D5A3D]">{s.count}회</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 메뉴 버튼들 */}
         <div className="space-y-3">
           <button
@@ -340,16 +349,27 @@ export default function PassportHome() {
 
         {/* 하단 문구 + 로그아웃 */}
         <footer className="pt-4 border-t border-[#E8E4DA] space-y-4">
+          {data.storeVisitBreakdown.length > 0 && (
+            <div className="mx-auto w-fit space-y-1 text-xs text-[#B0B0A0]">
+              {data.storeVisitBreakdown.map((s) => (
+                <div key={s.storeName} className="flex gap-3">
+                  <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
+                  <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="text-center text-sm text-[#B0B0A0] leading-relaxed">
             봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
             가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
             해율을 찾아주시는 한 걸음 한 걸음이<br />
             자연의 흐름을 이어갑니다. 감사합니다.
           </p>
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-2">
             <button
               onClick={() => setShowMyInfo(true)}
-              className="text-sm text-[#AAA] underline"
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#2D5A3D] bg-[#F0F7F2]
+                         border border-[#C4DCC9] hover:bg-[#E4F0E8] transition-colors duration-200"
             >
               내 정보
             </button>
@@ -357,13 +377,15 @@ export default function PassportHome() {
               onClick={() => {
                 window.location.href = '/guide';
               }}
-              className="text-sm text-[#AAA] underline"
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#2D5A3D] bg-[#F0F7F2]
+                         border border-[#C4DCC9] hover:bg-[#E4F0E8] transition-colors duration-200"
             >
               여권 설명서
             </button>
             <button
               onClick={handleLogout}
-              className="text-sm text-[#AAA] underline"
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#D4442A] bg-[#FFF5F0]
+                         border border-[#F0C4B8] hover:bg-[#FFEAE0] transition-colors duration-200"
               id="btn-logout"
             >
               로그아웃
