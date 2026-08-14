@@ -271,6 +271,10 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       <span className="font-semibold text-[#2D5A3D]">{data.customer.visit_count}회</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-[#8C8C80]">가입 매장</span>
+                      <span className="text-[#333]">{data.signupStoreName || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-[#8C8C80]">가입일</span>
                       <span className="text-[#333]">{formatDateKR(data.customer.created_at)}</span>
                     </div>
@@ -279,6 +283,17 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       <span className="text-[#333]">{data.customer.marketing_consent ? '동의' : '미동의'}</span>
                     </div>
                   </div>
+
+                  {data.storeVisitBreakdown.length > 0 && (
+                    <div className="grid gap-2 pt-3 border-t border-[#F0EDE6]" style={{ gridTemplateColumns: `repeat(${data.storeVisitBreakdown.length}, minmax(0, 1fr))` }}>
+                      {data.storeVisitBreakdown.map((s) => (
+                        <div key={s.storeId} className="bg-[#F5F5EC] rounded-xl px-3 py-2 text-center">
+                          <p className="text-xs text-[#8C8C80]">{s.storeName}</p>
+                          <p className="mt-0.5 text-lg font-bold text-[#2D5A3D]">{s.count}회</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="flex gap-2 pt-3 border-t border-[#F0EDE6]">
                     <button
@@ -346,8 +361,18 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]"
                     >
                       <div>
-                        <p className="text-[15px] font-medium text-[#333]">{r.rewardName}</p>
-                        <p className="text-xs text-[#AAA]">발급일: {formatDateKR(r.issuedAt)}</p>
+                        <p className="text-[15px] font-medium text-[#333]">
+                          {r.amount.toLocaleString()}원 할인권 <span className="text-xs text-[#AAA]">({r.thresholdVisits}회)</span>
+                        </p>
+                        <p className="text-xs text-[#AAA]">
+                          발급일: {formatDateKR(r.issuedAt)} · {r.issuedStoreName}
+                        </p>
+                        {r.status === 'used' && r.usedAt && (
+                          <p className="text-xs text-[#AAA]">
+                            사용일: {formatDateKR(r.usedAt)}
+                            {r.usedStoreName && ` · ${r.usedStoreName}`}
+                          </p>
+                        )}
                       </div>
                       <RewardStatusBadge status={r.status} />
                     </li>
@@ -369,6 +394,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]"
                     >
                       <span className="text-[15px] text-[#333]">{formatDateKR(v.visitDate)}</span>
+                      <span className="text-xs text-[#8C8C80]">{v.storeName}</span>
                     </li>
                   ))}
                 </ul>

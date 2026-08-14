@@ -15,7 +15,7 @@ export default function PassportHome() {
   const [visitLoading, setVisitLoading] = useState(false);
   const [visitMessage, setVisitMessage] = useState('');
   const [visitError, setVisitError] = useState('');
-  const [newRewards, setNewRewards] = useState<string[]>([]);
+  const [newCouponAmounts, setNewCouponAmounts] = useState<number[]>([]);
   const [tierUpMessage, setTierUpMessage] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -38,15 +38,15 @@ export default function PassportHome() {
     setVisitLoading(false);
 
     if (result.success && result.data) {
-      const { visitCount, newRewardNames, tier, tierUpgraded } = result.data;
+      const { visitCount, newCouponAmounts, tier, tierUpgraded } = result.data;
       const tierLine = tier.isMaxTier
         ? VIP_MESSAGE
         : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
       setVisitMessage(
         `오늘도 자연의 흐름이 여권에 기록되었습니다.\n현재까지 총 ${visitCount}회 방문하셨습니다.\n${tierLine}`
       );
-      if (newRewardNames.length > 0) {
-        setNewRewards(newRewardNames);
+      if (newCouponAmounts.length > 0) {
+        setNewCouponAmounts(newCouponAmounts);
       }
       if (tierUpgraded) {
         setTierUpMessage(`${tier.label}(으)로 자라나셨습니다. 자연의 흐름을 함께해 주셔서 감사합니다.`);
@@ -115,6 +115,9 @@ export default function PassportHome() {
         <header className="text-center space-y-3">
           <BrandLogo height={56} textClassName="text-2xl" />
           <p className="text-sm text-[#AAA]">해율 자연의 흐름 전자여권</p>
+          <p className="text-xs text-[#B0B0A0]">
+            해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕
+          </p>
         </header>
 
         {/* 고객 정보 카드 */}
@@ -191,6 +194,21 @@ export default function PassportHome() {
               </div>
             </div>
           )}
+
+          {/* 매장별 방문 횟수 */}
+          {data.storeVisitBreakdown.length > 0 && (
+            <div className="border-t border-[#F0EDE6] pt-4 space-y-2">
+              <p className="text-xs text-[#AAA]">매장별 방문 횟수</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {data.storeVisitBreakdown.map((s) => (
+                  <div key={s.storeName} className="bg-[#F5F5EC] rounded-xl py-2 px-1">
+                    <p className="text-xs text-[#8C8C80] leading-tight">{s.storeName}</p>
+                    <p className="text-base font-bold text-[#2D5A3D]">{s.count}회</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 오늘의 방문 / 메시지 영역 */}
@@ -230,12 +248,12 @@ export default function PassportHome() {
           </div>
         )}
 
-        {newRewards.length > 0 && (
+        {newCouponAmounts.length > 0 && (
           <div className="bg-[#FFFDF0] border border-[#E8D88C] px-5 py-5 rounded-2xl text-center space-y-2">
             <p className="text-lg font-bold text-[#B8860B]">🎉 축하드립니다!</p>
             <p className="text-[15px] text-[#666] leading-relaxed">
-              새로운 방문 선물이 도착했습니다.<br />
-              {newRewards.join(' · ')}
+              새로운 할인권이 도착했습니다.<br />
+              {newCouponAmounts.map((a) => `${a.toLocaleString()}원`).join(' · ')}
             </p>
             <p className="text-sm text-[#999]">내 선물함에서 확인해 주세요.</p>
           </div>
@@ -246,7 +264,7 @@ export default function PassportHome() {
           data.qrVerified ? (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center space-y-4">
               <p className="text-[15px] text-[#2D5A3D] leading-relaxed">
-                해율 매장 방문이 확인되었습니다.<br />
+                {data.storeName ?? '매장'} 방문이 확인되었습니다.<br />
                 오늘의 방문을 기록하시겠습니까?
               </p>
               <button
@@ -266,7 +284,7 @@ export default function PassportHome() {
                     기록 중...
                   </span>
                 ) : (
-                  '해율 방문 기록하기'
+                  `${data.storeName ?? '매장'} 방문 기록하기`
                 )}
               </button>
             </div>

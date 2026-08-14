@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getRewardCatalog, type RewardCatalogItem } from '@/app/actions';
+import { getRewardCatalog, type RewardRuleCatalogItem } from '@/app/actions';
 import { getAllTiers } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
 
@@ -11,7 +11,7 @@ const tiers = getAllTiers();
 
 export default function PassportGuide() {
   const router = useRouter();
-  const [rewards, setRewards] = useState<RewardCatalogItem[] | null>(null);
+  const [rewards, setRewards] = useState<RewardRuleCatalogItem[] | null>(null);
 
   useEffect(() => {
     getRewardCatalog().then((result) => {
@@ -40,9 +40,12 @@ export default function PassportGuide() {
         <header className="text-center space-y-3">
           <BrandLogo height={48} textClassName="text-xl" />
           <div>
-            <h1 className="text-xl font-bold text-[#2D5A3D]">해율 여권 설명서</h1>
+            <h1 className="text-xl font-bold text-[#2D5A3D]">해율푸드 여권 설명서</h1>
             <p className="mt-1 text-[15px] text-[#8C8C80]">
-              방문할수록 등급이 오르고, 선물도 받으실 수 있어요.
+              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 3개 매장에서 함께 사용하는 통합 전자여권입니다.
+            </p>
+            <p className="mt-1 text-[15px] text-[#8C8C80]">
+              방문할수록 등급이 오르고, 할인권도 받으실 수 있어요.
             </p>
           </div>
         </header>
@@ -71,43 +74,38 @@ export default function PassportGuide() {
             })}
           </div>
           <p className="text-xs text-[#AAA] leading-relaxed">
-            해율 VIP 가족이 되시면 별도 관리되며, 최고 등급에 맞는 혜택을 지속적으로 늘려나갈 예정입니다.
+            해율푸드 VIP 가족이 되시면 별도 관리되며, 최고 등급에 맞는 혜택을 지속적으로 늘려나갈 예정입니다.
           </p>
         </section>
 
-        {/* 방문 선물 안내 */}
+        {/* 방문 할인권 안내 */}
         <section className="space-y-3">
-          <h2 className="text-base font-semibold text-[#555]">방문 선물</h2>
+          <h2 className="text-base font-semibold text-[#555]">방문 할인권</h2>
           {!rewards ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+                <div key={i} className="h-14 rounded-xl bg-[#E8E8E0] animate-pulse" />
               ))}
             </div>
           ) : (
             <ul className="space-y-2">
               {rewards.map((r) => (
                 <li
-                  key={r.requiredVisits}
-                  className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6] flex items-start gap-3"
+                  key={r.thresholdVisits}
+                  className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6] flex items-center gap-3"
                 >
-                  <span className="mt-0.5 w-12 flex-shrink-0 text-sm font-semibold text-[#2D5A3D]">
-                    {r.requiredVisits}회
+                  <span className="w-24 flex-shrink-0 text-sm font-semibold text-[#2D5A3D]">
+                    {r.isRepeating ? `${r.thresholdVisits}회부터 ${r.repeatInterval}회마다` : `${r.thresholdVisits}회`}
                   </span>
-                  <div>
-                    <p className="text-[15px] font-medium text-[#333]">{r.name}</p>
-                    {r.description && (
-                      <p className="mt-0.5 text-xs text-[#8C8C80] leading-relaxed whitespace-pre-line">{r.description}</p>
-                    )}
-                  </div>
+                  <p className="text-[15px] font-medium text-[#333]">{r.amount.toLocaleString()}원 할인권</p>
                 </li>
               ))}
             </ul>
           )}
           <p className="text-xs text-[#AAA] leading-relaxed">
-            선물은 해당 방문 횟수를 달성하면 자동으로 선물함에 담깁니다. 사용하지 않으면 선물함에 계속
-            남아있으니, 매장에서 언제든 직원에게 보여주고 사용하실 수 있습니다. 선물의 유효기간은
-            발급일로부터 6개월입니다.
+            할인권은 해당 방문 횟수를 달성하면 자동으로 선물함에 담기며, 3개 매장 어디서든 사용하실 수
+            있습니다. 사용하지 않으면 선물함에 계속 남아있으니, 매장에서 언제든 직원에게 보여주고
+            사용하실 수 있습니다. 할인권의 유효기간은 발급일로부터 6개월입니다.
           </p>
         </section>
 

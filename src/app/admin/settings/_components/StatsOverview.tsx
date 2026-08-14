@@ -21,6 +21,7 @@ import {
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
 import { LineChart, BarChart, DonutChart, CHART_COLORS, getTierColor } from './charts';
+import StoreFilterBar from '../../_components/StoreFilterBar';
 
 type Period = 'day' | 'week' | 'month';
 
@@ -147,13 +148,13 @@ function PeriodSelector({
   );
 }
 
-function VisitTrendSection({ period, dateFrom, dateTo }: { period: Period; dateFrom?: string; dateTo?: string }) {
+function VisitTrendSection({ period, dateFrom, dateTo, storeId }: { period: Period; dateFrom?: string; dateTo?: string; storeId: string | null }) {
   const [data, setData] = useState<TrendResult | null>(null);
 
   const fetchData = useCallback(async () => {
-    const result = await getVisitTrend(period, dateFrom || undefined, dateTo || undefined);
+    const result = await getVisitTrend(period, dateFrom || undefined, dateTo || undefined, storeId);
     if (result.success && result.data) setData(result.data);
-  }, [period, dateFrom, dateTo]);
+  }, [period, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     fetchData();
@@ -176,13 +177,13 @@ function VisitTrendSection({ period, dateFrom, dateTo }: { period: Period; dateF
   );
 }
 
-function SignupTrendSection({ period, dateFrom, dateTo }: { period: Period; dateFrom?: string; dateTo?: string }) {
+function SignupTrendSection({ period, dateFrom, dateTo, storeId }: { period: Period; dateFrom?: string; dateTo?: string; storeId: string | null }) {
   const [data, setData] = useState<TrendResult | null>(null);
 
   const fetchData = useCallback(async () => {
-    const result = await getSignupTrend(period, dateFrom || undefined, dateTo || undefined);
+    const result = await getSignupTrend(period, dateFrom || undefined, dateTo || undefined, storeId);
     if (result.success && result.data) setData(result.data);
-  }, [period, dateFrom, dateTo]);
+  }, [period, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     fetchData();
@@ -205,13 +206,13 @@ function SignupTrendSection({ period, dateFrom, dateTo }: { period: Period; date
   );
 }
 
-function NewVsReturningSection({ period, dateFrom, dateTo }: { period: Period; dateFrom?: string; dateTo?: string }) {
+function NewVsReturningSection({ period, dateFrom, dateTo, storeId }: { period: Period; dateFrom?: string; dateTo?: string; storeId: string | null }) {
   const [data, setData] = useState<NewReturningPoint[] | null>(null);
 
   const fetchData = useCallback(async () => {
-    const result = await getNewVsReturningTrend(period, dateFrom || undefined, dateTo || undefined);
+    const result = await getNewVsReturningTrend(period, dateFrom || undefined, dateTo || undefined, storeId);
     if (result.success && result.data) setData(result.data);
-  }, [period, dateFrom, dateTo]);
+  }, [period, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     fetchData();
@@ -249,14 +250,15 @@ function NewVsReturningSection({ period, dateFrom, dateTo }: { period: Period; d
   );
 }
 
-function TierBreakdownSection() {
+function TierBreakdownSection({ storeId }: { storeId: string | null }) {
   const [data, setData] = useState<TierBreakdownItem[] | null>(null);
 
   useEffect(() => {
-    getTierBreakdown().then((result) => {
+    setData(null);
+    getTierBreakdown(storeId).then((result) => {
       if (result.success && result.data) setData(result.data);
     });
-  }, []);
+  }, [storeId]);
 
   return (
     <ChartCard title="등급별 회원 수" description="현재 활성 회원을 등급별로 나눈 현황입니다.">
@@ -271,14 +273,15 @@ function TierBreakdownSection() {
   );
 }
 
-function RewardUsageSection() {
+function RewardUsageSection({ storeId }: { storeId: string | null }) {
   const [data, setData] = useState<RewardStatItem[] | null>(null);
 
   useEffect(() => {
-    getRewardStats().then((result) => {
+    setData(null);
+    getRewardStats(storeId).then((result) => {
       if (result.success && result.data) setData(result.data);
     });
-  }, []);
+  }, [storeId]);
 
   return (
     <ChartCard title="선물 발급·사용률" description="방문 횟수별 선물의 발급/사용 현황과 사용률입니다.">
@@ -288,7 +291,7 @@ function RewardUsageSection() {
         <>
           <BarChart
             items={data.map((r) => ({
-              label: `${r.requiredVisits}회`,
+              label: `${r.thresholdVisits}회`,
               values: [
                 { seriesLabel: '발급', value: r.totalIssued, color: CHART_COLORS.slot1 },
                 { seriesLabel: '사용완료', value: r.totalUsed, color: CHART_COLORS.slot3 },
@@ -300,7 +303,7 @@ function RewardUsageSection() {
             <table className="w-full text-sm min-w-[480px]">
               <thead>
                 <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
-                  <th className="px-3 py-2 font-medium">선물</th>
+                  <th className="px-3 py-2 font-medium">할인권</th>
                   <th className="px-3 py-2 font-medium text-right">발급 수</th>
                   <th className="px-3 py-2 font-medium text-right">사용 완료</th>
                   <th className="px-3 py-2 font-medium text-right">미사용</th>
@@ -311,10 +314,10 @@ function RewardUsageSection() {
                 {data.map((r) => {
                   const rate = r.totalIssued > 0 ? Math.round((r.totalUsed / r.totalIssued) * 1000) / 10 : 0;
                   return (
-                    <tr key={r.rewardId} className="border-b border-[#F0EDE6] last:border-0">
+                    <tr key={r.ruleId} className="border-b border-[#F0EDE6] last:border-0">
                       <td className="px-3 py-2 text-[#333]">
-                        {r.rewardName}
-                        <span className="text-xs text-[#AAA] ml-1">({r.requiredVisits}회)</span>
+                        {r.amount.toLocaleString()}원
+                        <span className="text-xs text-[#AAA] ml-1">({r.thresholdVisits}회)</span>
                       </td>
                       <td className="px-3 py-2 text-right text-[#2D5A3D] font-semibold">{r.totalIssued}</td>
                       <td className="px-3 py-2 text-right text-[#8C8C80]">{r.totalUsed}</td>
@@ -332,20 +335,20 @@ function RewardUsageSection() {
   );
 }
 
-function VipConversionSection({ period, dateFrom, dateTo }: { period: Period; dateFrom?: string; dateTo?: string }) {
+function VipConversionSection({ period, dateFrom, dateTo, storeId }: { period: Period; dateFrom?: string; dateTo?: string; storeId: string | null }) {
   const [data, setData] = useState<VipConversionResult | null>(null);
 
   const fetchData = useCallback(async () => {
-    const result = await getVipConversionTrend(period, dateFrom || undefined, dateTo || undefined);
+    const result = await getVipConversionTrend(period, dateFrom || undefined, dateTo || undefined, storeId);
     if (result.success && result.data) setData(result.data);
-  }, [period, dateFrom, dateTo]);
+  }, [period, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   return (
-    <ChartCard title="VIP 전환 수" description="누적 방문 30회를 달성해 해율 VIP가 된 고객 수입니다.">
+    <ChartCard title="VIP 전환 수" description="누적 방문 30회를 달성해 해율푸드 VIP가 된 고객 수입니다.">
       {!data ? (
         <div className="h-48 rounded-xl bg-[#E8E8E0] animate-pulse" />
       ) : (
@@ -374,15 +377,23 @@ const BUCKET_LABELS: Record<LongAbsentBucketKey, string> = {
   from90plus: '90일 이상 미방문',
 };
 
-function LongAbsentDrilldown({ bucket, onClose }: { bucket: LongAbsentBucketKey; onClose: () => void }) {
+function LongAbsentDrilldown({
+  bucket,
+  storeId,
+  onClose,
+}: {
+  bucket: LongAbsentBucketKey;
+  storeId: string | null;
+  onClose: () => void;
+}) {
   const [items, setItems] = useState<LongAbsentCustomerItem[] | null>(null);
 
   useEffect(() => {
     setItems(null);
-    getLongAbsentCustomers(bucket).then((result) => {
+    getLongAbsentCustomers(bucket, storeId).then((result) => {
       if (result.success && result.data) setItems(result.data);
     });
-  }, [bucket]);
+  }, [bucket, storeId]);
 
   return (
     <div className="border-t border-[#F0EDE6] pt-4 space-y-3">
@@ -430,15 +441,17 @@ function LongAbsentDrilldown({ bucket, onClose }: { bucket: LongAbsentBucketKey;
   );
 }
 
-function LongAbsentSection() {
+function LongAbsentSection({ storeId }: { storeId: string | null }) {
   const [data, setData] = useState<LongAbsentBuckets | null>(null);
   const [openBucket, setOpenBucket] = useState<LongAbsentBucketKey | null>(null);
 
   useEffect(() => {
-    getLongAbsentBuckets().then((result) => {
+    setData(null);
+    setOpenBucket(null);
+    getLongAbsentBuckets(storeId).then((result) => {
       if (result.success && result.data) setData(result.data);
     });
-  }, []);
+  }, [storeId]);
 
   const bucketKeys: LongAbsentBucketKey[] = ['from30to59', 'from60to89', 'from90plus'];
 
@@ -463,7 +476,7 @@ function LongAbsentSection() {
               </button>
             ))}
           </div>
-          {openBucket && <LongAbsentDrilldown bucket={openBucket} onClose={() => setOpenBucket(null)} />}
+          {openBucket && <LongAbsentDrilldown bucket={openBucket} storeId={storeId} onClose={() => setOpenBucket(null)} />}
         </>
       )}
     </ChartCard>
@@ -474,9 +487,12 @@ export default function StatsOverview() {
   const [period, setPeriod] = useState<Period>('day');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [storeId, setStoreId] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
+      <StoreFilterBar value={storeId} onChange={setStoreId} />
+
       <PeriodSelector
         period={period}
         onPeriodChange={setPeriod}
@@ -487,16 +503,16 @@ export default function StatsOverview() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <VisitTrendSection period={period} dateFrom={dateFrom} dateTo={dateTo} />
-        <SignupTrendSection period={period} dateFrom={dateFrom} dateTo={dateTo} />
-        <NewVsReturningSection period={period} dateFrom={dateFrom} dateTo={dateTo} />
-        <TierBreakdownSection />
-        <VipConversionSection period={period} dateFrom={dateFrom} dateTo={dateTo} />
+        <VisitTrendSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
+        <SignupTrendSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
+        <NewVsReturningSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
+        <TierBreakdownSection storeId={storeId} />
+        <VipConversionSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
         <div className="lg:col-span-2">
-          <RewardUsageSection />
+          <RewardUsageSection storeId={storeId} />
         </div>
         <div className="lg:col-span-2">
-          <LongAbsentSection />
+          <LongAbsentSection storeId={storeId} />
         </div>
       </div>
     </div>

@@ -3,8 +3,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { normalizePhone, isValidPhone, getTodayKST } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
-import { isQrVerified } from '@/lib/qrVerification';
+import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
+import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
 import { REWARD_EXPIRY_MONTHS } from '@/lib/constants';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
 
@@ -56,7 +57,8 @@ export async function registerCustomer(
       return { success: false, error: '개인정보 수집·이용에 동의해 주세요.' };
     }
 
-    if (!(await isQrVerified())) {
+    const storeId = await getVerifiedStoreId();
+    if (!storeId) {
       return {
         success: false,
         error: '매장 방문 확인이 필요합니다.\nQR코드를 다시 스캔해 주세요.',
@@ -91,6 +93,7 @@ export async function registerCustomer(
         phone,
         birth_date: birthDate || null,
         marketing_consent: marketingConsent,
+        signup_store_id: storeId,
       })
       .select()
       .single();
@@ -131,6 +134,7 @@ export async function registerCustomer(
     const { error: visitError } = await supabase.from('visits').insert({
       customer_id: customer.id,
       visit_date: todayKST,
+      store_id: storeId,
     });
 
     if (visitError) {
@@ -243,6 +247,11 @@ export async function logout() {
 /**
  * 전자여권 홈 데이터 조회
  */
+export interface StoreVisitCount {
+  storeName: string;
+  count: number;
+}
+
 export interface PassportData {
   customer: Customer;
   todayVisited: boolean;
@@ -251,15 +260,16 @@ export interface PassportData {
   hasRewardToUse: boolean;
   tier: VisitTierInfo;
   qrVerified: boolean;
+  /** QR로 확인된 현재 매장 이름. 확인 안 됐으면 null */
+  storeName: string | null;
   rewardProgressMessage: string;
+  /** 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함) */
+  storeVisitBreakdown: StoreVisitCount[];
 }
 
 /**
- * 다음 선물까지 남은 횟수 안내 문구를 계산합니다.
- * - 아직 선물을 한 번도 받지 못했으면 "첫 번째 선물까지"
- * - 마지막 선물(해율 VIP 승급 시점)까지 남았으면 "해율의 VIP까지는"
- * - 그 사이 구간이면 "다음 선물까지"
- * - 이미 해율 VIP면 축하 문구
+ * 다음 할인권까지 남은 방문 횟수와 예정 금액 안내 문구를 계산합니다.
+ * (실물 선물 대신 reward_rules 기반 금액형 할인권 — 008_coupon_rewards.sql 참고)
  */
 async function getRewardProgressMessage(
   supabase: ReturnType<typeof createAdminClient>,
@@ -267,31 +277,26 @@ async function getRewardProgressMessage(
   tier: VisitTierInfo
 ): Promise<string> {
   if (tier.isMaxTier) {
-    return '가장 오랜 시간 자연을 함께한 해율 VIP 입니다.';
+    return '가장 오랜 시간 자연을 함께한 해율푸드 VIP 입니다.';
   }
 
-  const { data: rewards } = await supabase
-    .from('rewards')
-    .select('required_visits')
-    .eq('is_active', true)
-    .order('required_visits', { ascending: true });
+  const { data: rules } = await supabase
+    .from('reward_rules')
+    .select('id, threshold_visits, amount, is_repeating, repeat_interval')
+    .eq('is_active', true);
 
-  const thresholds = (rewards || []).map((r) => r.required_visits);
-  const nextIndex = thresholds.findIndex((t) => t > visitCount);
+  const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
+    id: r.id,
+    thresholdVisits: r.threshold_visits,
+    amount: r.amount,
+    isRepeating: r.is_repeating,
+    repeatInterval: r.repeat_interval,
+  }));
 
-  if (nextIndex === -1) {
-    return '';
-  }
+  const next = getNextCouponInfo(visitCount, ruleInputs);
+  if (!next) return '';
 
-  const remaining = thresholds[nextIndex] - visitCount;
-
-  if (nextIndex === 0) {
-    return `첫 번째 선물까지 ${remaining}회 남았습니다.`;
-  }
-  if (nextIndex === thresholds.length - 1) {
-    return `해율의 VIP까지는 ${remaining}회 남았습니다.`;
-  }
-  return `다음 선물까지 ${remaining}회 남았습니다.`;
+  return `다음 할인권까지 ${next.visitsRemaining}회 남았습니다. (${next.amount.toLocaleString()}원)`;
 }
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
@@ -302,6 +307,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     }
 
     const supabase = createAdminClient();
+    const storeId = await getVerifiedStoreId();
 
     // 고객 정보
     const { data: customer, error: custError } = await supabase
@@ -315,15 +321,27 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
       return { success: false, error: '회원 정보를 찾을 수 없습니다.' };
     }
 
-    // 오늘 방문 여부
+    // 오늘 방문 여부 (QR로 확인된 현재 매장 기준 — 다른 매장은 오늘 이미 방문했어도 별개)
     const todayKST = getTodayKST();
-    const { data: todayVisit } = await supabase
-      .from('visits')
-      .select('id')
-      .eq('customer_id', customer.id)
-      .eq('visit_date', todayKST)
-      .eq('is_cancelled', false)
-      .single();
+    let todayVisited = false;
+    if (storeId) {
+      const { data: todayVisit } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('customer_id', customer.id)
+        .eq('visit_date', todayKST)
+        .eq('store_id', storeId)
+        .eq('is_cancelled', false)
+        .single();
+      todayVisited = !!todayVisit;
+    }
+
+    // QR로 확인된 현재 매장 이름
+    let storeName: string | null = null;
+    if (storeId) {
+      const { data: store } = await supabase.from('stores').select('name').eq('id', storeId).single();
+      storeName = store?.name ?? null;
+    }
 
     // 최근 방문일
     const { data: recentVisit } = await supabase
@@ -335,27 +353,51 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
       .limit(1)
       .single();
 
-    // 사용 가능한 선물 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 선물)
+    // 사용 가능한 할인권 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 할인권만 — 옛 실물 선물 기록은 제외)
     const { data: rewards } = await supabase
       .from('customer_rewards')
       .select('id, status, issued_at')
       .eq('customer_id', customer.id)
+      .not('reward_rule_id', 'is', null)
       .neq('status', 'used');
 
     const availableRewards = (rewards || []).filter((r) => !isRewardExpired(r.issued_at)).length;
     const tier = getVisitTierInfo(customer.visit_count);
 
+    // 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함)
+    const { data: allStores } = await supabase
+      .from('stores')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+    const { data: visitRows } = await supabase
+      .from('visits')
+      .select('store_id')
+      .eq('customer_id', customer.id)
+      .eq('is_cancelled', false);
+
+    const visitCountMap = new Map<string, number>();
+    for (const v of visitRows || []) {
+      visitCountMap.set(v.store_id, (visitCountMap.get(v.store_id) || 0) + 1);
+    }
+    const storeVisitBreakdown: StoreVisitCount[] = (allStores || []).map((s) => ({
+      storeName: s.name,
+      count: visitCountMap.get(s.id) || 0,
+    }));
+
     return {
       success: true,
       data: {
         customer,
-        todayVisited: !!todayVisit,
+        todayVisited,
         recentVisitDate: recentVisit?.visit_date || null,
         availableRewards,
         hasRewardToUse: availableRewards > 0,
         tier,
-        qrVerified: await isQrVerified(),
+        qrVerified: storeId !== null,
+        storeName,
         rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
+        storeVisitBreakdown,
       },
     };
   } catch (error) {
@@ -370,7 +412,8 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
 
 export interface VisitResult {
   visitCount: number;
-  newRewardNames: string[];
+  /** 이번 방문으로 새로 발급된 할인권 금액 목록(원) */
+  newCouponAmounts: number[];
   tier: VisitTierInfo;
   /** 이번 방문으로 방문 등급이 올랐는지 여부 */
   tierUpgraded: boolean;
@@ -386,7 +429,8 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
       return { success: false, error: '로그인이 필요합니다.' };
     }
 
-    if (!(await isQrVerified())) {
+    const storeId = await getVerifiedStoreId();
+    if (!storeId) {
       return {
         success: false,
         error: '매장 방문 확인이 필요합니다.\nQR코드를 다시 스캔해 주세요.',
@@ -396,12 +440,13 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
     const supabase = createAdminClient();
     const todayKST = getTodayKST();
 
-    // 오늘 이미 방문했는지 확인
+    // 오늘 이 매장에 이미 방문했는지 확인 (다른 매장은 같은 날에도 별도로 방문 가능)
     const { data: existing } = await supabase
       .from('visits')
       .select('id')
       .eq('customer_id', session.customerId)
       .eq('visit_date', todayKST)
+      .eq('store_id', storeId)
       .eq('is_cancelled', false)
       .single();
 
@@ -416,6 +461,7 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
     const { error: visitError } = await supabase.from('visits').insert({
       customer_id: session.customerId,
       visit_date: todayKST,
+      store_id: storeId,
     });
 
     if (visitError) {
@@ -443,27 +489,22 @@ export async function registerVisit(): Promise<ApiResponse<VisitResult>> {
     const tierAfter = getVisitTierInfo(visitCount);
     const tierUpgraded = tierBefore.key !== tierAfter.key;
 
-    // 방금 이 방문으로 새로 발급된 선물 확인 (DB 트리거가 방문 횟수 임계값 달성 시 자동 발급)
+    // 방금 이 방문으로 새로 발급된 할인권 확인 (DB 트리거가 방문 횟수 임계값 달성 시 자동 발급)
     const recentThreshold = new Date(Date.now() - 10000).toISOString();
     const { data: justIssued } = await supabase
       .from('customer_rewards')
-      .select('reward_id')
+      .select('amount')
       .eq('customer_id', session.customerId)
+      .not('reward_rule_id', 'is', null)
       .gte('issued_at', recentThreshold);
 
-    let newRewardNames: string[] = [];
-    if (justIssued && justIssued.length > 0) {
-      const rewardIds = justIssued.map((j) => j.reward_id);
-      const { data: rewardRows } = await supabase
-        .from('rewards')
-        .select('id, name')
-        .in('id', rewardIds);
-      newRewardNames = (rewardRows || []).map((r) => r.name);
-    }
+    const newCouponAmounts = (justIssued || [])
+      .map((j) => j.amount ?? 0)
+      .filter((amount) => amount > 0);
 
     return {
       success: true,
-      data: { visitCount, newRewardNames, tier: tierAfter, tierUpgraded },
+      data: { visitCount, newCouponAmounts, tier: tierAfter, tierUpgraded },
       message: '오늘도 자연의 흐름이 여권에 기록되었습니다.',
     };
   } catch (error) {
@@ -526,18 +567,25 @@ export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> 
 
 export interface RewardItem {
   id: string;
-  rewardName: string;
-  description: string | null;
+  /** 할인 금액(원) */
+  amount: number;
+  /** 이 할인권이 해당하는 방문 횟수 기준 */
+  thresholdVisits: number;
   status: RewardStatus;
   issuedAt: string;
-  requestedAt: string | null;
   usedAt: string | null;
-  /** 미사용 상태로 발급일로부터 6개월이 지나 더 이상 사용할 수 없는 선물인지 여부 */
+  /** 발급된 매장 이름 */
+  issuedStoreName: string;
+  /** 사용된 매장 이름. 아직 미사용이면 null */
+  usedStoreName: string | null;
+  /** 미사용 상태로 발급일로부터 6개월이 지나 더 이상 사용할 수 없는 할인권인지 여부 */
   isExpired: boolean;
 }
 
 /**
- * 로그인된 고객의 선물함 목록 조회
+ * 로그인된 고객의 선물함(할인권) 목록 조회.
+ * 실물 선물 시절의 옛 기록(reward_id 기반)은 과거 데이터로 보존하되 화면에는 표시하지 않고,
+ * 할인권(reward_rule_id 기반)만 보여줍니다.
  */
 export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
   try {
@@ -550,37 +598,38 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
 
     const { data: customerRewards, error } = await supabase
       .from('customer_rewards')
-      .select('id, reward_id, status, issued_at, requested_at, used_at')
+      .select('id, threshold_visits, amount, status, issued_at, used_at, issued_store_id, used_store_id')
       .eq('customer_id', session.customerId)
-      .order('issued_at', { ascending: false });
+      .not('reward_rule_id', 'is', null)
+      .order('threshold_visits', { ascending: true });
 
     if (error) {
       return { success: false, error: '선물함 조회 중 오류가 발생했습니다.' };
     }
 
     const list = customerRewards || [];
-    const rewardIds = [...new Set(list.map((r) => r.reward_id))];
+    const storeIds = [
+      ...new Set([
+        ...list.map((r) => r.issued_store_id),
+        ...list.map((r) => r.used_store_id).filter((id): id is string => !!id),
+      ]),
+    ];
 
-    let rewardsMap: Record<string, { name: string; description: string | null }> = {};
-    if (rewardIds.length > 0) {
-      const { data: rewards } = await supabase
-        .from('rewards')
-        .select('id, name, description')
-        .in('id', rewardIds);
-
-      rewardsMap = Object.fromEntries(
-        (rewards || []).map((r) => [r.id, { name: r.name, description: r.description }])
-      );
+    let storeNameMap: Record<string, string> = {};
+    if (storeIds.length > 0) {
+      const { data: stores } = await supabase.from('stores').select('id, name').in('id', storeIds);
+      storeNameMap = Object.fromEntries((stores || []).map((s) => [s.id, s.name]));
     }
 
     const result: RewardItem[] = list.map((cr) => ({
       id: cr.id,
-      rewardName: rewardsMap[cr.reward_id]?.name || '선물',
-      description: rewardsMap[cr.reward_id]?.description ?? null,
+      amount: cr.amount ?? 0,
+      thresholdVisits: cr.threshold_visits ?? 0,
       status: cr.status,
       issuedAt: cr.issued_at,
-      requestedAt: cr.requested_at,
       usedAt: cr.used_at,
+      issuedStoreName: storeNameMap[cr.issued_store_id] || '-',
+      usedStoreName: cr.used_store_id ? storeNameMap[cr.used_store_id] || '-' : null,
       isExpired: cr.status !== 'used' && isRewardExpired(cr.issued_at),
     }));
 
@@ -592,8 +641,9 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
 }
 
 /**
- * 선물 사용 확인 — '사용 완료'로 즉시 처리합니다.
+ * 할인권 사용 확인 — '사용 완료'로 즉시 처리합니다.
  * 별도의 직원 인증 없이, 매장에서 직원이 확인 버튼을 눌러주면 바로 처리됩니다.
+ * 지금 QR로 확인된 매장을 used_store_id로 함께 기록합니다.
  */
 export async function confirmRewardUse(
   customerRewardId: string
@@ -602,6 +652,14 @@ export async function confirmRewardUse(
     const session = await getSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const storeId = await getVerifiedStoreId();
+    if (!storeId) {
+      return {
+        success: false,
+        error: '매장 방문 확인이 필요합니다.\nQR코드를 다시 스캔해 주세요.',
+      };
     }
 
     const supabase = createAdminClient();
@@ -629,6 +687,7 @@ export async function confirmRewardUse(
       .update({
         status: 'used',
         used_at: new Date().toISOString(),
+        used_store_id: storeId,
       })
       .eq('id', customerRewardId)
       .neq('status', 'used');
@@ -686,39 +745,57 @@ export async function updateMarketingConsent(consent: boolean): Promise<ApiRespo
 // 여권 설명서 (로그인 불필요)
 // ============================================================
 
-export interface RewardCatalogItem {
-  name: string;
-  description: string | null;
-  requiredVisits: number;
+export interface RewardRuleCatalogItem {
+  thresholdVisits: number;
+  amount: number;
+  isRepeating: boolean;
+  repeatInterval: number | null;
 }
 
 /**
- * 현재 운영 중인 방문 선물 목록 (설명서 화면용, 로그인 불필요)
+ * 현재 운영 중인 할인권 지급 규칙 목록 (설명서 화면용, 로그인 불필요)
  */
-export async function getRewardCatalog(): Promise<ApiResponse<RewardCatalogItem[]>> {
+export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogItem[]>> {
   try {
     const supabase = createAdminClient();
 
     const { data, error } = await supabase
-      .from('rewards')
-      .select('name, description, required_visits')
+      .from('reward_rules')
+      .select('threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
-      .order('required_visits', { ascending: true });
+      .order('threshold_visits', { ascending: true });
 
     if (error) {
-      return { success: false, error: '선물 정보를 불러올 수 없습니다.' };
+      return { success: false, error: '할인권 정보를 불러올 수 없습니다.' };
     }
 
     return {
       success: true,
       data: (data || []).map((r) => ({
-        name: r.name,
-        description: r.description,
-        requiredVisits: r.required_visits,
+        thresholdVisits: r.threshold_visits,
+        amount: r.amount,
+        isRepeating: r.is_repeating,
+        repeatInterval: r.repeat_interval,
       })),
     };
   } catch (error) {
     console.error('getRewardCatalog 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
+}
+
+// ============================================================
+// 매장 확인 (로그인 불필요)
+// ============================================================
+
+/**
+ * QR 스캔으로 현재 확인된 매장의 이름을 반환합니다. 확인 안 됐으면 null.
+ */
+export async function getCurrentStoreName(): Promise<string | null> {
+  const storeId = await getVerifiedStoreId();
+  if (!storeId) return null;
+
+  const supabase = createAdminClient();
+  const { data } = await supabase.from('stores').select('name').eq('id', storeId).single();
+  return data?.name ?? null;
 }

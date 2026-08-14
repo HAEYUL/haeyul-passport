@@ -9,13 +9,16 @@ import {
   cancelVisit,
   addManualVisit,
   getCustomerList,
+  getStores,
   type VisitRecordItem,
   type DuplicateVisitGroup,
   type VisitCountMismatchItem,
   type CustomerListItem,
 } from '@/app/admin/actions';
+import type { Store } from '@/types/database';
 import { formatDateKR, getTodayKST } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
+import StoreFilterBar from '../../_components/StoreFilterBar';
 
 type Section = 'today' | 'all' | 'duplicates' | 'mismatches' | 'manualAdd';
 
@@ -187,21 +190,22 @@ function VisitRecordTable({
   );
 }
 
-function TodayVisitorsSection() {
+function TodayVisitorsSection({ storeId }: { storeId: string | null }) {
   const [records, setRecords] = useState<VisitRecordItem[] | null>(null);
   const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
-    const result = await getTodayVisitors();
+    const result = await getTodayVisitors(storeId);
     if (result.success && result.data) {
       setRecords(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '방문자 목록을 불러올 수 없습니다.');
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
+    setRecords(null);
     fetchData();
   }, [fetchData]);
 
@@ -222,7 +226,7 @@ function TodayVisitorsSection() {
   );
 }
 
-function AllVisitRecordsSection() {
+function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
   const [query, setQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -230,14 +234,14 @@ function AllVisitRecordsSection() {
   const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
-    const result = await getVisitRecords(query, dateFrom || undefined, dateTo || undefined);
+    const result = await getVisitRecords(query, dateFrom || undefined, dateTo || undefined, storeId);
     if (result.success && result.data) {
       setRecords(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '방문 기록을 불러올 수 없습니다.');
     }
-  }, [query, dateFrom, dateTo]);
+  }, [query, dateFrom, dateTo, storeId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -426,9 +430,22 @@ function ManualAddSection() {
   const [selected, setSelected] = useState<CustomerListItem | null>(null);
   const [visitDate, setVisitDate] = useState(getTodayKST());
   const [reason, setReason] = useState('');
+  const [stores, setStores] = useState<Store[] | null>(null);
+  const [storeId, setStoreId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    getStores().then((result) => {
+      if (result.success && result.data) {
+        setStores(result.data);
+        if (result.data.length > 0) {
+          setStoreId((prev) => prev || result.data![0].id);
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (selected || !query.trim()) {
@@ -449,11 +466,15 @@ function ManualAddSection() {
       setError('고객을 선택해 주세요.');
       return;
     }
+    if (!storeId) {
+      setError('매장을 선택해 주세요.');
+      return;
+    }
     setLoading(true);
     setError('');
     setSuccess('');
 
-    const result = await addManualVisit(selected.id, visitDate, reason);
+    const result = await addManualVisit(selected.id, visitDate, reason, storeId);
 
     setLoading(false);
     if (result.success) {
@@ -524,6 +545,25 @@ function ManualAddSection() {
       </div>
 
       <div>
+        <label className="block text-sm font-medium text-[#555] mb-1">방문 매장</label>
+        <select
+          value={storeId}
+          onChange={(e) => setStoreId(e.target.value)}
+          className="w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
+        >
+          {!stores ? (
+            <option value="">불러오는 중...</option>
+          ) : (
+            stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))
+          )}
+        </select>
+      </div>
+
+      <div>
         <label className="block text-sm font-medium text-[#555] mb-1">방문 날짜</label>
         <input
           type="date"
@@ -572,6 +612,7 @@ function ManualAddSection() {
 
 export default function VisitManagement() {
   const [section, setSection] = useState<Section>('today');
+  const [storeId, setStoreId] = useState<string | null>(null);
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
@@ -589,8 +630,12 @@ export default function VisitManagement() {
           ))}
         </div>
 
-        {section === 'today' && <TodayVisitorsSection />}
-        {section === 'all' && <AllVisitRecordsSection />}
+        {(section === 'today' || section === 'all') && (
+          <StoreFilterBar value={storeId} onChange={setStoreId} />
+        )}
+
+        {section === 'today' && <TodayVisitorsSection storeId={storeId} />}
+        {section === 'all' && <AllVisitRecordsSection storeId={storeId} />}
         {section === 'duplicates' && <DuplicateVisitsSection />}
         {section === 'mismatches' && <MismatchesSection />}
         {section === 'manualAdd' && <ManualAddSection />}

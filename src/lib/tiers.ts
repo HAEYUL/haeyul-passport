@@ -16,14 +16,14 @@ export interface TierDefinition {
 // 낮은 등급부터 순서대로 정의합니다.
 const TIER_DEFINITIONS: TierDefinition[] = [
   { key: 'sprout', label: '새싹', minVisits: 1, iconSrc: '/tiers/sprout.svg', description: '자연과 첫 인연을 시작한 고객' },
-  { key: 'leaf', label: '푸른잎', minVisits: 5, iconSrc: '/tiers/leaf.svg', description: '해율을 다시 찾아주시는 고객' },
-  { key: 'tree', label: '나무', minVisits: 10, iconSrc: '/tiers/tree.svg', description: '해율과 함께 자라가는 단골 고객' },
-  { key: 'forest', label: '숲', minVisits: 20, iconSrc: '/tiers/forest.svg', description: '해율의 소중한 동행' },
-  { key: 'vip', label: '해율 VIP', minVisits: 30, iconSrc: '/tiers/vip.svg', description: '가장 오랜 시간 자연을 함께한 고객' },
+  { key: 'leaf', label: '푸른잎', minVisits: 5, iconSrc: '/tiers/leaf.svg', description: '해율푸드를 다시 찾아주시는 고객' },
+  { key: 'tree', label: '나무', minVisits: 10, iconSrc: '/tiers/tree.svg', description: '해율푸드와 함께 자라가는 단골 고객' },
+  { key: 'forest', label: '숲', minVisits: 20, iconSrc: '/tiers/forest.svg', description: '해율푸드의 소중한 동행' },
+  { key: 'vip', label: '해율푸드 VIP', minVisits: 30, iconSrc: '/tiers/vip.svg', description: '가장 오랜 시간 자연을 함께한 고객' },
 ];
 
 export const VIP_MESSAGE =
-  '해율 VIP가 되셨습니다. 오랜 시간 자연의 흐름을 함께해 주셔서 감사합니다.';
+  '해율푸드 VIP가 되셨습니다. 오랜 시간 자연의 흐름을 함께해 주셔서 감사합니다.';
 
 /**
  * 등급 안내(여권 설명서 등)에서 쓰기 위한 전체 등급 목록.
@@ -38,9 +38,9 @@ export interface VisitTierInfo {
   label: string;
   iconSrc: string;
   minVisits: number;
-  /** 다음 등급까지 남은 방문 횟수. 최고 등급(해율 VIP)이면 null. */
+  /** 다음 등급까지 남은 방문 횟수. 최고 등급(해율푸드 VIP)이면 null. */
   visitsUntilNext: number | null;
-  /** 다음 등급 이름. 최고 등급(해율 VIP)이면 null. */
+  /** 다음 등급 이름. 최고 등급(해율푸드 VIP)이면 null. */
   nextTierLabel: string | null;
   /** 현재 등급 구간 내 진행률(0~100). 최고 등급이면 100. */
   progressPercent: number;

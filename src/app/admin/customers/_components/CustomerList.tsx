@@ -13,6 +13,7 @@ import {
 import { formatDateKR, getTodayKST } from '@/lib/utils';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import AdminNav from '../../_components/AdminNav';
+import StoreFilterBar from '../../_components/StoreFilterBar';
 import SmsComposeModal from './SmsComposeModal';
 
 const FILTER_INFO: Record<CustomerListFilter, { title: string; description: string }> = {
@@ -37,8 +38,8 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     description: '오늘 선물을 사용한 고객 목록입니다.',
   },
   vip: {
-    title: '해율 VIP 고객',
-    description: '해율 VIP 등급(최고 등급)에 도달한 고객 목록입니다.',
+    title: '해율푸드 VIP 고객',
+    description: '해율푸드 VIP 등급(최고 등급)에 도달한 고객 목록입니다.',
   },
   longAbsent: {
     title: '장기 미방문 고객',
@@ -122,6 +123,7 @@ export default function CustomerList() {
     : LONG_ABSENT_DAY_OPTIONS[0];
 
   const [query, setQuery] = useState('');
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
   const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
@@ -130,25 +132,25 @@ export default function CustomerList() {
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
-    const result = await getCustomerList(q, filter, longAbsentDays, tierKey);
+    const result = await getCustomerList(q, filter, longAbsentDays, tierKey, storeId);
     if (result.success && result.data) {
       setCustomers(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '고객 목록을 불러올 수 없습니다.');
     }
-  }, [filter, longAbsentDays, tierKey]);
+  }, [filter, longAbsentDays, tierKey, storeId]);
 
   const fetchTierBreakdown = useCallback(async () => {
     setTierBreakdown(null);
-    const result = await getTierBreakdown();
+    const result = await getTierBreakdown(storeId);
     if (result.success && result.data) {
       setTierBreakdown(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '등급 정보를 불러올 수 없습니다.');
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     if (isTierMenu) {
@@ -214,6 +216,8 @@ export default function CustomerList() {
         </header>
 
         <AdminNav active="customers" />
+
+        <StoreFilterBar value={storeId} onChange={setStoreId} />
 
         {!isTierMenu && (
           <div className="flex flex-wrap gap-2">

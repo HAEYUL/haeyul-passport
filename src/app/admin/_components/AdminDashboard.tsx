@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getDashboardStats, getTodayVipVisitors, type DashboardStats, type TodayVipVisitor } from '@/app/admin/actions';
 import AdminNav from './AdminNav';
+import StoreFilterBar from './StoreFilterBar';
 
 interface AdminDashboardProps {
   username: string;
@@ -33,18 +34,19 @@ function StatCard({
 }
 
 export default function AdminDashboard({ username }: AdminDashboardProps) {
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [vipVisitors, setVipVisitors] = useState<TodayVipVisitor[]>([]);
   const [error, setError] = useState('');
 
   const fetchStats = useCallback(async () => {
-    const result = await getDashboardStats();
+    const result = await getDashboardStats(storeId);
     if (result.success && result.data) {
       setStats(result.data);
     } else if (!result.success) {
       setError(result.error || '통계를 불러올 수 없습니다.');
     }
-  }, []);
+  }, [storeId]);
 
   const fetchVipVisitors = useCallback(async () => {
     const result = await getTodayVipVisitors();
@@ -54,9 +56,13 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
   }, []);
 
   useEffect(() => {
+    setStats(null);
     fetchStats();
+  }, [fetchStats]);
+
+  useEffect(() => {
     fetchVipVisitors();
-  }, [fetchStats, fetchVipVisitors]);
+  }, [fetchVipVisitors]);
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
@@ -68,10 +74,12 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
 
         <AdminNav active="dashboard" />
 
+        <StoreFilterBar value={storeId} onChange={setStoreId} />
+
         {vipVisitors.length > 0 && (
           <div className="bg-[#FFFDF0] border-2 border-[#E8D88C] rounded-2xl px-5 py-4">
             <p className="text-[15px] font-semibold text-[#B8860B]">
-              오늘 방문한 해율 VIP 고객: {vipVisitors.map((v) => v.name).join(', ')}님
+              오늘 방문한 해율푸드 VIP 고객: {vipVisitors.map((v) => v.name).join(', ')}님
             </p>
             <Link href="/admin/vip" className="text-sm text-[#B8860B] underline">
               VIP관리에서 보기
@@ -112,7 +120,7 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
               href="/admin/customers?filter=todayRewardsUsed"
             />
             <StatCard
-              label="해율 VIP"
+              label="해율푸드 VIP"
               value={stats.vipCount}
               href="/admin/customers?filter=vip"
               accent="text-[#B8860B]"

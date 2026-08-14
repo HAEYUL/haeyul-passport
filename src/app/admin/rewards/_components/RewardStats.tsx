@@ -6,14 +6,18 @@ import {
   getAvailableRewards,
   getUsedRewards,
   restoreReward,
-  getRewardCatalogForAdmin,
-  updateRewardCatalogItem,
+  getRewardRules,
+  createRewardRule,
+  updateRewardRule,
+  deleteRewardRule,
   type RewardStatItem,
   type RewardUsageItem,
-  type RewardCatalogAdminItem,
+  type RewardRuleAdminItem,
+  type RewardRuleInput,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
+import StoreFilterBar from '../../_components/StoreFilterBar';
 
 type Section = 'stats' | 'available' | 'used' | 'catalog';
 
@@ -21,7 +25,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'stats', label: '등급별 통계' },
   { key: 'available', label: '사용 가능한 선물' },
   { key: 'used', label: '사용 완료 선물' },
-  { key: 'catalog', label: '선물 기준 관리' },
+  { key: 'catalog', label: '할인권 규칙 관리' },
 ];
 
 function TabButton({
@@ -48,21 +52,29 @@ function TabButton({
   );
 }
 
-function StatsSection() {
+function ruleLabel(s: { thresholdVisits: number; isRepeating: boolean; repeatInterval: number | null }) {
+  if (s.isRepeating && s.repeatInterval) {
+    return `${s.thresholdVisits}회부터 ${s.repeatInterval}회마다`;
+  }
+  return `${s.thresholdVisits}회 방문`;
+}
+
+function StatsSection({ storeId }: { storeId: string | null }) {
   const [stats, setStats] = useState<RewardStatItem[] | null>(null);
   const [error, setError] = useState('');
 
   const fetchStats = useCallback(async () => {
-    const result = await getRewardStats();
+    const result = await getRewardStats(storeId);
     if (result.success && result.data) {
       setStats(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '선물 현황을 불러올 수 없습니다.');
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
+    setStats(null);
     fetchStats();
   }, [fetchStats]);
 
@@ -114,7 +126,7 @@ function StatsSection() {
         <table className="w-full text-[15px] min-w-[420px]">
           <thead>
             <tr className="border-b border-[#F0EDE6] text-left text-sm text-[#8C8C80]">
-              <th className="px-5 py-3 font-medium">선물</th>
+              <th className="px-5 py-3 font-medium">할인권</th>
               <th className="px-3 py-3 font-medium text-right">발급</th>
               <th className="px-3 py-3 font-medium text-right">사용</th>
               <th className="px-5 py-3 font-medium text-right">미사용</th>
@@ -122,10 +134,10 @@ function StatsSection() {
           </thead>
           <tbody>
             {stats.map((s) => (
-              <tr key={s.rewardId} className="border-b border-[#F0EDE6] last:border-0">
+              <tr key={s.ruleId} className="border-b border-[#F0EDE6] last:border-0">
                 <td className="px-5 py-4">
-                  <p className="font-medium text-[#333]">{s.rewardName}</p>
-                  <p className="text-xs text-[#AAA]">{s.requiredVisits}회 방문</p>
+                  <p className="font-medium text-[#333]">{s.amount.toLocaleString()}원 할인권</p>
+                  <p className="text-xs text-[#AAA]">{ruleLabel(s)}</p>
                 </td>
                 <td className="px-3 py-4 text-right text-[#2D5A3D] font-semibold">{s.totalIssued}</td>
                 <td className="px-3 py-4 text-right text-[#8C8C80]">{s.totalUsed}</td>
@@ -193,19 +205,19 @@ function RestoreRewardControl({
   );
 }
 
-function RewardUsageSection({ statusFilter }: { statusFilter: 'available' | 'used' }) {
+function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'available' | 'used'; storeId: string | null }) {
   const [items, setItems] = useState<RewardUsageItem[] | null>(null);
   const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
-    const result = statusFilter === 'used' ? await getUsedRewards() : await getAvailableRewards();
+    const result = statusFilter === 'used' ? await getUsedRewards(storeId) : await getAvailableRewards(storeId);
     if (result.success && result.data) {
       setItems(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '선물 목록을 불러올 수 없습니다.');
     }
-  }, [statusFilter]);
+  }, [statusFilter, storeId]);
 
   useEffect(() => {
     setItems(null);
@@ -236,14 +248,14 @@ function RewardUsageSection({ statusFilter }: { statusFilter: 'available' | 'use
 
   return (
     <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-      <table className="w-full text-sm min-w-[640px]">
+      <table className="w-full text-sm min-w-[720px]">
         <thead>
           <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
             <th className="px-4 py-3 font-medium">고객명</th>
             <th className="px-4 py-3 font-medium">여권번호</th>
-            <th className="px-4 py-3 font-medium">선물명</th>
-            <th className="px-4 py-3 font-medium">발급일</th>
-            {statusFilter === 'used' && <th className="px-4 py-3 font-medium">사용일</th>}
+            <th className="px-4 py-3 font-medium">할인권</th>
+            <th className="px-4 py-3 font-medium">발급일 / 발급매장</th>
+            {statusFilter === 'used' && <th className="px-4 py-3 font-medium">사용일 / 사용매장</th>}
             {statusFilter === 'used' && <th className="px-4 py-3 font-medium text-right">관리</th>}
           </tr>
         </thead>
@@ -252,11 +264,16 @@ function RewardUsageSection({ statusFilter }: { statusFilter: 'available' | 'use
             <tr key={it.id} className="border-b border-[#F0EDE6] last:border-0">
               <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{it.customerName}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#555]">{it.customerNumber}</td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#333]">{it.rewardName}</td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">{formatDateKR(it.issuedAt)}</td>
+              <td className="px-4 py-3 whitespace-nowrap text-[#333]">
+                {it.amount.toLocaleString()}원 <span className="text-xs text-[#AAA]">({it.thresholdVisits}회)</span>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">
+                {formatDateKR(it.issuedAt)} · {it.issuedStoreName}
+              </td>
               {statusFilter === 'used' && (
                 <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">
                   {it.usedAt ? formatDateKR(it.usedAt) : '-'}
+                  {it.usedStoreName && ` · ${it.usedStoreName}`}
                 </td>
               )}
               {statusFilter === 'used' && (
@@ -272,110 +289,198 @@ function RewardUsageSection({ statusFilter }: { statusFilter: 'available' | 'use
   );
 }
 
-function CatalogEditRow({
-  item,
-  onSaved,
+const emptyRuleForm: RewardRuleInput = {
+  thresholdVisits: 0,
+  amount: 0,
+  isRepeating: false,
+  repeatInterval: null,
+};
+
+function RuleForm({
+  initial,
+  submitLabel,
+  onCancel,
+  onSubmit,
 }: {
-  item: RewardCatalogAdminItem;
-  onSaved: () => void;
+  initial: RewardRuleInput;
+  submitLabel: string;
+  onCancel?: () => void;
+  onSubmit: (input: RewardRuleInput) => Promise<{ success: boolean; error?: string }>;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.name);
-  const [description, setDescription] = useState(item.description || '');
+  const [thresholdVisits, setThresholdVisits] = useState(String(initial.thresholdVisits || ''));
+  const [amount, setAmount] = useState(String(initial.amount || ''));
+  const [isRepeating, setIsRepeating] = useState(initial.isRepeating);
+  const [repeatInterval, setRepeatInterval] = useState(String(initial.repeatInterval || ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!editing) {
-    return (
-      <li className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-[#2D5A3D]">{item.requiredVisits}회 방문</span>
-          <button
-            type="button"
-            onClick={() => {
-              setName(item.name);
-              setDescription(item.description || '');
-              setEditing(true);
-            }}
-            className="text-sm text-[#2D5A3D] underline"
-          >
-            수정
-          </button>
-        </div>
-        <p className="text-[15px] font-medium text-[#333]">{item.name}</p>
-        {item.description && <p className="text-sm text-[#8C8C80] leading-relaxed">{item.description}</p>}
-      </li>
-    );
-  }
-
-  async function handleSave() {
+  async function handleSubmit() {
     setLoading(true);
     setError('');
-    const result = await updateRewardCatalogItem(item.id, { name, description });
+    const result = await onSubmit({
+      thresholdVisits: Number(thresholdVisits),
+      amount: Number(amount),
+      isRepeating,
+      repeatInterval: isRepeating ? Number(repeatInterval) : null,
+    });
     setLoading(false);
-    if (result.success) {
-      setEditing(false);
-      onSaved();
-    } else {
+    if (!result.success) {
       setError(result.error || '저장 중 오류가 발생했습니다.');
     }
   }
 
   return (
-    <li className="bg-white rounded-2xl p-5 shadow-sm border border-[#2D5A3D] space-y-3">
-      <span className="text-sm font-semibold text-[#2D5A3D]">{item.requiredVisits}회 방문</span>
-      <div>
-        <label className="block text-xs font-medium text-[#8C8C80] mb-1">선물명</label>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-[#8C8C80] mb-1">기준 방문 횟수</label>
+          <input
+            type="number"
+            value={thresholdVisits}
+            onChange={(e) => setThresholdVisits(e.target.value)}
+            className="w-full px-3 py-2 text-[15px] border-2 border-[#D4D0C8] rounded-xl focus:border-[#2D5A3D] focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#8C8C80] mb-1">할인 금액 (원)</label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full px-3 py-2 text-[15px] border-2 border-[#D4D0C8] rounded-xl focus:border-[#2D5A3D] focus:outline-none"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
         <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full px-3 py-2 text-[15px] border-2 border-[#D4D0C8] rounded-xl focus:border-[#2D5A3D] focus:outline-none"
+          type="checkbox"
+          id={`repeating-${submitLabel}`}
+          checked={isRepeating}
+          onChange={(e) => setIsRepeating(e.target.checked)}
+          className="w-4 h-4"
         />
+        <label htmlFor={`repeating-${submitLabel}`} className="text-sm text-[#333]">
+          기준 횟수 이후 반복 발급
+        </label>
       </div>
-      <div>
-        <label className="block text-xs font-medium text-[#8C8C80] mb-1">설명</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className="w-full px-3 py-2 text-[15px] border-2 border-[#D4D0C8] rounded-xl focus:border-[#2D5A3D] focus:outline-none resize-none"
-        />
-      </div>
+      {isRepeating && (
+        <div>
+          <label className="block text-xs font-medium text-[#8C8C80] mb-1">반복 주기 (몇 회마다)</label>
+          <input
+            type="number"
+            value={repeatInterval}
+            onChange={(e) => setRepeatInterval(e.target.value)}
+            className="w-full px-3 py-2 text-[15px] border-2 border-[#D4D0C8] rounded-xl focus:border-[#2D5A3D] focus:outline-none"
+          />
+        </div>
+      )}
       {error && <p className="text-sm text-[#D4442A]">{error}</p>}
       <div className="flex justify-end gap-2">
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={loading} className="px-4 py-2 text-sm text-[#8C8C80] underline">
+            취소
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setEditing(false)}
-          disabled={loading}
-          className="px-4 py-2 text-sm text-[#8C8C80] underline"
-        >
-          취소
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
+          onClick={handleSubmit}
           disabled={loading}
           className="px-4 py-2 text-sm font-semibold bg-[#2D5A3D] text-white rounded-xl disabled:opacity-50"
         >
-          {loading ? '저장 중...' : '저장'}
+          {loading ? '저장 중...' : submitLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+function RuleRow({ item, onChanged }: { item: RewardRuleAdminItem; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleDelete() {
+    setDeleting(true);
+    setError('');
+    const result = await deleteRewardRule(item.id);
+    setDeleting(false);
+    if (result.success) {
+      onChanged();
+    } else {
+      setError(result.error || '삭제 중 오류가 발생했습니다.');
+    }
+  }
+
+  if (editing) {
+    return (
+      <li className="bg-white rounded-2xl p-5 shadow-sm border border-[#2D5A3D]">
+        <RuleForm
+          initial={{
+            thresholdVisits: item.thresholdVisits,
+            amount: item.amount,
+            isRepeating: item.isRepeating,
+            repeatInterval: item.repeatInterval,
+          }}
+          submitLabel="저장"
+          onCancel={() => setEditing(false)}
+          onSubmit={async (input) => {
+            const result = await updateRewardRule(item.id, input);
+            if (result.success) {
+              setEditing(false);
+              onChanged();
+            }
+            return result;
+          }}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className={`bg-white rounded-2xl p-5 shadow-sm border space-y-2 ${
+        item.isActive ? 'border-[#E8E4DA]' : 'border-[#E8E4DA] opacity-50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-lg font-bold text-[#2D5A3D]">{item.amount.toLocaleString()}원 할인권</p>
+          <p className="mt-1 text-sm text-[#8C8C80]">{ruleLabel(item)}</p>
+          {!item.isActive && <p className="mt-1 text-xs text-[#B8860B]">삭제됨(비활성)</p>}
+        </div>
+        {item.isActive && (
+          <div className="flex gap-2 flex-shrink-0">
+            <button type="button" onClick={() => setEditing(true)} className="text-sm text-[#2D5A3D] underline">
+              수정
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="text-sm text-[#D4442A] underline disabled:opacity-50"
+            >
+              {deleting ? '삭제 중...' : '삭제'}
+            </button>
+          </div>
+        )}
+      </div>
+      {error && <p className="text-sm text-[#D4442A]">{error}</p>}
     </li>
   );
 }
 
 function CatalogSection() {
-  const [items, setItems] = useState<RewardCatalogAdminItem[] | null>(null);
+  const [items, setItems] = useState<RewardRuleAdminItem[] | null>(null);
   const [error, setError] = useState('');
+  const [adding, setAdding] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const result = await getRewardCatalogForAdmin();
+    const result = await getRewardRules();
     if (result.success && result.data) {
       setItems(result.data);
       setError('');
     } else if (!result.success) {
-      setError(result.error || '선물 기준을 불러올 수 없습니다.');
+      setError(result.error || '할인권 규칙을 불러올 수 없습니다.');
     }
   }, []);
 
@@ -386,14 +491,41 @@ function CatalogSection() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[#8C8C80]">
-        선물명과 설명을 이 화면에서 바로 수정할 수 있습니다. 방문 횟수 기준(3/5/10/20/30회)은 등급
-        체계와 함께 관리되므로 여기서는 변경할 수 없습니다.
+        방문 횟수에 따른 할인권 금액 규칙을 관리합니다. 규칙을 삭제해도 이미 발급된 할인권에는 영향이
+        없으며, 새 할인권만 더 이상 발급되지 않습니다.
       </p>
       {error && (
         <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
           {error}
         </div>
       )}
+
+      {adding ? (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#2D5A3D]">
+          <RuleForm
+            initial={emptyRuleForm}
+            submitLabel="추가"
+            onCancel={() => setAdding(false)}
+            onSubmit={async (input) => {
+              const result = await createRewardRule(input);
+              if (result.success) {
+                setAdding(false);
+                fetchData();
+              }
+              return result;
+            }}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="w-full py-3 px-4 border-2 border-dashed border-[#D4D0C8] text-[#2D5A3D] text-sm font-semibold rounded-xl hover:bg-[#F5F5EC]"
+        >
+          + 새 할인권 규칙 추가
+        </button>
+      )}
+
       {!items ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -403,7 +535,7 @@ function CatalogSection() {
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
-            <CatalogEditRow key={item.id} item={item} onSaved={fetchData} />
+            <RuleRow key={item.id} item={item} onChanged={fetchData} />
           ))}
         </ul>
       )}
@@ -413,6 +545,7 @@ function CatalogSection() {
 
 export default function RewardStats() {
   const [section, setSection] = useState<Section>('stats');
+  const [storeId, setStoreId] = useState<string | null>(null);
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
@@ -430,9 +563,11 @@ export default function RewardStats() {
           ))}
         </div>
 
-        {section === 'stats' && <StatsSection />}
-        {section === 'available' && <RewardUsageSection statusFilter="available" />}
-        {section === 'used' && <RewardUsageSection statusFilter="used" />}
+        {section !== 'catalog' && <StoreFilterBar value={storeId} onChange={setStoreId} />}
+
+        {section === 'stats' && <StatsSection storeId={storeId} />}
+        {section === 'available' && <RewardUsageSection statusFilter="available" storeId={storeId} />}
+        {section === 'used' && <RewardUsageSection statusFilter="used" storeId={storeId} />}
         {section === 'catalog' && <CatalogSection />}
 
         <div className="pb-8" />

@@ -8,6 +8,7 @@ import BrandLogo from '@/components/BrandLogo';
 export default function QrPrintView() {
   const searchParams = useSearchParams();
   const url = searchParams.get('url') || '';
+  const storeName = searchParams.get('storeName') || '';
 
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -56,6 +57,9 @@ export default function QrPrintView() {
         ) : (
           <div className="flex flex-col items-center gap-6">
             <BrandLogo height={64} textClassName="text-2xl" />
+            {storeName && (
+              <p className="text-xl font-semibold text-[#2D5A3D]">{storeName}</p>
+            )}
             {!qrDataUrl ? (
               <div className="w-[420px] h-[420px] rounded-xl bg-[#E8E8E0] animate-pulse" />
             ) : (

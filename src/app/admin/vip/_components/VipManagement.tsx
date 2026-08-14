@@ -100,7 +100,7 @@ export default function VipManagement() {
       <div className="w-full max-w-5xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">VIP관리</h1>
-          <p className="text-sm text-[#8C8C80]">30회 이상 방문한 해율 VIP 고객을 별도로 관리합니다.</p>
+          <p className="text-sm text-[#8C8C80]">30회 이상 방문한 해율푸드 VIP 고객을 별도로 관리합니다.</p>
         </header>
 
         <AdminNav active="vip" />
@@ -115,7 +115,7 @@ export default function VipManagement() {
           <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
         ) : customers.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-            <p className="text-[15px] text-[#8C8C80]">아직 해율 VIP 고객이 없습니다.</p>
+            <p className="text-[15px] text-[#8C8C80]">아직 해율푸드 VIP 고객이 없습니다.</p>
           </div>
         ) : (
           <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">

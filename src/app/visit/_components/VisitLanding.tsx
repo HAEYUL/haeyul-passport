@@ -5,12 +5,17 @@ import RegisterForm from './RegisterForm';
 import LoginForm from './LoginForm';
 import BrandLogo from '@/components/BrandLogo';
 
+interface VisitLandingProps {
+  /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
+  storeName: string | null;
+}
+
 /**
  * QR 접속 후 첫 화면
  * - 처음 발급하기
  * - 기존 전자여권 열기
  */
-export default function VisitLanding() {
+export default function VisitLanding({ storeName }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
 
   if (mode === 'register') {
@@ -36,6 +41,12 @@ export default function VisitLanding() {
             </p>
           </div>
         </header>
+
+        {storeName && (
+          <p className="text-[15px] font-semibold text-[#2D5A3D]">
+            {storeName} 방문이 확인되었습니다.
+          </p>
+        )}
 
         {/* 버튼 */}
         <div className="space-y-4">

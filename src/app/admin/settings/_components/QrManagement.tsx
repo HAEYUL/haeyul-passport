@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
-import { getQrStatus, reissueQr, type QrStatusInfo } from '@/app/admin/actions';
+import { getQrStatus, reissueQr, getStores, type QrStatusInfo } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
+import type { Store } from '@/types/database';
 
 function buildVisitUrl(token: string): string {
   const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
@@ -11,6 +12,8 @@ function buildVisitUrl(token: string): string {
 }
 
 export default function QrManagement() {
+  const [stores, setStores] = useState<Store[] | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('');
   const [status, setStatus] = useState<QrStatusInfo | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState('');
@@ -19,17 +22,32 @@ export default function QrManagement() {
   const [reissuing, setReissuing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  useEffect(() => {
+    getStores().then((result) => {
+      if (result.success && result.data && result.data.length > 0) {
+        setStores(result.data);
+        setSelectedStoreId(result.data[0].id);
+      } else if (!result.success) {
+        setError(result.error || '매장 목록을 불러올 수 없습니다.');
+      }
+    });
+  }, []);
+
   const fetchStatus = useCallback(async () => {
-    const result = await getQrStatus();
+    if (!selectedStoreId) return;
+    setStatus(null);
+    const result = await getQrStatus(selectedStoreId);
     if (result.success && result.data) {
       setStatus(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || 'QR 상태를 불러올 수 없습니다.');
     }
-  }, []);
+  }, [selectedStoreId]);
 
   useEffect(() => {
+    setSuccessMessage('');
+    setConfirming(false);
     fetchStatus();
   }, [fetchStatus]);
 
@@ -54,9 +72,10 @@ export default function QrManagement() {
   }, [status]);
 
   async function handleReissueConfirm() {
+    if (!selectedStoreId) return;
     setReissuing(true);
     setError('');
-    const result = await reissueQr();
+    const result = await reissueQr(selectedStoreId);
     setReissuing(false);
     setConfirming(false);
 
@@ -68,24 +87,46 @@ export default function QrManagement() {
     }
   }
 
+  const selectedStore = stores?.find((s) => s.id === selectedStoreId) || null;
+
   function handleDownload() {
-    if (!qrDataUrl) return;
+    if (!qrDataUrl || !selectedStore) return;
     const a = document.createElement('a');
     a.href = qrDataUrl;
-    a.download = `해율_방문QR_${formatDateKR(new Date().toISOString())}.png`;
+    a.download = `${selectedStore.name}_방문QR_${formatDateKR(new Date().toISOString())}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   }
 
   function handlePrint() {
-    if (!status) return;
+    if (!status || !selectedStore) return;
     const url = buildVisitUrl(status.token);
-    window.open(`/admin/settings/qr-print?url=${encodeURIComponent(url)}`, '_blank');
+    const params = new URLSearchParams({ url, storeName: selectedStore.name });
+    window.open(`/admin/settings/qr-print?${params.toString()}`, '_blank');
   }
 
   return (
     <div className="space-y-4">
+      {stores && stores.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {stores.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setSelectedStoreId(s.id)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                selectedStoreId === s.id
+                  ? 'bg-[#2D5A3D] text-white'
+                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="text-sm text-[#8C8C80]">
         매장 방문등록용 QR을 관리합니다. 재발급하면 기존 QR은 즉시 사용할 수 없게 됩니다.
       </p>

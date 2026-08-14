@@ -9,9 +9,32 @@ export type RewardStatus = 'available' | 'requested' | 'used';
 
 export type ConsentType = 'privacy' | 'marketing';
 
+/** 매장 코드 (store_code) */
+export type StoreCode = 'haeyul' | 'gondre' | 'jeongdam';
+
 // ============================================================
 // 테이블 타입
 // ============================================================
+
+/** stores 테이블 */
+export interface Store {
+  id: string;
+  store_code: StoreCode;
+  name: string;
+  brand_name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** store_qr_tokens 테이블 */
+export interface StoreQrToken {
+  id: string;
+  store_id: string;
+  token: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 /** dining_tables 테이블 */
 export interface DiningTable {
@@ -35,6 +58,7 @@ export interface Customer {
   visit_count: number;
   is_active: boolean;
   admin_note: string | null;
+  signup_store_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +68,7 @@ export interface Visit {
   id: string;
   customer_id: string;
   table_id: string | null;
+  store_id: string;
   visit_date: string;
   visit_time: string;
   is_cancelled: boolean;
@@ -53,7 +78,7 @@ export interface Visit {
   created_at: string;
 }
 
-/** rewards 테이블 */
+/** rewards 테이블 (실물 선물 — 할인권 전환 후 미사용, 과거 기록 보존용) */
 export interface Reward {
   id: string;
   name: string;
@@ -64,11 +89,30 @@ export interface Reward {
   updated_at: string;
 }
 
+/** reward_rules 테이블 — 할인권 지급 규칙 (관리자가 직접 수정) */
+export interface RewardRule {
+  id: string;
+  threshold_visits: number;
+  amount: number;
+  is_repeating: boolean;
+  repeat_interval: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 /** customer_rewards 테이블 */
 export interface CustomerReward {
   id: string;
   customer_id: string;
-  reward_id: string;
+  /** 실물 선물(구 방식) 참조. 할인권(신규 방식)이면 null */
+  reward_id: string | null;
+  /** 할인권을 발급한 규칙. 실물 선물(구 방식)이면 null */
+  reward_rule_id: string | null;
+  /** 이 할인권이 해당하는 방문 횟수 기준 (예: 25) */
+  threshold_visits: number | null;
+  /** 발급 시점에 고정된 할인 금액(원). 이후 규칙 금액이 바뀌어도 변하지 않음 */
+  amount: number | null;
   status: RewardStatus;
   issued_at: string;
   requested_at: string | null;
@@ -76,6 +120,8 @@ export interface CustomerReward {
   used_at: string | null;
   confirmed_by: string | null;
   table_id_used: string | null;
+  issued_store_id: string;
+  used_store_id: string | null;
   created_at: string;
 }
 

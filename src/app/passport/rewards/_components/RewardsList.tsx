@@ -95,6 +95,9 @@ export default function RewardsList() {
 
         {/* 타이틀 */}
         <h1 className="text-2xl font-bold text-[#2D5A3D]">내 선물함</h1>
+        <p className="text-sm text-[#8C8C80] -mt-4">
+          해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
+        </p>
 
         {error && (
           <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-5 py-4 rounded-2xl text-[15px] leading-relaxed whitespace-pre-line">
@@ -102,12 +105,12 @@ export default function RewardsList() {
           </div>
         )}
 
-        {/* 선물 목록 */}
+        {/* 할인권 목록 */}
         {!rewards || rewards.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
             <p className="text-[15px] text-[#8C8C80] leading-relaxed">
-              아직 받은 선물이 없습니다.<br />
-              방문을 계속하시면 선물을 받으실 수 있어요.
+              아직 받은 할인권이 없습니다.<br />
+              방문을 계속하시면 할인권을 받으실 수 있어요.
             </p>
           </div>
         ) : (
@@ -119,20 +122,19 @@ export default function RewardsList() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-lg font-bold text-[#2D5A3D]">{reward.rewardName}</p>
-                    {reward.description && (
-                      <p className="mt-1 text-sm text-[#8C8C80] leading-relaxed">
-                        {reward.description}
-                      </p>
-                    )}
+                    <p className="text-lg font-bold text-[#2D5A3D]">{reward.amount.toLocaleString()}원 할인권</p>
+                    <p className="mt-1 text-sm text-[#8C8C80]">{reward.thresholdVisits}회 방문 기념</p>
                   </div>
                   <StatusBadge status={reward.status} isExpired={reward.isExpired} />
                 </div>
 
                 <div className="text-xs text-[#AAA] space-y-0.5">
-                  <p>발급일: {formatDateKR(reward.issuedAt)}</p>
+                  <p>발급일: {formatDateKR(reward.issuedAt)} · {reward.issuedStoreName}</p>
                   {reward.status === 'used' && reward.usedAt && (
-                    <p>사용일: {formatDateKR(reward.usedAt)}</p>
+                    <p>
+                      사용일: {formatDateKR(reward.usedAt)}
+                      {reward.usedStoreName && ` · ${reward.usedStoreName}`}
+                    </p>
                   )}
                 </div>
 

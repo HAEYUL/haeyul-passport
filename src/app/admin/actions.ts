@@ -15,14 +15,14 @@ import {
 } from '@/lib/utils';
 import { AUDIT_ACTION } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
-import { getOrCreateQrSettings, reissueQrToken } from '@/lib/qrSettings';
+import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
 import { sendSms } from '@/lib/sms';
 import {
   setAdminSession,
   getAdminSession,
   clearAdminSession,
 } from '@/lib/adminSession';
-import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, Store } from '@/types/database';
 
 /**
  * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
@@ -125,7 +125,7 @@ export interface DashboardStats {
   longAbsentCount: number;
 }
 
-export async function getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
+export async function getDashboardStats(storeId?: string | null): Promise<ApiResponse<DashboardStats>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -138,6 +138,41 @@ export async function getDashboardStats(): Promise<ApiResponse<DashboardStats>> 
     const { start: todayStart, end: todayEnd } = getTodayKSTRange();
     const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
 
+    let customersBase = supabase.from('customers').select('id', { count: 'exact', head: true }).eq('is_active', true);
+    let visitsBase = supabase
+      .from('visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('visit_date', todayKST)
+      .eq('is_cancelled', false);
+    let unclaimedRewardsBase = supabase.from('customer_rewards').select('id', { count: 'exact', head: true }).neq('status', 'used');
+    let newCustomersBase = supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gte('created_at', monthStart);
+    let todayRewardsUsedBase = supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'used')
+      .gte('used_at', todayStart)
+      .lt('used_at', todayEnd);
+    let vipCountBase = supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gte('visit_count', vipMinVisits);
+    let activeCustomersBase = supabase.from('customers').select('id').eq('is_active', true);
+
+    if (storeId) {
+      customersBase = customersBase.eq('signup_store_id', storeId);
+      visitsBase = visitsBase.eq('store_id', storeId);
+      unclaimedRewardsBase = unclaimedRewardsBase.eq('issued_store_id', storeId);
+      newCustomersBase = newCustomersBase.eq('signup_store_id', storeId);
+      todayRewardsUsedBase = todayRewardsUsedBase.eq('used_store_id', storeId);
+      vipCountBase = vipCountBase.eq('signup_store_id', storeId);
+      activeCustomersBase = activeCustomersBase.eq('signup_store_id', storeId);
+    }
+
     const [
       { count: totalCustomers },
       { count: todayVisits },
@@ -148,33 +183,13 @@ export async function getDashboardStats(): Promise<ApiResponse<DashboardStats>> 
       { data: activeCustomers },
       latestVisitMap,
     ] = await Promise.all([
-      supabase.from('customers').select('id', { count: 'exact', head: true }).eq('is_active', true),
-      supabase
-        .from('visits')
-        .select('id', { count: 'exact', head: true })
-        .eq('visit_date', todayKST)
-        .eq('is_cancelled', false),
-      supabase
-        .from('customer_rewards')
-        .select('id', { count: 'exact', head: true })
-        .neq('status', 'used'),
-      supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .gte('created_at', monthStart),
-      supabase
-        .from('customer_rewards')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'used')
-        .gte('used_at', todayStart)
-        .lt('used_at', todayEnd),
-      supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .gte('visit_count', vipMinVisits),
-      supabase.from('customers').select('id').eq('is_active', true),
+      customersBase,
+      visitsBase,
+      unclaimedRewardsBase,
+      newCustomersBase,
+      todayRewardsUsedBase,
+      vipCountBase,
+      activeCustomersBase,
       getLatestVisitDateMap(supabase),
     ]);
 
@@ -210,15 +225,21 @@ export async function getDashboardStats(): Promise<ApiResponse<DashboardStats>> 
 // ============================================================
 
 export interface RewardStatItem {
-  rewardId: string;
-  rewardName: string;
-  requiredVisits: number;
+  ruleId: string;
+  thresholdVisits: number;
+  amount: number;
+  isRepeating: boolean;
+  repeatInterval: number | null;
   totalIssued: number;
   totalUsed: number;
   totalUnused: number;
 }
 
-export async function getRewardStats(): Promise<ApiResponse<RewardStatItem[]>> {
+/**
+ * reward_rules(할인권 규칙)별 발급/사용 집계. 반복 규칙(예: 20회부터 5회마다)은
+ * 실제로 발급된 모든 회차(20회, 25회, 30회...)를 하나의 규칙 행으로 합산합니다.
+ */
+export async function getRewardStats(storeId?: string | null): Promise<ApiResponse<RewardStatItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -227,31 +248,38 @@ export async function getRewardStats(): Promise<ApiResponse<RewardStatItem[]>> {
 
     const supabase = createAdminClient();
 
-    const { data: rewards, error: rewardsError } = await supabase
-      .from('rewards')
-      .select('id, name, required_visits')
+    const { data: rules, error: rulesError } = await supabase
+      .from('reward_rules')
+      .select('id, threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
-      .order('required_visits', { ascending: true });
+      .order('threshold_visits', { ascending: true });
 
-    if (rewardsError) {
-      return { success: false, error: '선물 목록 조회 중 오류가 발생했습니다.' };
+    if (rulesError) {
+      return { success: false, error: '할인권 규칙 조회 중 오류가 발생했습니다.' };
     }
 
-    const { data: customerRewards, error: crError } = await supabase
+    let crQuery = supabase
       .from('customer_rewards')
-      .select('reward_id, status');
+      .select('reward_rule_id, status')
+      .not('reward_rule_id', 'is', null);
+    if (storeId) {
+      crQuery = crQuery.eq('issued_store_id', storeId);
+    }
+    const { data: customerRewards, error: crError } = await crQuery;
 
     if (crError) {
-      return { success: false, error: '선물 발급 현황 조회 중 오류가 발생했습니다.' };
+      return { success: false, error: '할인권 발급 현황 조회 중 오류가 발생했습니다.' };
     }
 
     const statsMap = new Map<string, RewardStatItem>(
-      (rewards || []).map((r) => [
+      (rules || []).map((r) => [
         r.id,
         {
-          rewardId: r.id,
-          rewardName: r.name,
-          requiredVisits: r.required_visits,
+          ruleId: r.id,
+          thresholdVisits: r.threshold_visits,
+          amount: r.amount,
+          isRepeating: r.is_repeating,
+          repeatInterval: r.repeat_interval,
           totalIssued: 0,
           totalUsed: 0,
           totalUnused: 0,
@@ -260,7 +288,7 @@ export async function getRewardStats(): Promise<ApiResponse<RewardStatItem[]>> {
     );
 
     for (const cr of customerRewards || []) {
-      const stat = statsMap.get(cr.reward_id);
+      const stat = cr.reward_rule_id ? statsMap.get(cr.reward_rule_id) : undefined;
       if (!stat) continue;
       stat.totalIssued += 1;
       if (cr.status === 'used') {
@@ -282,23 +310,30 @@ export interface RewardUsageItem {
   customerId: string;
   customerName: string;
   customerNumber: string;
-  rewardName: string;
-  requiredVisits: number;
+  amount: number;
+  thresholdVisits: number;
   issuedAt: string;
   usedAt: string | null;
+  issuedStoreName: string;
+  usedStoreName: string | null;
 }
 
 async function fetchRewardUsage(
   supabase: ReturnType<typeof createAdminClient>,
-  statusFilter: 'available' | 'used'
+  statusFilter: 'available' | 'used',
+  storeId?: string | null
 ): Promise<RewardUsageItem[]> {
   let request = supabase
     .from('customer_rewards')
-    .select('id, customer_id, reward_id, issued_at, used_at, status')
+    .select('id, customer_id, threshold_visits, amount, issued_at, used_at, status, issued_store_id, used_store_id')
+    .not('reward_rule_id', 'is', null)
     .order(statusFilter === 'used' ? 'used_at' : 'issued_at', { ascending: false })
     .limit(300);
 
   request = statusFilter === 'used' ? request.eq('status', 'used') : request.neq('status', 'used');
+  if (storeId) {
+    request = request.eq('issued_store_id', storeId);
+  }
 
   const { data: crs, error } = await request;
   if (error || !crs || crs.length === 0) {
@@ -306,43 +341,49 @@ async function fetchRewardUsage(
   }
 
   const customerIds = [...new Set(crs.map((c) => c.customer_id))];
-  const rewardIds = [...new Set(crs.map((c) => c.reward_id))];
+  const storeIds = [
+    ...new Set([
+      ...crs.map((c) => c.issued_store_id),
+      ...crs.map((c) => c.used_store_id).filter((id): id is string => !!id),
+    ]),
+  ];
 
-  const [{ data: customers }, { data: rewards }] = await Promise.all([
+  const [{ data: customers }, { data: stores }] = await Promise.all([
     supabase.from('customers').select('id, name, customer_number').in('id', customerIds),
-    supabase.from('rewards').select('id, name, required_visits').in('id', rewardIds),
+    supabase.from('stores').select('id, name').in('id', storeIds),
   ]);
 
   const customerMap = new Map((customers || []).map((c) => [c.id, c]));
-  const rewardMap = new Map((rewards || []).map((r) => [r.id, r]));
+  const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
 
   return crs.map((cr) => {
     const c = customerMap.get(cr.customer_id);
-    const r = rewardMap.get(cr.reward_id);
     return {
       id: cr.id,
       customerId: cr.customer_id,
       customerName: c?.name || '알 수 없음',
       customerNumber: c?.customer_number || '-',
-      rewardName: r?.name || '알 수 없음',
-      requiredVisits: r?.required_visits || 0,
+      amount: cr.amount ?? 0,
+      thresholdVisits: cr.threshold_visits ?? 0,
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,
+      issuedStoreName: storeMap.get(cr.issued_store_id) || '-',
+      usedStoreName: cr.used_store_id ? storeMap.get(cr.used_store_id) || '-' : null,
     };
   });
 }
 
 /**
- * 아직 사용하지 않은(available/requested) 선물 목록
+ * 아직 사용하지 않은(available/requested) 할인권 목록
  */
-export async function getAvailableRewards(): Promise<ApiResponse<RewardUsageItem[]>> {
+export async function getAvailableRewards(storeId?: string | null): Promise<ApiResponse<RewardUsageItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
     const supabase = createAdminClient();
-    const data = await fetchRewardUsage(supabase, 'available');
+    const data = await fetchRewardUsage(supabase, 'available', storeId);
     return { success: true, data };
   } catch (error) {
     console.error('getAvailableRewards 오류:', error);
@@ -351,16 +392,16 @@ export async function getAvailableRewards(): Promise<ApiResponse<RewardUsageItem
 }
 
 /**
- * 사용 완료된 선물 목록
+ * 사용 완료된 할인권 목록
  */
-export async function getUsedRewards(): Promise<ApiResponse<RewardUsageItem[]>> {
+export async function getUsedRewards(storeId?: string | null): Promise<ApiResponse<RewardUsageItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
     const supabase = createAdminClient();
-    const data = await fetchRewardUsage(supabase, 'used');
+    const data = await fetchRewardUsage(supabase, 'used', storeId);
     return { success: true, data };
   } catch (error) {
     console.error('getUsedRewards 오류:', error);
@@ -433,18 +474,19 @@ export async function restoreReward(
   }
 }
 
-export interface RewardCatalogAdminItem {
+export interface RewardRuleAdminItem {
   id: string;
-  name: string;
-  description: string | null;
-  requiredVisits: number;
+  thresholdVisits: number;
+  amount: number;
+  isRepeating: boolean;
+  repeatInterval: number | null;
+  isActive: boolean;
 }
 
 /**
- * 방문별 선물 기준(이름/설명) 관리 화면용 목록.
- * 방문 횟수 기준은 등급 체계(tiers.ts)와 별개로 관리되므로 여기서는 수정하지 않습니다.
+ * 할인권 규칙(방문 횟수 → 금액) 관리 화면용 목록. 비활성(삭제)된 규칙도 포함합니다.
  */
-export async function getRewardCatalogForAdmin(): Promise<ApiResponse<RewardCatalogAdminItem[]>> {
+export async function getRewardRules(): Promise<ApiResponse<RewardRuleAdminItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -453,41 +495,105 @@ export async function getRewardCatalogForAdmin(): Promise<ApiResponse<RewardCata
     const supabase = createAdminClient();
 
     const { data, error } = await supabase
-      .from('rewards')
-      .select('id, name, description, required_visits')
-      .eq('is_active', true)
-      .order('required_visits', { ascending: true });
+      .from('reward_rules')
+      .select('id, threshold_visits, amount, is_repeating, repeat_interval, is_active')
+      .order('threshold_visits', { ascending: true });
 
     if (error) {
-      return { success: false, error: '선물 기준 조회 중 오류가 발생했습니다.' };
+      return { success: false, error: '할인권 규칙 조회 중 오류가 발생했습니다.' };
     }
 
     return {
       success: true,
       data: (data || []).map((r) => ({
         id: r.id,
-        name: r.name,
-        description: r.description,
-        requiredVisits: r.required_visits,
+        thresholdVisits: r.threshold_visits,
+        amount: r.amount,
+        isRepeating: r.is_repeating,
+        repeatInterval: r.repeat_interval,
+        isActive: r.is_active,
       })),
     };
   } catch (error) {
-    console.error('getRewardCatalogForAdmin 오류:', error);
+    console.error('getRewardRules 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
 
-export interface UpdateRewardCatalogInput {
-  name: string;
-  description: string;
+export interface RewardRuleInput {
+  thresholdVisits: number;
+  amount: number;
+  isRepeating: boolean;
+  repeatInterval: number | null;
+}
+
+function validateRewardRuleInput(input: RewardRuleInput): string | null {
+  if (!Number.isInteger(input.thresholdVisits) || input.thresholdVisits <= 0) {
+    return '기준 방문 횟수를 올바르게 입력해 주세요.';
+  }
+  if (!Number.isInteger(input.amount) || input.amount <= 0) {
+    return '할인 금액을 올바르게 입력해 주세요.';
+  }
+  if (input.isRepeating && (!Number.isInteger(input.repeatInterval) || (input.repeatInterval ?? 0) <= 0)) {
+    return '반복 주기를 올바르게 입력해 주세요.';
+  }
+  return null;
 }
 
 /**
- * 선물명/설명만 수정합니다. (방문 횟수 기준은 고정)
+ * 새 할인권 규칙을 추가합니다.
  */
-export async function updateRewardCatalogItem(
-  rewardId: string,
-  input: UpdateRewardCatalogInput
+export async function createRewardRule(input: RewardRuleInput): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const validationError = validateRewardRuleInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: after, error: insertError } = await supabase
+      .from('reward_rules')
+      .insert({
+        threshold_visits: input.thresholdVisits,
+        amount: input.amount,
+        is_repeating: input.isRepeating,
+        repeat_interval: input.isRepeating ? input.repeatInterval : null,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      return { success: false, error: '할인권 규칙 추가 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.REWARD_RULE_CREATE,
+      target_type: 'reward_rule',
+      target_id: after.id,
+      before_data: null,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('createRewardRule 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 기존 할인권 규칙을 수정합니다.
+ */
+export async function updateRewardRule(
+  ruleId: string,
+  input: RewardRuleInput
 ): Promise<ApiResponse<null>> {
   try {
     const admin = await getAdminSession();
@@ -495,41 +601,91 @@ export async function updateRewardCatalogItem(
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
 
-    const name = input.name.trim();
-    if (!name) {
-      return { success: false, error: '선물명을 입력해 주세요.' };
+    const validationError = validateRewardRuleInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
     }
 
     const supabase = createAdminClient();
 
-    const { data: before } = await supabase.from('rewards').select('*').eq('id', rewardId).single();
+    const { data: before } = await supabase.from('reward_rules').select('*').eq('id', ruleId).single();
     if (!before) {
-      return { success: false, error: '선물 정보를 찾을 수 없습니다.' };
+      return { success: false, error: '할인권 규칙을 찾을 수 없습니다.' };
     }
 
     const { data: after, error: updateError } = await supabase
-      .from('rewards')
-      .update({ name, description: input.description.trim() || null })
-      .eq('id', rewardId)
+      .from('reward_rules')
+      .update({
+        threshold_visits: input.thresholdVisits,
+        amount: input.amount,
+        is_repeating: input.isRepeating,
+        repeat_interval: input.isRepeating ? input.repeatInterval : null,
+      })
+      .eq('id', ruleId)
       .select()
       .single();
 
     if (updateError) {
-      return { success: false, error: '선물 정보 수정 중 오류가 발생했습니다.' };
+      return { success: false, error: '할인권 규칙 수정 중 오류가 발생했습니다.' };
     }
 
     await supabase.from('audit_logs').insert({
       admin_id: admin.adminId,
-      action: AUDIT_ACTION.REWARD_CATALOG_UPDATE,
-      target_type: 'reward',
-      target_id: rewardId,
+      action: AUDIT_ACTION.REWARD_RULE_UPDATE,
+      target_type: 'reward_rule',
+      target_id: ruleId,
       before_data: before,
       after_data: after,
     });
 
     return { success: true };
   } catch (error) {
-    console.error('updateRewardCatalogItem 오류:', error);
+    console.error('updateRewardRule 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 할인권 규칙을 삭제(비활성화)합니다. 이미 발급된 할인권과의 외래키 제약 때문에
+ * 실제 DELETE 대신 is_active=false로 처리합니다.
+ */
+export async function deleteRewardRule(ruleId: string): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase.from('reward_rules').select('*').eq('id', ruleId).single();
+    if (!before) {
+      return { success: false, error: '할인권 규칙을 찾을 수 없습니다.' };
+    }
+
+    const { data: after, error: updateError } = await supabase
+      .from('reward_rules')
+      .update({ is_active: false })
+      .eq('id', ruleId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return { success: false, error: '할인권 규칙 삭제 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.REWARD_RULE_DELETE,
+      target_type: 'reward_rule',
+      target_id: ruleId,
+      before_data: before,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('deleteRewardRule 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -557,7 +713,7 @@ export interface CustomerListItem {
  * - newThisMonth: 이번 달 신규가입 고객
  * - unclaimedRewards: 미사용 선물을 보유한 고객
  * - todayRewardsUsed: 오늘 선물을 사용한 고객
- * - vip: 해율 VIP 등급(최고 등급) 고객
+ * - vip: 해율푸드 VIP 등급(최고 등급) 고객
  * - longAbsent: 최근 방문일로부터 일정 기간 이상 방문이 없는 고객
  * - tier: 특정 방문 등급(tierKey)에 해당하는 고객
  * - birthdayThisMonth: 이번 달이 생일인 고객
@@ -577,7 +733,8 @@ export async function getCustomerList(
   query: string,
   filter: CustomerListFilter = 'all',
   longAbsentDays: number = DEFAULT_LONG_ABSENT_DAYS,
-  tierKey?: VisitTierKey
+  tierKey?: VisitTierKey,
+  storeId?: string | null
 ): Promise<ApiResponse<CustomerListItem[]>> {
   try {
     const admin = await getAdminSession();
@@ -647,6 +804,10 @@ export async function getCustomerList(
       request = request.in('id', idFilter);
     }
 
+    if (storeId) {
+      request = request.eq('signup_store_id', storeId);
+    }
+
     if (filter === 'newThisMonth') {
       const todayKST = getTodayKST();
       const monthStart = `${todayKST.slice(0, 7)}-01`;
@@ -711,7 +872,7 @@ export interface TierBreakdownItem {
 /**
  * 등급별 고객 수 집계. "등급" 필터 화면에서 등급 목록을 보여줄 때 사용합니다.
  */
-export async function getTierBreakdown(): Promise<ApiResponse<TierBreakdownItem[]>> {
+export async function getTierBreakdown(storeId?: string | null): Promise<ApiResponse<TierBreakdownItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -731,6 +892,9 @@ export async function getTierBreakdown(): Promise<ApiResponse<TierBreakdownItem[
           .gte('visit_count', tier.minVisits);
         if (next) {
           q = q.lt('visit_count', next.minVisits);
+        }
+        if (storeId) {
+          q = q.eq('signup_store_id', storeId);
         }
         return q;
       })
@@ -768,7 +932,7 @@ export interface VisitRecordItem {
 
 async function fetchVisitRecords(
   supabase: ReturnType<typeof createAdminClient>,
-  opts: { dateFrom?: string; dateTo?: string; query?: string; onlyToday?: boolean; limit?: number }
+  opts: { dateFrom?: string; dateTo?: string; query?: string; onlyToday?: boolean; limit?: number; storeId?: string | null }
 ): Promise<VisitRecordItem[]> {
   let idFilter: string[] | null = null;
   const trimmed = (opts.query || '').trim();
@@ -797,6 +961,9 @@ async function fetchVisitRecords(
   }
   if (opts.dateTo) {
     request = request.lte('visit_date', opts.dateTo);
+  }
+  if (opts.storeId) {
+    request = request.eq('store_id', opts.storeId);
   }
   if (idFilter) {
     request = request.in('customer_id', idFilter);
@@ -834,14 +1001,14 @@ async function fetchVisitRecords(
 /**
  * 오늘 방문한 고객의 방문 기록 목록
  */
-export async function getTodayVisitors(): Promise<ApiResponse<VisitRecordItem[]>> {
+export async function getTodayVisitors(storeId?: string | null): Promise<ApiResponse<VisitRecordItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
     const supabase = createAdminClient();
-    const data = await fetchVisitRecords(supabase, { onlyToday: true, limit: 500 });
+    const data = await fetchVisitRecords(supabase, { onlyToday: true, limit: 500, storeId });
     return { success: true, data };
   } catch (error) {
     console.error('getTodayVisitors 오류:', error);
@@ -855,7 +1022,8 @@ export async function getTodayVisitors(): Promise<ApiResponse<VisitRecordItem[]>
 export async function getVisitRecords(
   query: string = '',
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  storeId?: string | null
 ): Promise<ApiResponse<VisitRecordItem[]>> {
   try {
     const admin = await getAdminSession();
@@ -863,7 +1031,7 @@ export async function getVisitRecords(
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
     const supabase = createAdminClient();
-    const data = await fetchVisitRecords(supabase, { query, dateFrom, dateTo, limit: 300 });
+    const data = await fetchVisitRecords(supabase, { query, dateFrom, dateTo, limit: 300, storeId });
     return { success: true, data };
   } catch (error) {
     console.error('getVisitRecords 오류:', error);
@@ -1067,7 +1235,8 @@ export async function cancelVisit(visitId: string, reason: string): Promise<ApiR
 export async function addManualVisit(
   customerId: string,
   visitDate: string,
-  reason: string
+  reason: string,
+  storeId: string
 ): Promise<ApiResponse<null>> {
   try {
     const admin = await getAdminSession();
@@ -1080,6 +1249,9 @@ export async function addManualVisit(
     }
     if (!visitDate) {
       return { success: false, error: '방문 날짜를 입력해 주세요.' };
+    }
+    if (!storeId) {
+      return { success: false, error: '매장을 선택해 주세요.' };
     }
     if (!reason.trim()) {
       return { success: false, error: '추가 사유를 입력해 주세요.' };
@@ -1103,16 +1275,17 @@ export async function addManualVisit(
       .select('id')
       .eq('customer_id', customerId)
       .eq('visit_date', visitDate)
+      .eq('store_id', storeId)
       .eq('is_cancelled', false)
       .single();
 
     if (existing) {
-      return { success: false, error: '해당 날짜에 이미 방문 기록이 있습니다.' };
+      return { success: false, error: '해당 날짜에 이미 해당 매장 방문 기록이 있습니다.' };
     }
 
     const { data: after, error: insertError } = await supabase
       .from('visits')
-      .insert({ customer_id: customerId, visit_date: visitDate })
+      .insert({ customer_id: customerId, visit_date: visitDate, store_id: storeId })
       .select()
       .single();
 
@@ -1145,7 +1318,7 @@ export interface VipCustomerItem {
   name: string;
   customerNumber: string;
   phone: string;
-  /** 해율 VIP 등급 선물이 발급된 시점 (VIP 달성일). 아직 발급되지 않았으면 null */
+  /** 해율푸드 VIP 등급 선물이 발급된 시점 (VIP 달성일). 아직 발급되지 않았으면 null */
   vipAchievedAt: string | null;
   visitCount: number;
   recentVisitDate: string | null;
@@ -1154,10 +1327,10 @@ export interface VipCustomerItem {
 }
 
 /**
- * 해율 VIP(최고 등급) 고객 목록. VIP 달성일/감사 선물 사용 여부는
+ * 해율푸드 VIP(최고 등급) 고객 목록. VIP 달성일/감사 선물 사용 여부는
  * 최고 등급 선물(customer_rewards)의 발급일·상태를 그대로 사용합니다.
  */
-export async function getVipCustomers(): Promise<ApiResponse<VipCustomerItem[]>> {
+export async function getVipCustomers(storeId?: string | null): Promise<ApiResponse<VipCustomerItem[]>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -1167,12 +1340,17 @@ export async function getVipCustomers(): Promise<ApiResponse<VipCustomerItem[]>>
     const supabase = createAdminClient();
     const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
 
-    const { data: customers, error: custError } = await supabase
+    let customersQuery = supabase
       .from('customers')
       .select('id, name, customer_number, phone, visit_count, admin_note')
       .eq('is_active', true)
       .gte('visit_count', vipMinVisits)
       .order('visit_count', { ascending: false });
+    if (storeId) {
+      customersQuery = customersQuery.eq('signup_store_id', storeId);
+    }
+
+    const { data: customers, error: custError } = await customersQuery;
 
     if (custError) {
       return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
@@ -1181,26 +1359,20 @@ export async function getVipCustomers(): Promise<ApiResponse<VipCustomerItem[]>>
       return { success: true, data: [] };
     }
 
-    const { data: vipReward } = await supabase
-      .from('rewards')
-      .select('id')
-      .eq('required_visits', vipMinVisits)
-      .eq('is_active', true)
-      .maybeSingle();
-
     const customerIds = customers.map((c) => c.id);
     const rewardMap = new Map<string, { issuedAt: string; status: string }>();
 
-    if (vipReward) {
-      const { data: crs } = await supabase
-        .from('customer_rewards')
-        .select('customer_id, issued_at, status')
-        .eq('reward_id', vipReward.id)
-        .in('customer_id', customerIds);
+    // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
+    // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
+    const { data: crs } = await supabase
+      .from('customer_rewards')
+      .select('customer_id, issued_at, status')
+      .eq('threshold_visits', vipMinVisits)
+      .not('reward_rule_id', 'is', null)
+      .in('customer_id', customerIds);
 
-      for (const cr of crs || []) {
-        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
-      }
+    for (const cr of crs || []) {
+      rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
     }
 
     const latestVisitMap = await getLatestVisitDateMap(supabase);
@@ -1264,7 +1436,7 @@ export interface TodayVipVisitor {
 }
 
 /**
- * 오늘 방문한 고객 중 해율 VIP(최고 등급)인 고객 목록. 대시보드 알림에 사용합니다.
+ * 오늘 방문한 고객 중 해율푸드 VIP(최고 등급)인 고객 목록. 대시보드 알림에 사용합니다.
  */
 export async function getTodayVipVisitors(): Promise<ApiResponse<TodayVipVisitor[]>> {
   try {
@@ -1313,6 +1485,38 @@ export async function getTodayVipVisitors(): Promise<ApiResponse<TodayVipVisitor
 }
 
 // ============================================================
+// 매장
+// ============================================================
+
+/**
+ * 활성 매장 목록을 조회합니다. (QR 관리, 관리자 화면 매장 필터 등에서 공용으로 사용)
+ */
+export async function getStores(): Promise<ApiResponse<Store[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      return { success: false, error: '매장 목록을 불러올 수 없습니다.' };
+    }
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    console.error('getStores 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
 // QR관리
 // ============================================================
 
@@ -1323,16 +1527,16 @@ export interface QrStatusInfo {
 }
 
 /**
- * 현재 활성 방문 QR 상태(토큰/생성일/최근 재발급일)를 조회합니다.
+ * 특정 매장의 현재 활성 방문 QR 상태(토큰/생성일/최근 재발급일)를 조회합니다.
  */
-export async function getQrStatus(): Promise<ApiResponse<QrStatusInfo>> {
+export async function getQrStatus(storeId: string): Promise<ApiResponse<QrStatusInfo>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
 
-    const settings = await getOrCreateQrSettings();
+    const settings = await getOrCreateStoreQrSettings(storeId);
     return {
       success: true,
       data: {
@@ -1348,22 +1552,22 @@ export async function getQrStatus(): Promise<ApiResponse<QrStatusInfo>> {
 }
 
 /**
- * QR을 재발급합니다. 저장되는 즉시 기존 QR(토큰)은 무효화됩니다.
+ * 특정 매장의 QR을 재발급합니다. 저장되는 즉시 그 매장의 기존 QR(토큰)은 무효화됩니다.
  */
-export async function reissueQr(): Promise<ApiResponse<QrStatusInfo>> {
+export async function reissueQr(storeId: string): Promise<ApiResponse<QrStatusInfo>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
 
-    const { before, after } = await reissueQrToken(admin.adminId);
+    const { before, after } = await reissueStoreQrToken(storeId);
 
     const supabase = createAdminClient();
     await supabase.from('audit_logs').insert({
       admin_id: admin.adminId,
       action: AUDIT_ACTION.QR_REISSUE,
-      target_type: 'app_settings',
+      target_type: 'store_qr_tokens',
       target_id: after.id,
       before_data: { token: before.token, createdAt: before.createdAt, lastReissuedAt: before.lastReissuedAt },
       after_data: { token: after.token, createdAt: after.createdAt, lastReissuedAt: after.lastReissuedAt },
@@ -1385,19 +1589,31 @@ export async function reissueQr(): Promise<ApiResponse<QrStatusInfo>> {
 
 export interface CustomerVisitItem {
   visitDate: string;
+  storeName: string;
 }
 
 export interface CustomerRewardItem {
   id: string;
-  rewardName: string;
+  amount: number;
+  thresholdVisits: number;
   status: RewardStatus;
   issuedAt: string;
   requestedAt: string | null;
   usedAt: string | null;
+  issuedStoreName: string;
+  usedStoreName: string | null;
+}
+
+export interface StoreVisitBreakdown {
+  storeId: string;
+  storeName: string;
+  count: number;
 }
 
 export interface CustomerDetail {
   customer: Customer;
+  signupStoreName: string | null;
+  storeVisitBreakdown: StoreVisitBreakdown[];
   visits: CustomerVisitItem[];
   rewards: CustomerRewardItem[];
 }
@@ -1421,40 +1637,52 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
       return { success: false, error: '고객 정보를 찾을 수 없습니다.' };
     }
 
-    const { data: visits } = await supabase
-      .from('visits')
-      .select('visit_date')
-      .eq('customer_id', customerId)
-      .eq('is_cancelled', false)
-      .order('visit_date', { ascending: false });
+    const [{ data: visits }, { data: customerRewards }, { data: stores }] = await Promise.all([
+      supabase
+        .from('visits')
+        .select('visit_date, store_id')
+        .eq('customer_id', customerId)
+        .eq('is_cancelled', false)
+        .order('visit_date', { ascending: false }),
+      supabase
+        .from('customer_rewards')
+        .select(
+          'id, threshold_visits, amount, status, issued_at, requested_at, used_at, issued_store_id, used_store_id'
+        )
+        .eq('customer_id', customerId)
+        .not('reward_rule_id', 'is', null)
+        .order('issued_at', { ascending: false }),
+      supabase.from('stores').select('id, name').eq('is_active', true),
+    ]);
 
-    const { data: customerRewards } = await supabase
-      .from('customer_rewards')
-      .select('id, reward_id, status, issued_at, requested_at, used_at')
-      .eq('customer_id', customerId)
-      .order('issued_at', { ascending: false });
+    const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
 
-    const rewardIds = [...new Set((customerRewards || []).map((r) => r.reward_id))];
-    let rewardsMap: Record<string, string> = {};
-    if (rewardIds.length > 0) {
-      const { data: rewards } = await supabase.from('rewards').select('id, name').in('id', rewardIds);
-      rewardsMap = Object.fromEntries((rewards || []).map((r) => [r.id, r.name]));
-    }
+    const storeVisitBreakdown: StoreVisitBreakdown[] = (stores || []).map((s) => ({
+      storeId: s.id,
+      storeName: s.name,
+      count: (visits || []).filter((v) => v.store_id === s.id).length,
+    }));
 
     return {
       success: true,
       data: {
         customer,
+        signupStoreName: customer.signup_store_id ? storeMap.get(customer.signup_store_id) || null : null,
+        storeVisitBreakdown,
         visits: (visits || []).map((v) => ({
           visitDate: v.visit_date,
+          storeName: storeMap.get(v.store_id) || '-',
         })),
         rewards: (customerRewards || []).map((r) => ({
           id: r.id,
-          rewardName: rewardsMap[r.reward_id] || '선물',
+          amount: r.amount ?? 0,
+          thresholdVisits: r.threshold_visits ?? 0,
           status: r.status,
           issuedAt: r.issued_at,
           requestedAt: r.requested_at,
           usedAt: r.used_at,
+          issuedStoreName: storeMap.get(r.issued_store_id) || '-',
+          usedStoreName: r.used_store_id ? storeMap.get(r.used_store_id) || '-' : null,
         })),
       },
     };
@@ -1639,7 +1867,8 @@ function bucketizeDates(buckets: DateBucket[], dates: string[]): TrendPoint[] {
 export async function getVisitTrend(
   period: StatsPeriod,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  storeId?: string | null
 ): Promise<ApiResponse<TrendResult>> {
   try {
     const admin = await getAdminSession();
@@ -1653,20 +1882,24 @@ export async function getVisitTrend(
     const overallEnd = buckets[buckets.length - 1].end;
     const prevRange = getPreviousRange(buckets);
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([
-      supabase
-        .from('visits')
-        .select('visit_date')
-        .eq('is_cancelled', false)
-        .gte('visit_date', overallStart)
-        .lte('visit_date', overallEnd),
-      supabase
-        .from('visits')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_cancelled', false)
-        .gte('visit_date', prevRange.start)
-        .lte('visit_date', prevRange.end),
-    ]);
+    let currentQuery = supabase
+      .from('visits')
+      .select('visit_date')
+      .eq('is_cancelled', false)
+      .gte('visit_date', overallStart)
+      .lte('visit_date', overallEnd);
+    let previousQuery = supabase
+      .from('visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_cancelled', false)
+      .gte('visit_date', prevRange.start)
+      .lte('visit_date', prevRange.end);
+    if (storeId) {
+      currentQuery = currentQuery.eq('store_id', storeId);
+      previousQuery = previousQuery.eq('store_id', storeId);
+    }
+
+    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
 
     const dates = (current || []).map((v) => v.visit_date);
     const points = bucketizeDates(buckets, dates);
@@ -1693,7 +1926,8 @@ export async function getVisitTrend(
 export async function getSignupTrend(
   period: StatsPeriod,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  storeId?: string | null
 ): Promise<ApiResponse<TrendResult>> {
   try {
     const admin = await getAdminSession();
@@ -1712,20 +1946,24 @@ export async function getSignupTrend(
     const prevStartTs = `${prevRange.start}T00:00:00+09:00`;
     const prevEndTs = `${prevRange.end}T23:59:59.999+09:00`;
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([
-      supabase
-        .from('customers')
-        .select('created_at')
-        .eq('is_active', true)
-        .gte('created_at', overallStartTs)
-        .lte('created_at', overallEndTs),
-      supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .gte('created_at', prevStartTs)
-        .lte('created_at', prevEndTs),
-    ]);
+    let currentQuery = supabase
+      .from('customers')
+      .select('created_at')
+      .eq('is_active', true)
+      .gte('created_at', overallStartTs)
+      .lte('created_at', overallEndTs);
+    let previousQuery = supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gte('created_at', prevStartTs)
+      .lte('created_at', prevEndTs);
+    if (storeId) {
+      currentQuery = currentQuery.eq('signup_store_id', storeId);
+      previousQuery = previousQuery.eq('signup_store_id', storeId);
+    }
+
+    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
 
     const dates = (current || []).map((c) => toKSTDateString(c.created_at));
     const points = bucketizeDates(buckets, dates);
@@ -1760,7 +1998,8 @@ export interface NewReturningPoint {
 export async function getNewVsReturningTrend(
   period: StatsPeriod,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  storeId?: string | null
 ): Promise<ApiResponse<NewReturningPoint[]>> {
   try {
     const admin = await getAdminSession();
@@ -1773,12 +2012,16 @@ export async function getNewVsReturningTrend(
     const overallStart = buckets[0].start;
     const overallEnd = buckets[buckets.length - 1].end;
 
-    const { data: rangeVisits, error } = await supabase
+    let rangeVisitsQuery = supabase
       .from('visits')
       .select('customer_id, visit_date')
       .eq('is_cancelled', false)
       .gte('visit_date', overallStart)
       .lte('visit_date', overallEnd);
+    if (storeId) {
+      rangeVisitsQuery = rangeVisitsQuery.eq('store_id', storeId);
+    }
+    const { data: rangeVisits, error } = await rangeVisitsQuery;
 
     if (error) {
       return { success: false, error: '방문 기록 조회 중 오류가 발생했습니다.' };
@@ -1836,12 +2079,13 @@ export interface VipConversionResult extends TrendResult {
 }
 
 /**
- * 일별/주별/월별 VIP 전환(해율 VIP 등급 선물 발급) 수 추이.
+ * 일별/주별/월별 VIP 전환(해율푸드 VIP 등급 선물 발급) 수 추이.
  */
 export async function getVipConversionTrend(
   period: StatsPeriod,
   dateFrom?: string,
-  dateTo?: string
+  dateTo?: string,
+  storeId?: string | null
 ): Promise<ApiResponse<VipConversionResult>> {
   try {
     const admin = await getAdminSession();
@@ -1852,35 +2096,18 @@ export async function getVipConversionTrend(
     const supabase = createAdminClient();
     const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
 
-    const [{ data: vipReward }, { count: totalVipCount }] = await Promise.all([
-      supabase
-        .from('rewards')
-        .select('id')
-        .eq('required_visits', vipMinVisits)
-        .eq('is_active', true)
-        .maybeSingle(),
-      supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .gte('visit_count', vipMinVisits),
-    ]);
-
-    const buckets = getDateBuckets(period, dateFrom, dateTo);
-
-    if (!vipReward) {
-      return {
-        success: true,
-        data: {
-          points: buckets.map((b) => ({ label: b.label, date: b.start, count: 0 })),
-          total: 0,
-          previousTotal: 0,
-          average: 0,
-          totalVipCount: totalVipCount || 0,
-        },
-      };
+    let vipCountQuery = supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gte('visit_count', vipMinVisits);
+    if (storeId) {
+      vipCountQuery = vipCountQuery.eq('signup_store_id', storeId);
     }
 
+    const { count: totalVipCount } = await vipCountQuery;
+
+    const buckets = getDateBuckets(period, dateFrom, dateTo);
     const overallStart = buckets[0].start;
     const overallEnd = buckets[buckets.length - 1].end;
     const prevRange = getPreviousRange(buckets);
@@ -1889,20 +2116,28 @@ export async function getVipConversionTrend(
     const prevStartTs = `${prevRange.start}T00:00:00+09:00`;
     const prevEndTs = `${prevRange.end}T23:59:59.999+09:00`;
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([
-      supabase
-        .from('customer_rewards')
-        .select('issued_at')
-        .eq('reward_id', vipReward.id)
-        .gte('issued_at', overallStartTs)
-        .lte('issued_at', overallEndTs),
-      supabase
-        .from('customer_rewards')
-        .select('id', { count: 'exact', head: true })
-        .eq('reward_id', vipReward.id)
-        .gte('issued_at', prevStartTs)
-        .lte('issued_at', prevEndTs),
-    ]);
+    // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
+    // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
+    let currentQuery = supabase
+      .from('customer_rewards')
+      .select('issued_at')
+      .eq('threshold_visits', vipMinVisits)
+      .not('reward_rule_id', 'is', null)
+      .gte('issued_at', overallStartTs)
+      .lte('issued_at', overallEndTs);
+    let previousQuery = supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('threshold_visits', vipMinVisits)
+      .not('reward_rule_id', 'is', null)
+      .gte('issued_at', prevStartTs)
+      .lte('issued_at', prevEndTs);
+    if (storeId) {
+      currentQuery = currentQuery.eq('issued_store_id', storeId);
+      previousQuery = previousQuery.eq('issued_store_id', storeId);
+    }
+
+    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
 
     const dates = (current || []).map((r) => toKSTDateString(r.issued_at));
     const points = bucketizeDates(buckets, dates);
@@ -1933,7 +2168,7 @@ export interface LongAbsentBuckets {
 /**
  * 최근 방문일 기준 장기 미방문 고객을 30~59 / 60~89 / 90일 이상 구간으로 나눠 집계합니다.
  */
-export async function getLongAbsentBuckets(): Promise<ApiResponse<LongAbsentBuckets>> {
+export async function getLongAbsentBuckets(storeId?: string | null): Promise<ApiResponse<LongAbsentBuckets>> {
   try {
     const admin = await getAdminSession();
     if (!admin) {
@@ -1941,7 +2176,11 @@ export async function getLongAbsentBuckets(): Promise<ApiResponse<LongAbsentBuck
     }
 
     const supabase = createAdminClient();
-    const { data: activeCustomers } = await supabase.from('customers').select('id').eq('is_active', true);
+    let activeCustomersQuery = supabase.from('customers').select('id').eq('is_active', true);
+    if (storeId) {
+      activeCustomersQuery = activeCustomersQuery.eq('signup_store_id', storeId);
+    }
+    const { data: activeCustomers } = await activeCustomersQuery;
     const activeIds = new Set((activeCustomers || []).map((c) => c.id));
     const latestVisitMap = await getLatestVisitDateMap(supabase);
 
@@ -1986,7 +2225,8 @@ export interface LongAbsentCustomerItem {
  * 장기 미방문 구간별 고객 명단. (통계 화면의 드릴다운)
  */
 export async function getLongAbsentCustomers(
-  bucket: LongAbsentBucketKey
+  bucket: LongAbsentBucketKey,
+  storeId?: string | null
 ): Promise<ApiResponse<LongAbsentCustomerItem[]>> {
   try {
     const admin = await getAdminSession();
@@ -2014,12 +2254,17 @@ export async function getLongAbsentCustomers(
       return { success: true, data: [] };
     }
 
+    let customersQuery = supabase
+      .from('customers')
+      .select('id, name, visit_count')
+      .eq('is_active', true)
+      .in('id', matchingIds);
+    if (storeId) {
+      customersQuery = customersQuery.eq('signup_store_id', storeId);
+    }
+
     const [{ data: customers }, { data: rewards }] = await Promise.all([
-      supabase
-        .from('customers')
-        .select('id, name, visit_count')
-        .eq('is_active', true)
-        .in('id', matchingIds),
+      customersQuery,
       supabase.from('customer_rewards').select('customer_id, status').in('customer_id', matchingIds).neq('status', 'used'),
     ]);
 
