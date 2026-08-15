@@ -415,10 +415,12 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     for (const v of visitRows || []) {
       visitCountMap.set(v.store_id, (visitCountMap.get(v.store_id) || 0) + 1);
     }
-    const storeVisitBreakdown: StoreVisitCount[] = (allStores || []).map((s) => ({
-      storeName: s.name,
-      count: visitCountMap.get(s.id) || 0,
-    }));
+    const storeVisitBreakdown: StoreVisitCount[] = (allStores || [])
+      .map((s) => ({
+        storeName: s.name,
+        count: visitCountMap.get(s.id) || 0,
+      }))
+      .sort((a, b) => b.count - a.count);
 
     return {
       success: true,
