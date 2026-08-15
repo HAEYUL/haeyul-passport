@@ -36,7 +36,7 @@ function ChartCard({ title, description, children }: { title: string; descriptio
     <section className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-4">
       <div>
         <h3 className="text-base font-semibold text-[#2D5A3D]">{title}</h3>
-        {description && <p className="text-xs text-[#8C8C80] mt-0.5">{description}</p>}
+        {description && <p className="text-xs text-[#6B6B5E] mt-0.5">{description}</p>}
       </div>
       {children}
     </section>
@@ -59,14 +59,14 @@ function TrendStatRow({
   return (
     <div className="grid grid-cols-3 gap-3 text-center sm:text-left">
       <div>
-        <p className="text-xs text-[#8C8C80]">전체</p>
+        <p className="text-xs text-[#6B6B5E]">전체</p>
         <p className="text-xl font-bold text-[#2D5A3D]">
           {total}
           {unit}
         </p>
       </div>
       <div>
-        <p className="text-xs text-[#8C8C80]">이전 기간 대비</p>
+        <p className="text-xs text-[#6B6B5E]">이전 기간 대비</p>
         <p className="text-xl font-bold" style={{ color: diffColor }}>
           {diff > 0 ? '+' : ''}
           {diff}
@@ -74,7 +74,7 @@ function TrendStatRow({
         </p>
       </div>
       <div>
-        <p className="text-xs text-[#8C8C80]">평균</p>
+        <p className="text-xs text-[#6B6B5E]">평균</p>
         <p className="text-xl font-bold text-[#2D5A3D]">
           {average}
           {unit}
@@ -124,7 +124,7 @@ function PeriodSelector({
           onChange={(e) => onDateFromChange(e.target.value)}
           className="px-3 py-2 border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
         />
-        <span className="text-[#AAA]">~</span>
+        <span className="text-[#6B6B5E]">~</span>
         <input
           type="date"
           value={dateTo}
@@ -138,7 +138,7 @@ function PeriodSelector({
               onDateFromChange('');
               onDateToChange('');
             }}
-            className="text-xs text-[#8C8C80] underline"
+            className="text-xs text-[#6B6B5E] underline"
           >
             초기화
           </button>
@@ -228,10 +228,10 @@ function NewVsReturningSection({ period, dateFrom, dateTo, storeId }: { period: 
       ) : (
         <>
           <div className="flex gap-6 text-sm">
-            <p className="text-[#8C8C80]">
+            <p className="text-[#6B6B5E]">
               신규 <span className="font-bold text-[#2D5A3D]">{totalNew}명</span>
             </p>
-            <p className="text-[#8C8C80]">
+            <p className="text-[#6B6B5E]">
               재방문 <span className="font-bold text-[#2D5A3D]">{totalReturning}명</span>
             </p>
           </div>
@@ -302,7 +302,7 @@ function RewardUsageSection({ storeId }: { storeId: string | null }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[480px]">
               <thead>
-                <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+                <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
                   <th className="px-3 py-2 font-medium">할인권</th>
                   <th className="px-3 py-2 font-medium text-right">발급 수</th>
                   <th className="px-3 py-2 font-medium text-right">사용 완료</th>
@@ -317,11 +317,11 @@ function RewardUsageSection({ storeId }: { storeId: string | null }) {
                     <tr key={r.ruleId} className="border-b border-[#F0EDE6] last:border-0">
                       <td className="px-3 py-2 text-[#333]">
                         {r.amount.toLocaleString()}원
-                        <span className="text-xs text-[#AAA] ml-1">({r.thresholdVisits}회)</span>
+                        <span className="text-xs text-[#6B6B5E] ml-1">({r.thresholdVisits}회)</span>
                       </td>
                       <td className="px-3 py-2 text-right text-[#2D5A3D] font-semibold">{r.totalIssued}</td>
-                      <td className="px-3 py-2 text-right text-[#8C8C80]">{r.totalUsed}</td>
-                      <td className="px-3 py-2 text-right text-[#B8860B]">{r.totalUnused}</td>
+                      <td className="px-3 py-2 text-right text-[#6B6B5E]">{r.totalUsed}</td>
+                      <td className="px-3 py-2 text-right text-[#8A5800]">{r.totalUnused}</td>
                       <td className="px-3 py-2 text-right font-semibold text-[#333]">{rate}%</td>
                     </tr>
                   );
@@ -354,11 +354,11 @@ function VipConversionSection({ period, dateFrom, dateTo, storeId }: { period: P
       ) : (
         <>
           <div className="flex gap-6 text-sm">
-            <p className="text-[#8C8C80]">
-              선택 기간 신규 VIP <span className="font-bold text-[#B8860B]">{data.total}명</span>
+            <p className="text-[#6B6B5E]">
+              선택 기간 신규 VIP <span className="font-bold text-[#8A5800]">{data.total}명</span>
             </p>
-            <p className="text-[#8C8C80]">
-              전체 VIP <span className="font-bold text-[#B8860B]">{data.totalVipCount}명</span>
+            <p className="text-[#6B6B5E]">
+              전체 VIP <span className="font-bold text-[#8A5800]">{data.totalVipCount}명</span>
             </p>
           </div>
           <LineChart
@@ -399,19 +399,19 @@ function LongAbsentDrilldown({
     <div className="border-t border-[#F0EDE6] pt-4 space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-[#2D5A3D]">{BUCKET_LABELS[bucket]} 고객 명단</h4>
-        <button type="button" onClick={onClose} className="text-xs text-[#8C8C80] underline">
+        <button type="button" onClick={onClose} className="text-xs text-[#6B6B5E] underline">
           닫기
         </button>
       </div>
       {!items ? (
         <div className="h-24 rounded-xl bg-[#E8E8E0] animate-pulse" />
       ) : items.length === 0 ? (
-        <p className="text-sm text-[#8C8C80]">해당하는 고객이 없습니다.</p>
+        <p className="text-sm text-[#6B6B5E]">해당하는 고객이 없습니다.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[560px]">
             <thead>
-              <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+              <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
                 <th className="px-3 py-2 font-medium">고객명</th>
                 <th className="px-3 py-2 font-medium">현재 등급</th>
                 <th className="px-3 py-2 font-medium text-right">누적 방문</th>
@@ -426,11 +426,11 @@ function LongAbsentDrilldown({
                   <td className="px-3 py-2 font-medium text-[#2D5A3D] whitespace-nowrap">{it.name}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-[#333]">{it.tierLabel}</td>
                   <td className="px-3 py-2 text-right text-[#333]">{it.visitCount}회</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-[#8C8C80]">
+                  <td className="px-3 py-2 whitespace-nowrap text-[#6B6B5E]">
                     {it.recentVisitDate ? formatDateKR(it.recentVisitDate) : '-'}
                   </td>
                   <td className="px-3 py-2 text-right text-[#D4442A] font-semibold">{it.daysSinceVisit}일</td>
-                  <td className="px-3 py-2 text-right text-[#B8860B]">{it.availableRewards}개</td>
+                  <td className="px-3 py-2 text-right text-[#8A5800]">{it.availableRewards}개</td>
                 </tr>
               ))}
             </tbody>
@@ -471,7 +471,7 @@ function LongAbsentSection({ storeId }: { storeId: string | null }) {
                   openBucket === key ? 'border-[#2D5A3D] bg-[#F0F7F2]' : 'border-[#E8E4DA] bg-white hover:bg-[#F5F5EC]'
                 }`}
               >
-                <p className="text-xs text-[#8C8C80]">{BUCKET_LABELS[key]}</p>
+                <p className="text-xs text-[#6B6B5E]">{BUCKET_LABELS[key]}</p>
                 <p className="text-2xl font-bold text-[#D4442A] mt-1">{data[key]}명</p>
               </button>
             ))}

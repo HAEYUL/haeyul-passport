@@ -29,7 +29,7 @@ export default function AdminNav({ active }: AdminNavProps) {
           <Link
             key={tab.key}
             href={tab.href}
-            className={`px-4 py-2.5 rounded-xl text-base font-semibold transition-colors duration-200 ${
+            className={`min-h-[44px] inline-flex items-center px-4 py-2.5 rounded-xl text-base font-semibold transition-colors duration-200 ${
               active === tab.key
                 ? 'bg-[#2D5A3D] text-white'
                 : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
@@ -39,7 +39,7 @@ export default function AdminNav({ active }: AdminNavProps) {
           </Link>
         ))}
       </div>
-      <button onClick={handleLogout} className="text-sm text-[#AAA] underline">
+      <button onClick={handleLogout} className="text-sm text-[#6B6B5E] underline">
         로그아웃
       </button>
     </nav>

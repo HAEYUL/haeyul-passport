@@ -61,7 +61,7 @@ function AdminNoteCell({
       />
       {error && <p className="text-[10px] text-[#D4442A]">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => setEditing(false)} disabled={loading} className="text-xs text-[#8C8C80] underline">
+        <button type="button" onClick={() => setEditing(false)} disabled={loading} className="text-xs text-[#6B6B5E] underline">
           취소
         </button>
         <button
@@ -100,7 +100,7 @@ export default function VipManagement() {
       <div className="w-full max-w-5xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">VIP관리</h1>
-          <p className="text-sm text-[#8C8C80]">30회 이상 방문한 해율푸드 VIP 고객을 별도로 관리합니다.</p>
+          <p className="text-sm text-[#6B6B5E]">30회 이상 방문한 해율푸드 VIP 고객을 별도로 관리합니다.</p>
         </header>
 
         <AdminNav active="vip" />
@@ -115,13 +115,13 @@ export default function VipManagement() {
           <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
         ) : customers.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-            <p className="text-[15px] text-[#8C8C80]">아직 해율푸드 VIP 고객이 없습니다.</p>
+            <p className="text-[15px] text-[#6B6B5E]">아직 해율푸드 VIP 고객이 없습니다.</p>
           </div>
         ) : (
           <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
             <table className="w-full text-sm min-w-[920px]">
               <thead>
-                <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+                <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
                   <th className="px-4 py-3 font-medium">고객명</th>
                   <th className="px-4 py-3 font-medium">여권번호</th>
                   <th className="px-4 py-3 font-medium">연락처</th>
@@ -142,14 +142,14 @@ export default function VipManagement() {
                       {c.vipAchievedAt ? formatDateKR(c.vipAchievedAt) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap text-[#333]">{c.visitCount}회</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">
+                    <td className="px-4 py-3 whitespace-nowrap text-[#6B6B5E]">
                       {c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {c.giftUsed ? (
-                        <span className="text-xs text-[#8C8C80] font-semibold">사용 완료</span>
+                        <span className="text-xs text-[#6B6B5E] font-semibold">사용 완료</span>
                       ) : (
-                        <span className="text-xs text-[#B8860B] font-semibold">미사용</span>
+                        <span className="text-xs text-[#8A5800] font-semibold">미사용</span>
                       )}
                     </td>
                     <td className="px-4 py-3 min-w-[220px]">

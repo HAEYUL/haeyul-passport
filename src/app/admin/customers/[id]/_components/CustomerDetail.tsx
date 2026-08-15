@@ -11,6 +11,7 @@ import {
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getVisitTierInfo } from '@/lib/tiers';
+import { getStoreAdminColor } from '@/lib/storeColors';
 
 interface CustomerDetailProps {
   customerId: string;
@@ -19,7 +20,7 @@ interface CustomerDetailProps {
 function RewardStatusBadge({ status }: { status: string }) {
   if (status === 'available') {
     return (
-      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFFDF0] text-[#B8860B] border border-[#E8D88C]">
+      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFFDF0] text-[#8A5800] border border-[#E8D88C]">
         사용 가능
       </span>
     );
@@ -32,7 +33,7 @@ function RewardStatusBadge({ status }: { status: string }) {
     );
   }
   return (
-    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#8C8C80] border border-[#E0E0D0]">
+    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#6B6B5E] border border-[#E0E0D0]">
       사용 완료
     </span>
   );
@@ -134,7 +135,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
       <div className="w-full max-w-2xl mx-auto space-y-6">
-        <Link href="/admin/customers" className="flex items-center text-[#2D5A3D] text-base font-medium w-fit">
+        <Link href="/admin/customers" className="min-h-[44px] flex items-center text-[#2D5A3D] text-base font-medium w-fit">
           <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -158,13 +159,13 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] space-y-3">
               <div className="flex items-center justify-between">
                 <h1 className="text-xl font-bold text-[#2D5A3D]">{data.customer.name} 고객님</h1>
-                <span className="text-sm text-[#AAA]">{data.customer.customer_number}</span>
+                <span className="text-sm text-[#6B6B5E]">{data.customer.customer_number}</span>
               </div>
 
               {editMode && editForm ? (
                 <div className="border-t border-[#F0EDE6] pt-3 space-y-4">
                   <div>
-                    <label className="block text-sm text-[#8C8C80] mb-1">성함</label>
+                    <label className="block text-sm text-[#6B6B5E] mb-1">성함</label>
                     <input
                       type="text"
                       value={editForm.name}
@@ -174,7 +175,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-[#8C8C80] mb-1">전화번호</label>
+                    <label className="block text-sm text-[#6B6B5E] mb-1">전화번호</label>
                     <input
                       type="tel"
                       value={editForm.phone}
@@ -184,7 +185,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-[#8C8C80] mb-1">생년월일</label>
+                    <label className="block text-sm text-[#6B6B5E] mb-1">생년월일</label>
                     <input
                       type="date"
                       value={editForm.birthDate}
@@ -194,7 +195,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-[#8C8C80] mb-1">
+                    <label className="block text-sm text-[#6B6B5E] mb-1">
                       총 방문 횟수
                     </label>
                     <input
@@ -205,7 +206,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       className="w-full px-3 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl
                                  focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
                     />
-                    <p className="mt-1 text-xs text-[#AAA]">
+                    <p className="mt-1 text-xs text-[#6B6B5E]">
                       변경하면 등급과 방문 선물이 자동으로 다시 계산됩니다.
                     </p>
                   </div>
@@ -230,7 +231,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     <button
                       onClick={() => setEditMode(false)}
                       disabled={saving}
-                      className="flex-1 py-3 px-4 bg-white text-[#8C8C80] text-base font-medium rounded-xl
+                      className="flex-1 py-3 px-4 bg-white text-[#6B6B5E] text-base font-medium rounded-xl
                                  border border-[#D4D0C8] hover:bg-[#F5F5EC] transition-colors duration-200
                                  disabled:cursor-not-allowed"
                     >
@@ -251,47 +252,50 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                 <>
                   <div className="border-t border-[#F0EDE6] pt-3 space-y-2 text-[15px]">
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">전화번호</span>
+                      <span className="text-[#6B6B5E]">전화번호</span>
                       <span className="text-[#333]">{data.customer.phone}</span>
                     </div>
                     {data.customer.birth_date && (
                       <div className="flex justify-between">
-                        <span className="text-[#8C8C80]">생년월일</span>
+                        <span className="text-[#6B6B5E]">생년월일</span>
                         <span className="text-[#333]">{formatDateKR(data.customer.birth_date)}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">현재 등급</span>
+                      <span className="text-[#6B6B5E]">현재 등급</span>
                       <span className="font-semibold text-[#2D5A3D]">
                         {getVisitTierInfo(data.customer.visit_count).label}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">총 방문 횟수</span>
+                      <span className="text-[#6B6B5E]">총 방문 횟수</span>
                       <span className="font-semibold text-[#2D5A3D]">{data.customer.visit_count}회</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">가입 매장</span>
+                      <span className="text-[#6B6B5E]">가입 매장</span>
                       <span className="text-[#333]">{data.signupStoreName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">가입일</span>
+                      <span className="text-[#6B6B5E]">가입일</span>
                       <span className="text-[#333]">{formatDateKR(data.customer.created_at)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8C8C80]">마케팅 수신 동의</span>
+                      <span className="text-[#6B6B5E]">마케팅 수신 동의</span>
                       <span className="text-[#333]">{data.customer.marketing_consent ? '동의' : '미동의'}</span>
                     </div>
                   </div>
 
                   {data.storeVisitBreakdown.length > 0 && (
                     <div className="grid gap-2 pt-3 border-t border-[#F0EDE6]" style={{ gridTemplateColumns: `repeat(${data.storeVisitBreakdown.length}, minmax(0, 1fr))` }}>
-                      {data.storeVisitBreakdown.map((s) => (
-                        <div key={s.storeId} className="bg-[#F5F5EC] rounded-xl px-3 py-2 text-center">
-                          <p className="text-xs text-[#8C8C80]">{s.storeName}</p>
-                          <p className="mt-0.5 text-lg font-bold text-[#2D5A3D]">{s.count}회</p>
-                        </div>
-                      ))}
+                      {data.storeVisitBreakdown.map((s) => {
+                        const color = getStoreAdminColor(s.storeName);
+                        return (
+                          <div key={s.storeId} className="rounded-xl px-3 py-2 text-center" style={{ backgroundColor: color.bg }}>
+                            <p className="text-xs font-semibold" style={{ color: color.text }}>{s.storeName}</p>
+                            <p className="mt-0.5 text-lg font-bold" style={{ color: color.text }}>{s.count}회</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -326,7 +330,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                         <button
                           onClick={() => setDeleteConfirm(false)}
                           disabled={deleting}
-                          className="flex-1 py-2.5 px-4 bg-white text-[#8C8C80] text-sm font-medium rounded-xl
+                          className="flex-1 py-2.5 px-4 bg-white text-[#6B6B5E] text-sm font-medium rounded-xl
                                      border border-[#D4D0C8] hover:bg-[#F5F5EC] transition-colors duration-200
                                      disabled:cursor-not-allowed"
                         >
@@ -352,7 +356,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
             <div className="space-y-2">
               <h2 className="text-base font-semibold text-[#555]">선물함</h2>
               {data.rewards.length === 0 ? (
-                <p className="text-[15px] text-[#AAA] py-2">아직 받은 선물이 없습니다.</p>
+                <p className="text-[15px] text-[#6B6B5E] py-2">아직 받은 선물이 없습니다.</p>
               ) : (
                 <ul className="space-y-2">
                   {data.rewards.map((r) => (
@@ -362,13 +366,13 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     >
                       <div>
                         <p className="text-[15px] font-medium text-[#333]">
-                          {r.amount.toLocaleString()}원 할인권 <span className="text-xs text-[#AAA]">({r.thresholdVisits}회)</span>
+                          {r.amount.toLocaleString()}원 할인권 <span className="text-xs text-[#6B6B5E]">({r.thresholdVisits}회)</span>
                         </p>
-                        <p className="text-xs text-[#AAA]">
+                        <p className="text-xs text-[#6B6B5E]">
                           발급일: {formatDateKR(r.issuedAt)} · {r.issuedStoreName}
                         </p>
                         {r.status === 'used' && r.usedAt && (
-                          <p className="text-xs text-[#AAA]">
+                          <p className="text-xs text-[#6B6B5E]">
                             사용일: {formatDateKR(r.usedAt)}
                             {r.usedStoreName && ` · ${r.usedStoreName}`}
                           </p>
@@ -385,18 +389,24 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
             <div className="space-y-2">
               <h2 className="text-base font-semibold text-[#555]">방문기록 ({data.visits.length}회)</h2>
               {data.visits.length === 0 ? (
-                <p className="text-[15px] text-[#AAA] py-2">방문 기록이 없습니다.</p>
+                <p className="text-[15px] text-[#6B6B5E] py-2">방문 기록이 없습니다.</p>
               ) : (
                 <ul className="space-y-2">
-                  {data.visits.map((v, i) => (
-                    <li
-                      key={`${v.visitDate}-${i}`}
-                      className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]"
-                    >
-                      <span className="text-[15px] text-[#333]">{formatDateKR(v.visitDate)}</span>
-                      <span className="text-xs text-[#8C8C80]">{v.storeName}</span>
-                    </li>
-                  ))}
+                  {data.visits.map((v, i) => {
+                    const color = getStoreAdminColor(v.storeName);
+                    return (
+                      <li
+                        key={`${v.visitDate}-${i}`}
+                        className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border-2 border-l-[6px]"
+                        style={{ borderColor: '#F0EDE6', borderLeftColor: color.border }}
+                      >
+                        <span className="text-base font-bold text-[#232320]">{formatDateKR(v.visitDate)}</span>
+                        <span className="text-sm font-bold" style={{ color: color.text }}>
+                          {v.storeName}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

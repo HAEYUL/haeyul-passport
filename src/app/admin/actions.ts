@@ -123,6 +123,8 @@ export interface DashboardStats {
   todayRewardsUsed: number;
   vipCount: number;
   longAbsentCount: number;
+  monthlyIssuedRewards: number;
+  monthlyUsedRewards: number;
 }
 
 export async function getDashboardStats(storeId?: string | null): Promise<ApiResponse<DashboardStats>> {
@@ -162,6 +164,15 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       .eq('is_active', true)
       .gte('visit_count', vipMinVisits);
     let activeCustomersBase = supabase.from('customers').select('id').eq('is_active', true);
+    let monthlyIssuedBase = supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .gte('issued_at', monthStart);
+    let monthlyUsedBase = supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'used')
+      .gte('used_at', monthStart);
 
     if (storeId) {
       customersBase = customersBase.eq('signup_store_id', storeId);
@@ -171,6 +182,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       todayRewardsUsedBase = todayRewardsUsedBase.eq('used_store_id', storeId);
       vipCountBase = vipCountBase.eq('signup_store_id', storeId);
       activeCustomersBase = activeCustomersBase.eq('signup_store_id', storeId);
+      monthlyIssuedBase = monthlyIssuedBase.eq('issued_store_id', storeId);
+      monthlyUsedBase = monthlyUsedBase.eq('used_store_id', storeId);
     }
 
     const [
@@ -182,6 +195,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       { count: vipCount },
       { data: activeCustomers },
       latestVisitMap,
+      { count: monthlyIssuedRewards },
+      { count: monthlyUsedRewards },
     ] = await Promise.all([
       customersBase,
       visitsBase,
@@ -191,6 +206,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       vipCountBase,
       activeCustomersBase,
       getLatestVisitDateMap(supabase),
+      monthlyIssuedBase,
+      monthlyUsedBase,
     ]);
 
     const activeIds = new Set((activeCustomers || []).map((c) => c.id));
@@ -212,6 +229,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
         todayRewardsUsed: todayRewardsUsed || 0,
         vipCount: vipCount || 0,
         longAbsentCount,
+        monthlyIssuedRewards: monthlyIssuedRewards || 0,
+        monthlyUsedRewards: monthlyUsedRewards || 0,
       },
     };
   } catch (error) {
@@ -705,6 +724,8 @@ export interface CustomerListItem {
   recentVisitDate: string | null;
   /** 마케팅(광고성 문자 등) 수신동의 여부 */
   marketingConsent: boolean;
+  /** 가입 매장명 */
+  signupStoreName: string;
 }
 
 /**
@@ -796,7 +817,7 @@ export async function getCustomerList(
 
     let request = supabase
       .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent')
+      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(idFilter ? 1000 : 100);
@@ -846,6 +867,9 @@ export async function getCustomerList(
       return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
     }
 
+    const { data: storeRows } = await supabase.from('stores').select('id, name');
+    const storeMap = new Map((storeRows || []).map((s) => [s.id, s.name]));
+
     const result: CustomerListItem[] = (data || []).map((c) => ({
       id: c.id,
       customerNumber: c.customer_number,
@@ -855,6 +879,7 @@ export async function getCustomerList(
       createdAt: c.created_at,
       recentVisitDate: latestVisitMap.get(c.id) ?? null,
       marketingConsent: c.marketing_consent,
+      signupStoreName: storeMap.get(c.signup_store_id) || '-',
     }));
 
     if (filter === 'longAbsent') {
@@ -929,6 +954,8 @@ export interface VisitRecordItem {
   customerName: string;
   customerNumber: string;
   phone: string;
+  storeId: string;
+  storeName: string;
   visitDate: string;
   visitTime: string;
   isCancelled: boolean;
@@ -955,7 +982,7 @@ async function fetchVisitRecords(
 
   let request = supabase
     .from('visits')
-    .select('id, customer_id, visit_date, visit_time, is_cancelled, cancel_reason, location_verified, distance_meters')
+    .select('id, customer_id, store_id, visit_date, visit_time, is_cancelled, cancel_reason, location_verified, distance_meters')
     .order('visit_date', { ascending: false })
     .order('visit_time', { ascending: false })
     .limit(opts.limit ?? 300);
@@ -982,12 +1009,13 @@ async function fetchVisitRecords(
   }
 
   const customerIds = [...new Set(visits.map((v) => v.customer_id))];
-  const { data: customers } = await supabase
-    .from('customers')
-    .select('id, name, customer_number, phone')
-    .in('id', customerIds);
+  const [{ data: customers }, { data: stores }] = await Promise.all([
+    supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds),
+    supabase.from('stores').select('id, name'),
+  ]);
 
   const customerMap = new Map((customers || []).map((c) => [c.id, c]));
+  const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
 
   return visits.map((v) => {
     const c = customerMap.get(v.customer_id);
@@ -997,6 +1025,8 @@ async function fetchVisitRecords(
       customerName: c?.name || '알 수 없음',
       customerNumber: c?.customer_number || '-',
       phone: c?.phone || '-',
+      storeId: v.store_id,
+      storeName: storeMap.get(v.store_id) || '알 수 없음',
       visitDate: v.visit_date,
       visitTime: v.visit_time,
       isCancelled: v.is_cancelled,

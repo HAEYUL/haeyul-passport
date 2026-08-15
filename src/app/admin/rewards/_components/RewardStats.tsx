@@ -109,23 +109,23 @@ function StatsSection({ storeId }: { storeId: string | null }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA]">
-          <p className="text-sm text-[#8C8C80]">총 발급</p>
+          <p className="text-sm text-[#6B6B5E]">총 발급</p>
           <p className="mt-2 text-3xl font-bold text-[#2D5A3D]">{totals.issued}</p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA]">
-          <p className="text-sm text-[#8C8C80]">사용됨</p>
-          <p className="mt-2 text-3xl font-bold text-[#8C8C80]">{totals.used}</p>
+          <p className="text-sm text-[#6B6B5E]">사용됨</p>
+          <p className="mt-2 text-3xl font-bold text-[#6B6B5E]">{totals.used}</p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA]">
-          <p className="text-sm text-[#8C8C80]">미사용</p>
-          <p className="mt-2 text-3xl font-bold text-[#B8860B]">{totals.unused}</p>
+          <p className="text-sm text-[#6B6B5E]">미사용</p>
+          <p className="mt-2 text-3xl font-bold text-[#8A5800]">{totals.unused}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-[#E8E4DA] overflow-x-auto">
         <table className="w-full text-[15px] min-w-[420px]">
           <thead>
-            <tr className="border-b border-[#F0EDE6] text-left text-sm text-[#8C8C80]">
+            <tr className="border-b border-[#F0EDE6] text-left text-sm text-[#6B6B5E]">
               <th className="px-5 py-3 font-medium">할인권</th>
               <th className="px-3 py-3 font-medium text-right">발급</th>
               <th className="px-3 py-3 font-medium text-right">사용</th>
@@ -137,11 +137,11 @@ function StatsSection({ storeId }: { storeId: string | null }) {
               <tr key={s.ruleId} className="border-b border-[#F0EDE6] last:border-0">
                 <td className="px-5 py-4">
                   <p className="font-medium text-[#333]">{s.amount.toLocaleString()}원 할인권</p>
-                  <p className="text-xs text-[#AAA]">{ruleLabel(s)}</p>
+                  <p className="text-xs text-[#6B6B5E]">{ruleLabel(s)}</p>
                 </td>
                 <td className="px-3 py-4 text-right text-[#2D5A3D] font-semibold">{s.totalIssued}</td>
-                <td className="px-3 py-4 text-right text-[#8C8C80]">{s.totalUsed}</td>
-                <td className="px-5 py-4 text-right text-[#B8860B] font-semibold">{s.totalUnused}</td>
+                <td className="px-3 py-4 text-right text-[#6B6B5E]">{s.totalUsed}</td>
+                <td className="px-5 py-4 text-right text-[#8A5800] font-semibold">{s.totalUnused}</td>
               </tr>
             ))}
           </tbody>
@@ -194,7 +194,7 @@ function RestoreRewardControl({
       />
       {error && <p className="text-[10px] text-[#D4442A]">{error}</p>}
       <div className="flex gap-1">
-        <button type="button" onClick={() => setRestoring(false)} disabled={loading} className="text-xs text-[#8C8C80] underline">
+        <button type="button" onClick={() => setRestoring(false)} disabled={loading} className="text-xs text-[#6B6B5E] underline">
           닫기
         </button>
         <button type="button" onClick={handleConfirm} disabled={loading} className="text-xs font-semibold text-[#2D5A3D] underline disabled:opacity-50">
@@ -239,7 +239,7 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
   if (items.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-        <p className="text-[15px] text-[#8C8C80]">
+        <p className="text-[15px] text-[#6B6B5E]">
           {statusFilter === 'used' ? '사용 완료된 선물이 없습니다.' : '사용 가능한 선물이 없습니다.'}
         </p>
       </div>
@@ -250,7 +250,7 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
     <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
       <table className="w-full text-sm min-w-[720px]">
         <thead>
-          <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+          <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
             <th className="px-4 py-3 font-medium">고객명</th>
             <th className="px-4 py-3 font-medium">여권번호</th>
             <th className="px-4 py-3 font-medium">할인권</th>
@@ -265,13 +265,13 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
               <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{it.customerName}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#555]">{it.customerNumber}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#333]">
-                {it.amount.toLocaleString()}원 <span className="text-xs text-[#AAA]">({it.thresholdVisits}회)</span>
+                {it.amount.toLocaleString()}원 <span className="text-xs text-[#6B6B5E]">({it.thresholdVisits}회)</span>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">
+              <td className="px-4 py-3 whitespace-nowrap text-[#6B6B5E]">
                 {formatDateKR(it.issuedAt)} · {it.issuedStoreName}
               </td>
               {statusFilter === 'used' && (
-                <td className="px-4 py-3 whitespace-nowrap text-[#8C8C80]">
+                <td className="px-4 py-3 whitespace-nowrap text-[#6B6B5E]">
                   {it.usedAt ? formatDateKR(it.usedAt) : '-'}
                   {it.usedStoreName && ` · ${it.usedStoreName}`}
                 </td>
@@ -333,7 +333,7 @@ function RuleForm({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-[#8C8C80] mb-1">기준 방문 횟수</label>
+          <label className="block text-xs font-medium text-[#6B6B5E] mb-1">기준 방문 횟수</label>
           <input
             type="number"
             value={thresholdVisits}
@@ -342,7 +342,7 @@ function RuleForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#8C8C80] mb-1">할인 금액 (원)</label>
+          <label className="block text-xs font-medium text-[#6B6B5E] mb-1">할인 금액 (원)</label>
           <input
             type="number"
             value={amount}
@@ -365,7 +365,7 @@ function RuleForm({
       </div>
       {isRepeating && (
         <div>
-          <label className="block text-xs font-medium text-[#8C8C80] mb-1">반복 주기 (몇 회마다)</label>
+          <label className="block text-xs font-medium text-[#6B6B5E] mb-1">반복 주기 (몇 회마다)</label>
           <input
             type="number"
             value={repeatInterval}
@@ -377,7 +377,7 @@ function RuleForm({
       {error && <p className="text-sm text-[#D4442A]">{error}</p>}
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <button type="button" onClick={onCancel} disabled={loading} className="px-4 py-2 text-sm text-[#8C8C80] underline">
+          <button type="button" onClick={onCancel} disabled={loading} className="px-4 py-2 text-sm text-[#6B6B5E] underline">
             취소
           </button>
         )}
@@ -438,32 +438,39 @@ function RuleRow({ item, onChanged }: { item: RewardRuleAdminItem; onChanged: ()
 
   return (
     <li
-      className={`bg-white rounded-2xl p-5 shadow-sm border space-y-2 ${
+      className={`bg-white rounded-2xl p-5 shadow-sm border-2 space-y-3 ${
         item.isActive ? 'border-[#E8E4DA]' : 'border-[#E8E4DA] opacity-50'
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-lg font-bold text-[#2D5A3D]">{item.amount.toLocaleString()}원 할인권</p>
-          <p className="mt-1 text-sm text-[#8C8C80]">{ruleLabel(item)}</p>
-          {!item.isActive && <p className="mt-1 text-xs text-[#B8860B]">삭제됨(비활성)</p>}
-        </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-2xl font-extrabold leading-tight">
+          <span className="text-[#232320]">{ruleLabel(item)}</span>
+          <span className="mx-2 text-[#6B6B5E]">→</span>
+          <span className="text-[#2D5A3D]">{item.amount.toLocaleString()}원</span>
+        </p>
         {item.isActive && (
           <div className="flex gap-2 flex-shrink-0">
-            <button type="button" onClick={() => setEditing(true)} className="text-sm text-[#2D5A3D] underline">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#2D5A3D] text-white text-base font-bold
+                         hover:bg-[#245032] transition-colors duration-200"
+            >
               수정
             </button>
             <button
               type="button"
               onClick={handleDelete}
               disabled={deleting}
-              className="text-sm text-[#D4442A] underline disabled:opacity-50"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl border-2 border-[#F0C4B8] text-[#D4442A] text-base font-bold
+                         hover:bg-[#FFF5F0] transition-colors duration-200 disabled:opacity-50"
             >
               {deleting ? '삭제 중...' : '삭제'}
             </button>
           </div>
         )}
       </div>
+      {!item.isActive && <p className="text-sm font-semibold text-[#8A5800]">삭제됨(비활성)</p>}
       {error && <p className="text-sm text-[#D4442A]">{error}</p>}
     </li>
   );
@@ -490,7 +497,7 @@ function CatalogSection() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         방문 횟수에 따른 할인권 금액 규칙을 관리합니다. 규칙을 삭제해도 이미 발급된 할인권에는 영향이
         없으며, 새 할인권만 더 이상 발급되지 않습니다.
       </p>
@@ -552,7 +559,7 @@ export default function RewardStats() {
       <div className="w-full max-w-2xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">선물관리</h1>
-          <p className="text-sm text-[#8C8C80]">방문 선물의 발급·사용 현황을 확인하고 관리할 수 있습니다.</p>
+          <p className="text-sm text-[#6B6B5E]">방문 선물의 발급·사용 현황을 확인하고 관리할 수 있습니다.</p>
         </header>
 
         <AdminNav active="rewards" />

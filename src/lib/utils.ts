@@ -185,6 +185,22 @@ export function isValidPhone(phone: string): boolean {
   return digits.length === 10 || digits.length === 11;
 }
 
+/**
+ * 전화번호 가운데 자리를 가려 표시합니다.
+ * 010-1234-5678 → 010-****-5678
+ */
+export function maskPhone(phone: string): string {
+  const parts = phone.split('-');
+  if (parts.length === 3) {
+    return `${parts[0]}-${'*'.repeat(parts[1].length)}-${parts[2]}`;
+  }
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) {
+    return maskPhone(normalizePhone(phone));
+  }
+  return phone;
+}
+
 /** SMS(단문) 최대 바이트. 초과 시 LMS(장문)로 전환됩니다. */
 export const SMS_BYTE_LIMIT = 90;
 

@@ -46,7 +46,7 @@ export default function AdminSettings() {
       <div className="w-full max-w-5xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">설정</h1>
-          <p className="text-sm text-[#8C8C80]">매장 및 관리자 관련 설정을 관리하는 화면입니다.</p>
+          <p className="text-sm text-[#6B6B5E]">매장 및 관리자 관련 설정을 관리하는 화면입니다.</p>
         </header>
 
         <AdminNav active="settings" />

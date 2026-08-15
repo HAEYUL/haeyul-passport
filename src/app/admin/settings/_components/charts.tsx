@@ -36,7 +36,7 @@ export function getTierColor(index: number): string {
 
 const GRID_COLOR = '#e1e0d9';
 const AXIS_COLOR = '#c3c2b7';
-const MUTED_TEXT = '#898781';
+const MUTED_TEXT = '#6B6B5E';
 const PRIMARY_TEXT = '#0b0b0b';
 
 export interface LineSeries {
@@ -294,7 +294,7 @@ export function DonutChart({ slices, size = 180 }: { slices: DonutSlice[]; size?
   if (total === 0) {
     return (
       <div className="flex items-center justify-center" style={{ width: size, height: size }}>
-        <p className="text-sm text-[#898781]">아직 데이터가 없습니다</p>
+        <p className="text-sm text-[#6B6B5E]">아직 데이터가 없습니다</p>
       </div>
     );
   }
@@ -342,7 +342,7 @@ export function DonutChart({ slices, size = 180 }: { slices: DonutSlice[]; size?
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
             <span className="text-[#52514e]">{s.label}</span>
             <span className="font-semibold text-[#0b0b0b]">{s.value}명</span>
-            <span className="text-xs text-[#898781]">({total > 0 ? Math.round((s.value / total) * 1000) / 10 : 0}%)</span>
+            <span className="text-xs text-[#6B6B5E]">({total > 0 ? Math.round((s.value / total) * 1000) / 10 : 0}%)</span>
           </li>
         ))}
       </ul>

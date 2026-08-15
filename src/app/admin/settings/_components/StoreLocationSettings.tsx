@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getStores, updateStoreLocation } from '@/app/admin/actions';
+import { getStoreAdminColor } from '@/lib/storeColors';
 import type { Store } from '@/types/database';
 
 interface EditForm {
@@ -86,24 +87,30 @@ export default function StoreLocationSettings() {
     <div className="space-y-4">
       {stores && stores.length > 1 && (
         <div className="flex flex-wrap gap-2">
-          {stores.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSelectedStoreId(s.id)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
-                selectedStoreId === s.id
-                  ? 'bg-[#2D5A3D] text-white'
-                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
+          {stores.map((s) => {
+            const color = getStoreAdminColor(s.name);
+            const selected = selectedStoreId === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSelectedStoreId(s.id)}
+                aria-pressed={selected}
+                className="min-h-[40px] px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors duration-200"
+                style={
+                  selected
+                    ? { backgroundColor: color.border, borderColor: color.border, color: '#FFFFFF' }
+                    : { backgroundColor: '#FFFFFF', borderColor: color.border, color: color.text }
+                }
+              >
+                {s.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         고객이 QR을 스캔해 방문을 등록할 때, 이 좌표를 기준으로 허용 반경 이내에 있는지 확인합니다.
         위치 정보를 가져오지 못한 경우(권한 거부·미지원)에는 등록을 막지 않습니다.
       </p>
@@ -154,7 +161,7 @@ export default function StoreLocationSettings() {
               onChange={(e) => setEditForm({ ...editForm, radiusMeters: e.target.value })}
               className="w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
             />
-            <p className="mt-1 text-xs text-[#AAA]">이 반경(미터) 밖에서는 방문 등록이 거부됩니다.</p>
+            <p className="mt-1 text-xs text-[#6B6B5E]">이 반경(미터) 밖에서는 방문 등록이 거부됩니다.</p>
           </div>
 
           {saveError && <p className="text-sm text-[#D4442A]">{saveError}</p>}

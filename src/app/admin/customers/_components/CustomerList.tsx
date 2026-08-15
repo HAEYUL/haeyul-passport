@@ -10,8 +10,9 @@ import {
   type CustomerListFilter,
   type TierBreakdownItem,
 } from '@/app/admin/actions';
-import { formatDateKR, getTodayKST } from '@/lib/utils';
+import { formatDateKR, getTodayKST, maskPhone } from '@/lib/utils';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
+import { getStoreAdminColor } from '@/lib/storeColors';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 import SmsComposeModal from './SmsComposeModal';
@@ -209,7 +210,7 @@ export default function CustomerList() {
       <div className="w-full max-w-4xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">{title}</h1>
-          <p className="text-sm text-[#8C8C80]">{description}</p>
+          <p className="text-sm text-[#6B6B5E]">{description}</p>
           {filter !== 'all' && (
             <Link href="/admin/customers" className="inline-block text-sm text-[#2D5A3D] underline">
               전체 고객 보기
@@ -232,7 +233,7 @@ export default function CustomerList() {
                 key={String(opt.value)}
                 type="button"
                 onClick={() => setMarketingConsent(opt.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
                   marketingConsent === opt.value
                     ? 'bg-[#2D5A3D] text-white'
                     : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
@@ -248,7 +249,7 @@ export default function CustomerList() {
           <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/customers?filter=tier"
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+              className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
                 filter === 'tier'
                   ? 'bg-[#2D5A3D] text-white'
                   : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
@@ -258,7 +259,7 @@ export default function CustomerList() {
             </Link>
             <Link
               href="/admin/customers?filter=birthdayThisMonth"
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+              className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
                 filter === 'birthdayThisMonth'
                   ? 'bg-[#2D5A3D] text-white'
                   : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
@@ -275,7 +276,7 @@ export default function CustomerList() {
               <Link
                 key={days}
                 href={`/admin/customers?filter=longAbsent&days=${days}`}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
                   longAbsentDays === days
                     ? 'bg-[#2D5A3D] text-white'
                     : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
@@ -369,13 +370,13 @@ export default function CustomerList() {
               </div>
             ) : customers.length === 0 ? (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-                <p className="text-[15px] text-[#8C8C80]">검색 결과가 없습니다.</p>
+                <p className="text-[15px] text-[#6B6B5E]">검색 결과가 없습니다.</p>
               </div>
             ) : (
               <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-                <table className="w-full text-sm min-w-[900px]">
+                <table className="w-full text-sm min-w-[1020px]">
                   <thead>
-                    <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+                    <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
                       <th className="px-4 py-3 font-medium w-10">
                         <input
                           type="checkbox"
@@ -388,6 +389,7 @@ export default function CustomerList() {
                       <th className="px-4 py-3 font-medium">성함</th>
                       <th className="px-4 py-3 font-medium">여권번호</th>
                       <th className="px-4 py-3 font-medium">연락처</th>
+                      <th className="px-4 py-3 font-medium">가입매장</th>
                       <th className="px-4 py-3 font-medium text-right">방문 횟수</th>
                       <th className="px-4 py-3 font-medium">등급</th>
                       <th className="px-4 py-3 font-medium">가입일</th>
@@ -396,42 +398,49 @@ export default function CustomerList() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((c) => (
-                      <tr
-                        key={c.id}
-                        onClick={() => router.push(`/admin/customers/${c.id}`)}
-                        className="border-b border-[#F0EDE6] last:border-0 cursor-pointer
-                                   hover:bg-[#F5F5EC] transition-colors duration-200"
-                      >
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(c.id)}
-                            onChange={() => toggleSelect(c.id)}
-                            className="w-4 h-4 accent-[#2D5A3D]"
-                            aria-label={`${c.name} 선택`}
-                          />
-                        </td>
-                        <td className="px-4 py-3 font-medium text-[#2D5A3D] whitespace-nowrap">{c.name}</td>
-                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.customerNumber}</td>
-                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.phone}</td>
-                        <td className="px-4 py-3 text-right text-[#555] whitespace-nowrap">{c.visitCount}회</td>
-                        <td className="px-4 py-3 text-[#555] whitespace-nowrap">
-                          {getVisitTierInfo(c.visitCount).label}
-                        </td>
-                        <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">{formatDateKR(c.createdAt)}</td>
-                        <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">
-                          {c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-'}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {c.marketingConsent ? (
-                            <span className="text-xs font-semibold text-[#2D5A3D]">동의</span>
-                          ) : (
-                            <span className="text-xs text-[#AAA]">미동의</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {customers.map((c) => {
+                      const storeColor = getStoreAdminColor(c.signupStoreName);
+                      return (
+                        <tr
+                          key={c.id}
+                          onClick={() => router.push(`/admin/customers/${c.id}`)}
+                          className="border-b border-[#F0EDE6] last:border-0 cursor-pointer border-l-4
+                                     hover:bg-[#F5F5EC] transition-colors duration-200"
+                          style={{ borderLeftColor: storeColor.border }}
+                        >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(c.id)}
+                              onChange={() => toggleSelect(c.id)}
+                              className="w-4 h-4 accent-[#2D5A3D]"
+                              aria-label={`${c.name} 선택`}
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-bold text-[#2D5A3D] whitespace-nowrap">{c.name}</td>
+                          <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.customerNumber}</td>
+                          <td className="px-4 py-3 font-bold text-[#232320] whitespace-nowrap">{maskPhone(c.phone)}</td>
+                          <td className="px-4 py-3 font-semibold whitespace-nowrap" style={{ color: storeColor.text }}>
+                            {c.signupStoreName}
+                          </td>
+                          <td className="px-4 py-3 text-right text-[#555] whitespace-nowrap">{c.visitCount}회</td>
+                          <td className="px-4 py-3 text-[#555] whitespace-nowrap">
+                            {getVisitTierInfo(c.visitCount).label}
+                          </td>
+                          <td className="px-4 py-3 text-[#6B6B5E] whitespace-nowrap">{formatDateKR(c.createdAt)}</td>
+                          <td className="px-4 py-3 text-[#6B6B5E] whitespace-nowrap">
+                            {c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {c.marketingConsent ? (
+                              <span className="text-xs font-semibold text-[#2D5A3D]">동의</span>
+                            ) : (
+                              <span className="text-xs text-[#6B6B5E]">미동의</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

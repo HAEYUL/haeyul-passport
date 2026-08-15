@@ -16,7 +16,8 @@ import {
   type CustomerListItem,
 } from '@/app/admin/actions';
 import type { Store } from '@/types/database';
-import { formatDateKR, getTodayKST } from '@/lib/utils';
+import { formatDateKR, getTodayKST, maskPhone } from '@/lib/utils';
+import { getStoreAdminColor } from '@/lib/storeColors';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
@@ -116,7 +117,7 @@ function CancelVisitControl({
           type="button"
           onClick={() => setCanceling(false)}
           disabled={loading}
-          className="text-xs text-[#8C8C80] underline"
+          className="text-xs text-[#6B6B5E] underline"
         >
           닫기
         </button>
@@ -148,7 +149,7 @@ function LocationBadge({ status, distanceMeters }: { status: VisitRecordItem['lo
       </span>
     );
   }
-  return <span className="text-xs text-[#AAA] whitespace-nowrap">확인 안 됨</span>;
+  return <span className="text-xs text-[#6B6B5E] whitespace-nowrap">확인 안 됨</span>;
 }
 
 function VisitRecordTable({
@@ -161,59 +162,59 @@ function VisitRecordTable({
   if (records.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-        <p className="text-[15px] text-[#8C8C80]">방문 기록이 없습니다.</p>
+        <p className="text-[15px] text-[#6B6B5E]">방문 기록이 없습니다.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-      <table className="w-full text-sm min-w-[760px]">
-        <thead>
-          <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
-            <th className="px-4 py-3 font-medium">방문일</th>
-            <th className="px-4 py-3 font-medium">방문시각</th>
-            <th className="px-4 py-3 font-medium">고객명</th>
-            <th className="px-4 py-3 font-medium">여권번호</th>
-            <th className="px-4 py-3 font-medium">연락처</th>
-            <th className="px-4 py-3 font-medium">상태</th>
-            <th className="px-4 py-3 font-medium">위치확인</th>
-            <th className="px-4 py-3 font-medium text-right">관리</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((r) => (
-            <tr
-              key={r.id}
-              className={`border-b border-[#F0EDE6] last:border-0 ${
-                r.locationVerified === 'failed' && !r.isCancelled ? 'bg-[#FFF0EC]' : ''
-              }`}
-            >
-              <td className="px-4 py-3 whitespace-nowrap text-[#333]">{formatDateKR(r.visitDate)}</td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#555]">{formatTimeKR(r.visitTime)}</td>
-              <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{r.customerName}</td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#555]">{r.customerNumber}</td>
-              <td className="px-4 py-3 whitespace-nowrap text-[#555]">{r.phone}</td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                {r.isCancelled ? (
-                  <span className="text-xs text-[#AAA]">
-                    취소됨{r.cancelReason ? ` · ${r.cancelReason}` : ''}
+    <ul className="space-y-3">
+      {records.map((r) => {
+        const color = getStoreAdminColor(r.storeName);
+        const locationFailed = r.locationVerified === 'failed' && !r.isCancelled;
+        return (
+          <li
+            key={r.id}
+            className={`rounded-2xl border-2 border-l-[6px] p-4 shadow-sm ${r.isCancelled ? 'opacity-60' : ''}`}
+            style={{
+              borderColor: locationFailed ? '#F0B8A8' : '#E8E4DA',
+              borderLeftColor: color.border,
+              backgroundColor: locationFailed ? '#FFF0EC' : '#FFFFFF',
+            }}
+          >
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-lg font-extrabold" style={{ color: color.text }}>
+                    {r.storeName}
                   </span>
-                ) : (
-                  <span className="text-xs text-[#2D5A3D] font-semibold">정상</span>
-                )}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                <LocationBadge status={r.locationVerified} distanceMeters={r.distanceMeters} />
-              </td>
-              <td className="px-4 py-3 text-right">
+                  <span className="text-lg font-extrabold text-[#232320]">{formatTimeKR(r.visitTime)}</span>
+                  <span className="text-sm font-medium text-[#6B6B5E]">{formatDateKR(r.visitDate)}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap text-base">
+                  <span className="font-bold text-[#232320]">{r.customerName}</span>
+                  <span className="text-sm text-[#555]">{r.customerNumber}</span>
+                  <span className="font-bold text-[#232320]">{maskPhone(r.phone)}</span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {r.isCancelled ? (
+                    <span className="text-xs font-semibold text-[#6B6B5E]">
+                      취소됨{r.cancelReason ? ` · ${r.cancelReason}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-[#2D5A3D]">정상</span>
+                  )}
+                  <LocationBadge status={r.locationVerified} distanceMeters={r.distanceMeters} />
+                </div>
+              </div>
+              <div className="flex-shrink-0">
                 {!r.isCancelled && <CancelVisitControl visitId={r.id} onCancelled={onChanged} />}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -238,7 +239,7 @@ function TodayVisitorsSection({ storeId }: { storeId: string | null }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#8C8C80]">오늘({formatDateKR(getTodayKST())}) 방문한 고객 목록입니다.</p>
+      <p className="text-sm text-[#6B6B5E]">오늘({formatDateKR(getTodayKST())}) 방문한 고객 목록입니다.</p>
       {error && (
         <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
           {error}
@@ -294,7 +295,7 @@ function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
           onChange={(e) => setDateFrom(e.target.value)}
           className="px-3 py-2.5 text-sm border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
         />
-        <span className="self-center text-[#AAA] text-sm">~</span>
+        <span className="self-center text-[#6B6B5E] text-sm">~</span>
         <input
           type="date"
           value={dateTo}
@@ -338,7 +339,7 @@ function DuplicateVisitsSection() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         같은 고객이 같은 날짜에 취소되지 않은 방문 기록을 2건 이상 가진 경우입니다.
       </p>
       {error && (
@@ -362,7 +363,7 @@ function DuplicateVisitsSection() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-base font-semibold text-[#2D5A3D]">{g.customerName}</p>
-                  <p className="text-sm text-[#8C8C80]">
+                  <p className="text-sm text-[#6B6B5E]">
                     {g.customerNumber} · {g.phone}
                   </p>
                 </div>
@@ -404,7 +405,7 @@ function MismatchesSection() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         고객의 기록된 방문 횟수와 실제 방문 기록 건수가 다른 경우입니다. 일반 로그인 등으로 방문
         횟수가 잘못 올라가거나 누락된 경우를 확인할 수 있습니다.
       </p>
@@ -423,7 +424,7 @@ function MismatchesSection() {
         <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
           <table className="w-full text-sm min-w-[560px]">
             <thead>
-              <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
+              <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
                 <th className="px-4 py-3 font-medium">고객명</th>
                 <th className="px-4 py-3 font-medium">여권번호</th>
                 <th className="px-4 py-3 font-medium">연락처</th>
@@ -517,7 +518,7 @@ function ManualAddSection() {
 
   return (
     <div className="max-w-md space-y-4">
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         QR 스캔 없이 매장에서 직접 방문을 등록해야 하는 경우 관리자가 수동으로 추가할 수 있습니다.
       </p>
 
@@ -531,7 +532,7 @@ function ManualAddSection() {
             <button
               type="button"
               onClick={() => setSelected(null)}
-              className="text-sm text-[#AAA] underline"
+              className="text-sm text-[#6B6B5E] underline"
             >
               변경
             </button>
@@ -559,7 +560,7 @@ function ManualAddSection() {
                       className="w-full text-left px-4 py-3 hover:bg-[#F5F5EC] transition-colors duration-200"
                     >
                       <span className="text-[15px] text-[#2D5A3D] font-medium">{c.name}</span>
-                      <span className="ml-2 text-sm text-[#8C8C80]">
+                      <span className="ml-2 text-sm text-[#6B6B5E]">
                         {c.customerNumber} · {c.phone}
                       </span>
                     </button>
@@ -646,7 +647,7 @@ export default function VisitManagement() {
       <div className="w-full max-w-4xl mx-auto space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-bold text-[#2D5A3D]">방문관리</h1>
-          <p className="text-sm text-[#8C8C80]">방문 기록을 조회하고, 이상 여부를 점검할 수 있습니다.</p>
+          <p className="text-sm text-[#6B6B5E]">방문 기록을 조회하고, 이상 여부를 점검할 수 있습니다.</p>
         </header>
 
         <AdminNav active="visits" />

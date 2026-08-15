@@ -88,15 +88,15 @@ export default function SmsComposeModal({ customerIds, consentedCount, onClose }
               </button>
             </div>
 
-            <p className="text-sm text-[#8C8C80]">
+            <p className="text-sm text-[#6B6B5E]">
               받는 사람 {targetCount}명
               {messageType === 'ad' && excludedPreview > 0 && (
-                <span className="text-[#B8860B]"> (마케팅 미동의 {excludedPreview}명 자동 제외)</span>
+                <span className="text-[#8A5800]"> (마케팅 미동의 {excludedPreview}명 자동 제외)</span>
               )}
             </p>
 
             {messageType === 'ad' && (
-              <p className="text-xs text-[#8C8C80] bg-[#FFF8F0] border border-[#F0D4B8] rounded-lg px-3 py-2">
+              <p className="text-xs text-[#6B6B5E] bg-[#FFF8F0] border border-[#F0D4B8] rounded-lg px-3 py-2">
                 문자 앞에 &quot;(광고)&quot;, 끝에 무료수신거부 안내가 자동으로 추가됩니다.
               </p>
             )}
@@ -110,7 +110,7 @@ export default function SmsComposeModal({ customerIds, consentedCount, onClose }
                          bg-white placeholder-[#B0B0A0] focus:border-[#2D5A3D] focus:outline-none
                          transition-colors duration-200 resize-none"
             />
-            <p className="text-xs text-[#8C8C80] text-right">
+            <p className="text-xs text-[#6B6B5E] text-right">
               {byteLength}byte {isLms ? '(장문 LMS로 발송됩니다)' : '(단문 SMS)'}
             </p>
 

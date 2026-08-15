@@ -33,6 +33,11 @@ input, select, textarea {
   font-size: 17px;
 }
 
+/* 입력 필드/셀렉트 터치 영역 최소 크기 (체크박스·라디오 제외) */
+input:not([type="checkbox"]):not([type="radio"]), select {
+  min-height: 44px;
+}
+
 /* 버튼 터치 영역 최소 크기 */
 button {
   min-height: 48px;

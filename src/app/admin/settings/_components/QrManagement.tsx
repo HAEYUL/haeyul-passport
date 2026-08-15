@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import { getQrStatus, reissueQr, getStores, type QrStatusInfo } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
+import { getStoreAdminColor } from '@/lib/storeColors';
 import type { Store } from '@/types/database';
 
 function buildVisitUrl(token: string): string {
@@ -110,24 +111,30 @@ export default function QrManagement() {
     <div className="space-y-4">
       {stores && stores.length > 1 && (
         <div className="flex flex-wrap gap-2">
-          {stores.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSelectedStoreId(s.id)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
-                selectedStoreId === s.id
-                  ? 'bg-[#2D5A3D] text-white'
-                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
+          {stores.map((s) => {
+            const color = getStoreAdminColor(s.name);
+            const selected = selectedStoreId === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSelectedStoreId(s.id)}
+                aria-pressed={selected}
+                className="min-h-[40px] px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors duration-200"
+                style={
+                  selected
+                    ? { backgroundColor: color.border, borderColor: color.border, color: '#FFFFFF' }
+                    : { backgroundColor: '#FFFFFF', borderColor: color.border, color: color.text }
+                }
+              >
+                {s.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      <p className="text-sm text-[#8C8C80]">
+      <p className="text-sm text-[#6B6B5E]">
         매장 방문등록용 QR을 관리합니다. 재발급하면 기존 QR은 즉시 사용할 수 없게 됩니다.
       </p>
 
@@ -161,15 +168,15 @@ export default function QrManagement() {
 
           <div className="border-t border-[#F0EDE6] pt-4 space-y-2">
             <div className="flex items-center justify-between text-[15px]">
-              <span className="text-[#8C8C80]">상태</span>
+              <span className="text-[#6B6B5E]">상태</span>
               <span className="font-semibold text-[#2D5A3D]">사용 중</span>
             </div>
             <div className="flex items-center justify-between text-[15px]">
-              <span className="text-[#8C8C80]">생성일</span>
+              <span className="text-[#6B6B5E]">생성일</span>
               <span className="text-[#333]">{formatDateKR(status.createdAt)}</span>
             </div>
             <div className="flex items-center justify-between text-[15px]">
-              <span className="text-[#8C8C80]">최근 재발급일</span>
+              <span className="text-[#6B6B5E]">최근 재발급일</span>
               <span className="text-[#333]">
                 {status.lastReissuedAt ? formatDateKR(status.lastReissuedAt) : '재발급한 적 없음'}
               </span>
@@ -219,7 +226,7 @@ export default function QrManagement() {
                   type="button"
                   onClick={() => setConfirming(false)}
                   disabled={reissuing}
-                  className="flex-1 py-2.5 px-4 bg-white text-[#8C8C80] text-sm font-semibold rounded-xl border-2 border-[#D4D0C8]"
+                  className="flex-1 py-2.5 px-4 bg-white text-[#6B6B5E] text-sm font-semibold rounded-xl border-2 border-[#D4D0C8]"
                 >
                   취소
                 </button>

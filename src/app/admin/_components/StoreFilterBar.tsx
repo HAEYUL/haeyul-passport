@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getStores } from '@/app/admin/actions';
+import { getStoreAdminColor } from '@/lib/storeColors';
 import type { Store } from '@/types/database';
 
 interface StoreFilterBarProps {
@@ -43,20 +44,26 @@ export default function StoreFilterBar({ value, onChange }: StoreFilterBarProps)
       >
         전체
       </button>
-      {stores.map((s) => (
-        <button
-          key={s.id}
-          type="button"
-          onClick={() => onChange(s.id)}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
-            value === s.id
-              ? 'bg-[#2D5A3D] text-white'
-              : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
-          }`}
-        >
-          {s.name}
-        </button>
-      ))}
+      {stores.map((s) => {
+        const color = getStoreAdminColor(s.name);
+        const selected = value === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            aria-pressed={selected}
+            className="min-h-[40px] px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-colors duration-200"
+            style={
+              selected
+                ? { backgroundColor: color.border, borderColor: color.border, color: '#FFFFFF' }
+                : { backgroundColor: '#FFFFFF', borderColor: color.border, color: color.text }
+            }
+          >
+            {s.name}
+          </button>
+        );
+      })}
     </div>
   );
 }
