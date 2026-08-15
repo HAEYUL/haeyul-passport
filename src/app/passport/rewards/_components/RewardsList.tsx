@@ -7,20 +7,20 @@ import { formatDateKR } from '@/lib/utils';
 function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isExpired: boolean }) {
   if (status === 'used') {
     return (
-      <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#8C8C80] border border-[#E0E0D0]">
+      <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-white text-[#6B6B5E] border-2 border-[#D4D0C8]">
         사용 완료
       </span>
     );
   }
   if (isExpired) {
     return (
-      <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#F5F5EC] text-[#AAA] border border-[#E0E0D0]">
+      <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-white text-[#6B6B5E] border-2 border-[#D4D0C8]">
         유효기간경과
       </span>
     );
   }
   return (
-    <span className="flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFFDF0] text-[#B8860B] border border-[#E8D88C]">
+    <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-[#8A5800] text-white">
       사용 가능
     </span>
   );
@@ -84,7 +84,7 @@ export default function RewardsList() {
         {/* 뒤로 가기 */}
         <button
           onClick={goBack}
-          className="flex items-center text-[#2D5A3D] text-base font-medium"
+          className="flex items-center min-h-[44px] text-[#2D5A3D] text-base font-bold"
           type="button"
         >
           <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,13 +94,15 @@ export default function RewardsList() {
         </button>
 
         {/* 타이틀 */}
-        <h1 className="text-2xl font-bold text-[#2D5A3D]">내 선물함</h1>
-        <p className="text-sm text-[#8C8C80] -mt-4">
-          해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
-        </p>
+        <div>
+          <h1 className="text-2xl font-bold text-[#2D5A3D]">내 선물함</h1>
+          <p className="mt-1 text-[15px] font-medium text-[#55534A]">
+            해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
+          </p>
+        </div>
 
         {error && (
-          <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-5 py-4 rounded-2xl text-[15px] leading-relaxed whitespace-pre-line">
+          <div className="bg-[#FFF3E4] border-2 border-[#EAC28E] text-[#7A4A16] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
             {error}
           </div>
         )}
@@ -108,49 +110,67 @@ export default function RewardsList() {
         {/* 할인권 목록 */}
         {!rewards || rewards.length === 0 ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-            <p className="text-[15px] text-[#8C8C80] leading-relaxed">
+            <p className="text-[17px] font-medium text-[#44443C] leading-relaxed">
               아직 받은 할인권이 없습니다.<br />
               방문을 계속하시면 할인권을 받으실 수 있어요.
             </p>
           </div>
         ) : (
-          <ul className="space-y-3">
-            {rewards.map((reward) => (
-              <li
-                key={reward.id}
-                className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-lg font-bold text-[#2D5A3D]">{reward.amount.toLocaleString()}원 할인권</p>
-                    <p className="mt-1 text-sm text-[#8C8C80]">{reward.thresholdVisits}회 방문 기념</p>
+          <ul className="space-y-4">
+            {rewards.map((reward) => {
+              const isUsable = reward.status !== 'used' && !reward.isExpired;
+              return (
+                <li
+                  key={reward.id}
+                  className={`rounded-2xl p-5 space-y-3 border-2 ${
+                    isUsable
+                      ? 'bg-[#FFF3D6] border-[#F0D98C] shadow-sm'
+                      : 'bg-[#F5F5EC] border-[#E0E0D0]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2">
+                      <span className="text-2xl leading-none mt-0.5">🎫</span>
+                      <div>
+                        <p className={`text-2xl font-extrabold leading-tight ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
+                          {reward.amount.toLocaleString()}원
+                        </p>
+                        <p className={`mt-0.5 text-[15px] font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
+                          {reward.thresholdVisits}회 방문 기념
+                        </p>
+                      </div>
+                    </div>
+                    <StatusBadge status={reward.status} isExpired={reward.isExpired} />
                   </div>
-                  <StatusBadge status={reward.status} isExpired={reward.isExpired} />
-                </div>
 
-                <div className="text-xs text-[#AAA] space-y-0.5">
-                  <p>발급일: {formatDateKR(reward.issuedAt)} · {reward.issuedStoreName}</p>
-                  {reward.status === 'used' && reward.usedAt && (
-                    <p>
-                      사용일: {formatDateKR(reward.usedAt)}
-                      {reward.usedStoreName && ` · ${reward.usedStoreName}`}
-                    </p>
+                  <p className={`text-xs font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
+                    전 매장 사용가능
+                  </p>
+
+                  <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? 'border-[#F0D98C] text-[#7A5B10]' : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>
+                    <p>발급일: {formatDateKR(reward.issuedAt)} · {reward.issuedStoreName}</p>
+                    {reward.status === 'used' && reward.usedAt && (
+                      <p>
+                        사용일: {formatDateKR(reward.usedAt)}
+                        {reward.usedStoreName && ` · ${reward.usedStoreName}`}
+                      </p>
+                    )}
+                  </div>
+
+                  {isUsable && (
+                    <button
+                      onClick={() => handleConfirm(reward.id)}
+                      disabled={actionLoadingId === reward.id}
+                      className="w-full min-h-[52px] py-3 px-4 bg-[#2D5A3D] text-white text-base font-bold rounded-xl
+                                 shadow-sm hover:bg-[#245032] active:scale-[0.98]
+                                 transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
+                    >
+                      {actionLoadingId === reward.id ? '처리 중...' : '직원확인'}
+                    </button>
                   )}
-                </div>
-
-                {reward.status !== 'used' && !reward.isExpired && (
-                  <button
-                    onClick={() => handleConfirm(reward.id)}
-                    disabled={actionLoadingId === reward.id}
-                    className="w-full py-3 px-4 bg-[#2D5A3D] text-white text-base font-semibold rounded-xl
-                               shadow-sm hover:bg-[#245032] active:scale-[0.98]
-                               transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
-                  >
-                    {actionLoadingId === reward.id ? '처리 중...' : '직원확인'}
-                  </button>
-                )}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
 
