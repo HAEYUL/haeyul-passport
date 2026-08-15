@@ -69,7 +69,7 @@ export default function VisitHistory({ onBack }: VisitHistoryProps) {
         </button>
 
         {/* 타이틀 */}
-        <h1 className="text-2xl font-bold text-[#2D5A3D]">방문기록</h1>
+        <h1 className="text-2xl font-bold text-[#2D5A3D]">방문기록 ({data.totalVisits}회)</h1>
 
         {/* 요약 카드 */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-3">
@@ -102,7 +102,7 @@ export default function VisitHistory({ onBack }: VisitHistoryProps) {
             <ul className="space-y-2">
               {data.visits.map((visit, index) => (
                 <li
-                  key={visit.visit_date}
+                  key={`${visit.visit_date}-${visit.visit_time}`}
                   className="flex items-center justify-between bg-white rounded-xl px-4 py-3
                              border border-[#F0EDE6]"
                 >
@@ -115,6 +115,7 @@ export default function VisitHistory({ onBack }: VisitHistoryProps) {
                       {formatDateKR(visit.visit_date)}
                     </span>
                   </div>
+                  <span className="text-sm text-[#8C8C80]">{visit.storeName}</span>
                 </li>
               ))}
             </ul>

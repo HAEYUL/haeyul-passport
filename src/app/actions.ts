@@ -567,7 +567,7 @@ export interface VisitHistoryData {
   totalVisits: number;
   firstVisitDate: string | null;
   recentVisitDate: string | null;
-  visits: { visit_date: string; visit_time: string }[];
+  visits: { visit_date: string; visit_time: string; storeName: string }[];
 }
 
 export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> {
@@ -581,7 +581,7 @@ export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> 
 
     const { data: visits, error } = await supabase
       .from('visits')
-      .select('visit_date, visit_time')
+      .select('visit_date, visit_time, store_id')
       .eq('customer_id', session.customerId)
       .eq('is_cancelled', false)
       .order('visit_date', { ascending: false });
@@ -592,13 +592,22 @@ export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> 
 
     const visitList = visits || [];
 
+    const { data: stores } = await supabase.from('stores').select('id, name');
+    const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
+
+    const visitsWithStore = visitList.map((v) => ({
+      visit_date: v.visit_date,
+      visit_time: v.visit_time,
+      storeName: storeMap.get(v.store_id) || '-',
+    }));
+
     return {
       success: true,
       data: {
         totalVisits: visitList.length,
         firstVisitDate: visitList.length > 0 ? visitList[visitList.length - 1].visit_date : null,
         recentVisitDate: visitList.length > 0 ? visitList[0].visit_date : null,
-        visits: visitList,
+        visits: visitsWithStore,
       },
     };
   } catch (error) {
