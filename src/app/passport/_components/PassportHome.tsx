@@ -179,40 +179,6 @@ export default function PassportHome() {
           </div>
         </div>
 
-        {/* 다음 혜택까지 카드 (주황/노랑 계열) */}
-        <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-2xl p-6 space-y-4">
-          {data.tier.isMaxTier ? (
-            <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
-              {VIP_MESSAGE}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex justify-between items-baseline text-[15px] font-semibold text-[#8A5800]">
-                <span>{data.tier.label}</span>
-                <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회</span>
-              </div>
-              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#F0D98C]">
-                <div
-                  className="h-full bg-[#D99A2B] rounded-full transition-all duration-500"
-                  style={{ width: `${data.tier.progressPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {data.rewardProgressMessage && (
-            <p className="text-[17px] font-bold text-[#8A5800] text-center leading-relaxed border-t border-[#F0D98C] pt-3">
-              🎫 {data.rewardProgressMessage}
-            </p>
-          )}
-
-          {data.availableRewards > 0 && (
-            <p className="text-[15px] font-semibold text-[#8A5800] text-center">
-              지금 사용 가능한 할인권 {data.availableRewards}개가 있어요
-            </p>
-          )}
-        </div>
-
         {/* 오늘의 방문 / 메시지 영역 */}
         {visitMessage && (
           <div className="bg-[#F0F7F2] border-2 border-[#C4DCC9] text-[#1F4A2E] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
@@ -310,6 +276,40 @@ export default function PassportHome() {
             </p>
           </div>
         )}
+
+        {/* 다음 혜택까지 카드 (주황/노랑 계열) */}
+        <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-2xl p-6 space-y-4">
+          {data.tier.isMaxTier ? (
+            <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
+              {VIP_MESSAGE}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex justify-between items-baseline text-[15px] font-semibold text-[#8A5800]">
+                <span>{data.tier.label}</span>
+                <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회</span>
+              </div>
+              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#F0D98C]">
+                <div
+                  className="h-full bg-[#D99A2B] rounded-full transition-all duration-500"
+                  style={{ width: `${data.tier.progressPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {data.rewardProgressMessage && (
+            <p className="text-[17px] font-bold text-[#8A5800] text-center leading-relaxed border-t border-[#F0D98C] pt-3">
+              🎫 {data.rewardProgressMessage}
+            </p>
+          )}
+
+          {data.availableRewards > 0 && (
+            <p className="text-[15px] font-semibold text-[#8A5800] text-center">
+              지금 사용 가능한 할인권 {data.availableRewards}개가 있어요
+            </p>
+          )}
+        </div>
 
         {/* 매장별 방문 횟수 */}
         {data.storeVisitBreakdown.length > 0 && (
