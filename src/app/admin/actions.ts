@@ -734,7 +734,8 @@ export async function getCustomerList(
   filter: CustomerListFilter = 'all',
   longAbsentDays: number = DEFAULT_LONG_ABSENT_DAYS,
   tierKey?: VisitTierKey,
-  storeId?: string | null
+  storeId?: string | null,
+  marketingConsent?: boolean | null
 ): Promise<ApiResponse<CustomerListItem[]>> {
   try {
     const admin = await getAdminSession();
@@ -806,6 +807,10 @@ export async function getCustomerList(
 
     if (storeId) {
       request = request.eq('signup_store_id', storeId);
+    }
+
+    if (marketingConsent != null) {
+      request = request.eq('marketing_consent', marketingConsent);
     }
 
     if (filter === 'newThisMonth') {

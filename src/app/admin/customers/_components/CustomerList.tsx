@@ -83,7 +83,7 @@ function csvCell(value: string): string {
 const BOM = String.fromCharCode(0xfeff);
 
 function exportCustomersCsv(customers: CustomerListItem[]) {
-  const headers = ['성함', '여권번호', '연락처', '방문 횟수', '등급', '가입일', '최근 방문일'];
+  const headers = ['성함', '여권번호', '연락처', '방문 횟수', '등급', '가입일', '최근 방문일', '혜택·소식 수신동의'];
   const rows = customers.map((c) => [
     c.name,
     c.customerNumber,
@@ -92,6 +92,7 @@ function exportCustomersCsv(customers: CustomerListItem[]) {
     getVisitTierInfo(c.visitCount).label,
     formatDateKR(c.createdAt),
     c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-',
+    c.marketingConsent ? '동의' : '미동의',
   ]);
 
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
@@ -124,6 +125,7 @@ export default function CustomerList() {
 
   const [query, setQuery] = useState('');
   const [storeId, setStoreId] = useState<string | null>(null);
+  const [marketingConsent, setMarketingConsent] = useState<boolean | null>(null);
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
   const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
@@ -132,14 +134,14 @@ export default function CustomerList() {
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
-    const result = await getCustomerList(q, filter, longAbsentDays, tierKey, storeId);
+    const result = await getCustomerList(q, filter, longAbsentDays, tierKey, storeId, marketingConsent);
     if (result.success && result.data) {
       setCustomers(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '고객 목록을 불러올 수 없습니다.');
     }
-  }, [filter, longAbsentDays, tierKey, storeId]);
+  }, [filter, longAbsentDays, tierKey, storeId, marketingConsent]);
 
   const fetchTierBreakdown = useCallback(async () => {
     setTierBreakdown(null);
@@ -218,6 +220,29 @@ export default function CustomerList() {
         <AdminNav active="customers" />
 
         <StoreFilterBar value={storeId} onChange={setStoreId} />
+
+        {!isTierMenu && (
+          <div className="flex flex-wrap gap-2">
+            {([
+              { label: '수신동의 전체', value: null },
+              { label: '수신동의', value: true },
+              { label: '수신미동의', value: false },
+            ] as const).map((opt) => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setMarketingConsent(opt.value)}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                  marketingConsent === opt.value
+                    ? 'bg-[#2D5A3D] text-white'
+                    : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!isTierMenu && (
           <div className="flex flex-wrap gap-2">
@@ -348,7 +373,7 @@ export default function CustomerList() {
               </div>
             ) : (
               <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-                <table className="w-full text-sm min-w-[800px]">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead>
                     <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#8C8C80]">
                       <th className="px-4 py-3 font-medium w-10">
@@ -367,6 +392,7 @@ export default function CustomerList() {
                       <th className="px-4 py-3 font-medium">등급</th>
                       <th className="px-4 py-3 font-medium">가입일</th>
                       <th className="px-4 py-3 font-medium">최근 방문일</th>
+                      <th className="px-4 py-3 font-medium">수신동의</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -396,6 +422,13 @@ export default function CustomerList() {
                         <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">{formatDateKR(c.createdAt)}</td>
                         <td className="px-4 py-3 text-[#8C8C80] whitespace-nowrap">
                           {c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {c.marketingConsent ? (
+                            <span className="text-xs font-semibold text-[#2D5A3D]">동의</span>
+                          ) : (
+                            <span className="text-xs text-[#AAA]">미동의</span>
+                          )}
                         </td>
                       </tr>
                     ))}
