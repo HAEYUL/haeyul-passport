@@ -128,7 +128,7 @@ export default function VipManagement() {
                   <th className="px-4 py-3 font-medium">VIP 달성일</th>
                   <th className="px-4 py-3 font-medium text-right">총 방문 횟수</th>
                   <th className="px-4 py-3 font-medium">최근 방문일</th>
-                  <th className="px-4 py-3 font-medium">감사 선물</th>
+                  <th className="px-4 py-3 font-medium">감사 할인권</th>
                   <th className="px-4 py-3 font-medium">관리자 메모</th>
                 </tr>
               </thead>

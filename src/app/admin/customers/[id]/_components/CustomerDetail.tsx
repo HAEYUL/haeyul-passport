@@ -207,7 +207,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                                  focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
                     />
                     <p className="mt-1 text-xs text-[#6B6B5E]">
-                      변경하면 등급과 방문 선물이 자동으로 다시 계산됩니다.
+                      변경하면 등급과 방문 할인권이 자동으로 다시 계산됩니다.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -323,7 +323,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     <div className="bg-[#FFF5F0] border border-[#F0C4B8] rounded-xl p-4 space-y-3">
                       <p className="text-[15px] text-[#996633] leading-relaxed">
                         정말 삭제하시겠습니까?<br />
-                        방문기록·선물·동의기록이 모두 함께 삭제되며 되돌릴 수 없습니다.
+                        방문기록·할인권·동의기록이 모두 함께 삭제되며 되돌릴 수 없습니다.
                       </p>
                       {deleteError && <p className="text-sm text-[#D4442A]">{deleteError}</p>}
                       <div className="flex gap-2">
@@ -352,11 +352,11 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
               )}
             </div>
 
-            {/* 선물함 */}
+            {/* 할인권함 */}
             <div className="space-y-2">
-              <h2 className="text-base font-semibold text-[#555]">선물함</h2>
+              <h2 className="text-base font-semibold text-[#555]">할인권함</h2>
               {data.rewards.length === 0 ? (
-                <p className="text-[15px] text-[#6B6B5E] py-2">아직 받은 선물이 없습니다.</p>
+                <p className="text-[15px] text-[#6B6B5E] py-2">아직 받은 할인권이 없습니다.</p>
               ) : (
                 <ul className="space-y-2">
                   {data.rewards.map((r) => (

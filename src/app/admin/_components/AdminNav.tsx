@@ -11,7 +11,7 @@ const TABS: { key: AdminNavProps['active']; href: string; label: string }[] = [
   { key: 'dashboard', href: '/admin', label: '대시보드' },
   { key: 'customers', href: '/admin/customers', label: '고객관리' },
   { key: 'visits', href: '/admin/visits', label: '방문관리' },
-  { key: 'rewards', href: '/admin/rewards', label: '선물관리' },
+  { key: 'rewards', href: '/admin/rewards', label: '할인권관리' },
   { key: 'vip', href: '/admin/vip', label: 'VIP관리' },
   { key: 'settings', href: '/admin/settings', label: '설정' },
 ];

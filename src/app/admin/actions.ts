@@ -146,7 +146,13 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       .select('id', { count: 'exact', head: true })
       .eq('visit_date', todayKST)
       .eq('is_cancelled', false);
-    let unclaimedRewardsBase = supabase.from('customer_rewards').select('id', { count: 'exact', head: true }).neq('status', 'used');
+    // 실물 선물(구 방식, reward_rule_id가 NULL) 기록은 더 이상 발급되지 않으므로
+    // 할인권(reward_rule 기반) 기록만 집계합니다 — 선물관리 화면과 집계 기준을 통일합니다.
+    let unclaimedRewardsBase = supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .neq('status', 'used')
+      .not('reward_rule_id', 'is', null);
     let newCustomersBase = supabase
       .from('customers')
       .select('id', { count: 'exact', head: true })
@@ -156,6 +162,7 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       .from('customer_rewards')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'used')
+      .not('reward_rule_id', 'is', null)
       .gte('used_at', todayStart)
       .lt('used_at', todayEnd);
     let vipCountBase = supabase
@@ -167,11 +174,13 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
     let monthlyIssuedBase = supabase
       .from('customer_rewards')
       .select('id', { count: 'exact', head: true })
+      .not('reward_rule_id', 'is', null)
       .gte('issued_at', monthStart);
     let monthlyUsedBase = supabase
       .from('customer_rewards')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'used')
+      .not('reward_rule_id', 'is', null)
       .gte('used_at', monthStart);
 
     if (storeId) {
@@ -454,11 +463,11 @@ export async function restoreReward(
       .single();
 
     if (fetchError || !before) {
-      return { success: false, error: '선물 정보를 찾을 수 없습니다.' };
+      return { success: false, error: '할인권 정보를 찾을 수 없습니다.' };
     }
 
     if (before.status !== 'used') {
-      return { success: false, error: '사용된 선물만 복원할 수 있습니다.' };
+      return { success: false, error: '사용된 할인권만 복원할 수 있습니다.' };
     }
 
     // customer_rewards에는 사용 완료된 선물의 일반 UPDATE를 막는 트리거가 있어,

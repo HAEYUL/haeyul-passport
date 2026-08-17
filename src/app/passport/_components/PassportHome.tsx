@@ -223,7 +223,7 @@ export default function PassportHome() {
               새로운 할인권이 도착했습니다.<br />
               {newCouponAmounts.map((a) => `${a.toLocaleString()}원`).join(' · ')}
             </p>
-            <p className="text-[15px] font-medium text-[#8A5800]">내 선물함에서 확인해 주세요.</p>
+            <p className="text-[15px] font-medium text-[#8A5800]">내 할인권함에서 확인해 주세요.</p>
           </div>
         )}
 
@@ -360,7 +360,7 @@ export default function PassportHome() {
                        } active:scale-[0.98]`}
             id="btn-rewards"
           >
-            내 선물함 {data.availableRewards > 0 && `(${data.availableRewards})`}
+            내 할인권함 {data.availableRewards > 0 && `(${data.availableRewards})`}
           </button>
         </div>
 

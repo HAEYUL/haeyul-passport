@@ -31,12 +31,12 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     description: '이번 달에 새로 가입한 고객 목록입니다.',
   },
   unclaimedRewards: {
-    title: '미사용 선물 보유 고객',
-    description: '아직 사용하지 않은 선물을 가지고 있는 고객 목록입니다.',
+    title: '미사용 할인권 보유 고객',
+    description: '아직 사용하지 않은 할인권을 가지고 있는 고객 목록입니다.',
   },
   todayRewardsUsed: {
-    title: '오늘 선물 사용 고객',
-    description: '오늘 선물을 사용한 고객 목록입니다.',
+    title: '오늘 할인권 사용 고객',
+    description: '오늘 할인권을 사용한 고객 목록입니다.',
   },
   vip: {
     title: '해율푸드 VIP 고객',

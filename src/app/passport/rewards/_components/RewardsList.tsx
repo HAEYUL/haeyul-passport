@@ -95,7 +95,7 @@ export default function RewardsList() {
 
         {/* 타이틀 */}
         <div>
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">내 선물함</h1>
+          <h1 className="text-2xl font-bold text-[#2D5A3D]">내 할인권함</h1>
           <p className="mt-1 text-[15px] font-medium text-[#55534A]">
             해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
           </p>

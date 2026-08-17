@@ -284,7 +284,7 @@ function RewardUsageSection({ storeId }: { storeId: string | null }) {
   }, [storeId]);
 
   return (
-    <ChartCard title="선물 발급·사용률" description="방문 횟수별 선물의 발급/사용 현황과 사용률입니다.">
+    <ChartCard title="할인권 발급·사용률" description="방문 횟수별 할인권의 발급/사용 현황과 사용률입니다.">
       {!data ? (
         <div className="h-48 rounded-xl bg-[#E8E8E0] animate-pulse" />
       ) : (
@@ -417,7 +417,7 @@ function LongAbsentDrilldown({
                 <th className="px-3 py-2 font-medium text-right">누적 방문</th>
                 <th className="px-3 py-2 font-medium">최근 방문일</th>
                 <th className="px-3 py-2 font-medium text-right">미방문 일수</th>
-                <th className="px-3 py-2 font-medium text-right">사용 가능 선물</th>
+                <th className="px-3 py-2 font-medium text-right">사용 가능 할인권</th>
               </tr>
             </thead>
             <tbody>

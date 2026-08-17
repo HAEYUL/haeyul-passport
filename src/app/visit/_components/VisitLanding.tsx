@@ -88,7 +88,7 @@ export default function VisitLanding({ storeName }: VisitLandingProps) {
           </p>
           <p className="mt-2 text-[15px] text-[#8C8C80] leading-relaxed">
             오늘의 방문이 기록되고, 방문할수록<br />
-            해율이 준비한 선물을 받으실 수 있습니다.
+            해율이 준비한 할인권을 받으실 수 있습니다.
           </p>
         </div>
 

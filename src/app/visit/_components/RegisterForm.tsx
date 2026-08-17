@@ -169,7 +169,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 </button>
                 <ul className="mt-2 space-y-0.5 text-sm text-[#666] leading-relaxed list-disc list-inside">
                   <li>수집 항목: 이름, 연락처, 생일</li>
-                  <li>수집 목적: 방문 기록 관리 및 선물·생일 혜택 제공</li>
+                  <li>수집 목적: 방문 기록 관리 및 할인권·생일 혜택 제공</li>
                   <li>보유 기간: 회원 탈퇴 시까지</li>
                   <li>해율만두전골·곤드레밥집·정담명가 남원추어탕에서 함께 이용됩니다.</li>
                   <li>동의를 거부할 수 있으며, 거부 시 전자여권 서비스 이용이 제한됩니다.</li>
@@ -198,7 +198,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                   <p className="mb-1">수집한 개인정보는 다음의 목적으로 이용합니다.</p>
                   <ul className="space-y-1 list-disc list-inside">
                     <li>방문 기록 및 회원 등급 관리</li>
-                    <li>방문 선물 및 생일 혜택 제공</li>
+                    <li>방문 할인권 및 생일 혜택 제공</li>
                     <li>고객 서비스 운영</li>
                   </ul>
                 </div>

@@ -23,8 +23,8 @@ type Section = 'stats' | 'available' | 'used' | 'catalog';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'stats', label: '등급별 통계' },
-  { key: 'available', label: '사용 가능한 선물' },
-  { key: 'used', label: '사용 완료 선물' },
+  { key: 'available', label: '사용 가능한 할인권' },
+  { key: 'used', label: '사용 완료 할인권' },
   { key: 'catalog', label: '할인권 규칙 관리' },
 ];
 
@@ -69,7 +69,7 @@ function StatsSection({ storeId }: { storeId: string | null }) {
       setStats(result.data);
       setError('');
     } else if (!result.success) {
-      setError(result.error || '선물 현황을 불러올 수 없습니다.');
+      setError(result.error || '할인권 현황을 불러올 수 없습니다.');
     }
   }, [storeId]);
 
@@ -215,7 +215,7 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
       setItems(result.data);
       setError('');
     } else if (!result.success) {
-      setError(result.error || '선물 목록을 불러올 수 없습니다.');
+      setError(result.error || '할인권 목록을 불러올 수 없습니다.');
     }
   }, [statusFilter, storeId]);
 
@@ -240,7 +240,7 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
     return (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
         <p className="text-[15px] text-[#6B6B5E]">
-          {statusFilter === 'used' ? '사용 완료된 선물이 없습니다.' : '사용 가능한 선물이 없습니다.'}
+          {statusFilter === 'used' ? '사용 완료된 할인권이 없습니다.' : '사용 가능한 할인권이 없습니다.'}
         </p>
       </div>
     );
@@ -558,8 +558,8 @@ export default function RewardStats() {
     <main className="flex flex-col min-h-screen px-6 py-8">
       <div className="w-full max-w-2xl mx-auto space-y-6">
         <header className="space-y-1">
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">선물관리</h1>
-          <p className="text-sm text-[#6B6B5E]">방문 선물의 발급·사용 현황을 확인하고 관리할 수 있습니다.</p>
+          <h1 className="text-2xl font-bold text-[#2D5A3D]">할인권관리</h1>
+          <p className="text-sm text-[#6B6B5E]">방문 할인권의 발급·사용 현황을 확인하고 관리할 수 있습니다.</p>
         </header>
 
         <AdminNav active="rewards" />

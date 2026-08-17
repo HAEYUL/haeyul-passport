@@ -13,11 +13,13 @@ interface AdminDashboardProps {
 function StatCard({
   label,
   value,
+  unit,
   href,
   accent,
 }: {
   label: string;
   value: number;
+  unit: string;
   href: string;
   accent?: string;
 }) {
@@ -28,7 +30,10 @@ function StatCard({
                  hover:bg-[#F5F5EC] transition-colors duration-200"
     >
       <p className="text-sm text-[#6B6B5E]">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${accent || 'text-[#2D5A3D]'}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-bold ${accent || 'text-[#2D5A3D]'}`}>
+        {value.toLocaleString()}
+        <span className="ml-1 text-base font-bold">{unit}</span>
+      </p>
     </Link>
   );
 }
@@ -179,28 +184,33 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
               <StatCard
                 label="이번달 신규가입"
                 value={stats.newCustomersThisMonth}
+                unit="명"
                 href="/admin/customers?filter=newThisMonth"
               />
               <StatCard
-                label="미사용 선물"
+                label="미사용 할인권"
                 value={stats.unclaimedRewards}
+                unit="개"
                 href="/admin/customers?filter=unclaimedRewards"
                 accent="text-[#8A5800]"
               />
               <StatCard
-                label="오늘 선물 사용"
+                label="오늘 할인권 사용"
                 value={stats.todayRewardsUsed}
+                unit="개"
                 href="/admin/customers?filter=todayRewardsUsed"
               />
               <StatCard
                 label="해율푸드 VIP"
                 value={stats.vipCount}
+                unit="명"
                 href="/admin/customers?filter=vip"
                 accent="text-[#8A5800]"
               />
               <StatCard
                 label="장기 미방문"
                 value={stats.longAbsentCount}
+                unit="명"
                 href="/admin/customers?filter=longAbsent&days=30"
                 accent="text-[#D4442A]"
               />
