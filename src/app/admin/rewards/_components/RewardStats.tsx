@@ -54,7 +54,7 @@ function TabButton({
 
 function ruleLabel(s: { thresholdVisits: number; isRepeating: boolean; repeatInterval: number | null }) {
   if (s.isRepeating && s.repeatInterval) {
-    return `${s.thresholdVisits}회부터 ${s.repeatInterval}회마다`;
+    return `해율VIP ${s.repeatInterval}회마다`;
   }
   return `${s.thresholdVisits}회 방문`;
 }

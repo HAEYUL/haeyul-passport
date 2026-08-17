@@ -99,7 +99,7 @@ export default function PassportGuide() {
                   <span className="flex-shrink-0 text-[15px] font-bold text-[#8A5800] text-right leading-snug">
                     {r.isRepeating ? (
                       <>
-                        {r.thresholdVisits}회부터<br />{r.repeatInterval}회마다
+                        해율VIP<br />{r.repeatInterval}회마다
                       </>
                     ) : (
                       `${r.thresholdVisits}회`
