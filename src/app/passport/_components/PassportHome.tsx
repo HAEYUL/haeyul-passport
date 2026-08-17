@@ -129,10 +129,24 @@ export default function PassportHome() {
     <main className="flex flex-col min-h-screen px-6 py-8">
       <div className="w-full max-w-sm mx-auto space-y-6">
         {/* 헤더 */}
-        <header className="text-center space-y-3">
-          <BrandLogo height={56} textClassName="text-2xl" />
-          <p className="text-[15px] font-medium text-[#55534A]">해율 자연의 흐름 전자여권</p>
-          <p className="text-sm font-medium text-[#55534A]">
+        <header className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <BrandLogo height={56} textClassName="text-2xl" />
+            <a
+              href="https://haeyul-homepage.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+                         rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
+                         text-[13px] font-bold leading-tight text-center
+                         hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+            >
+              <span>홈페이지</span>
+              <span>둘러보기</span>
+            </a>
+          </div>
+          <p className="text-[15px] font-medium text-[#55534A] text-center">해율 자연의 흐름 전자여권</p>
+          <p className="text-sm font-medium text-[#55534A] text-center">
             해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕
           </p>
         </header>
