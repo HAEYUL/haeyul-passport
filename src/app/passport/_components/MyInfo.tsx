@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { updateMarketingConsent } from '@/app/actions';
+import { updateMarketingConsent, updateBirthDate } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 import type { Customer } from '@/types/database';
 
@@ -15,6 +15,11 @@ export default function MyInfo({ customer, onBack, onUpdated }: MyInfoProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [editingBirthDate, setEditingBirthDate] = useState(false);
+  const [birthDateInput, setBirthDateInput] = useState(customer.birth_date || '');
+  const [birthDateSaving, setBirthDateSaving] = useState(false);
+  const [birthDateError, setBirthDateError] = useState('');
+
   async function handleToggleConsent() {
     setLoading(true);
     setError('');
@@ -27,6 +32,28 @@ export default function MyInfo({ customer, onBack, onUpdated }: MyInfoProps) {
       onUpdated();
     } else {
       setError(result.error || '변경 중 오류가 발생했습니다.');
+    }
+  }
+
+  function startEditBirthDate() {
+    setBirthDateInput(customer.birth_date || '');
+    setBirthDateError('');
+    setEditingBirthDate(true);
+  }
+
+  async function handleSaveBirthDate() {
+    setBirthDateSaving(true);
+    setBirthDateError('');
+
+    const result = await updateBirthDate(birthDateInput || null);
+
+    setBirthDateSaving(false);
+
+    if (result.success) {
+      setEditingBirthDate(false);
+      onUpdated();
+    } else {
+      setBirthDateError(result.error || '변경 중 오류가 발생했습니다.');
     }
   }
 
@@ -68,14 +95,58 @@ export default function MyInfo({ customer, onBack, onUpdated }: MyInfoProps) {
             <span className="text-[15px] text-[#8C8C80]">휴대전화 번호</span>
             <span className="text-[15px] font-medium text-[#333]">{customer.phone}</span>
           </div>
-          {customer.birth_date && (
-            <div className="flex justify-between">
-              <span className="text-[15px] text-[#8C8C80]">생년월일</span>
-              <span className="text-[15px] font-medium text-[#333]">
-                {formatDateKR(customer.birth_date)}
-              </span>
-            </div>
-          )}
+          <div className="border-t border-[#F0EDE6] pt-3">
+            {editingBirthDate ? (
+              <div className="space-y-2">
+                <span className="text-[15px] text-[#8C8C80]">생년월일</span>
+                <input
+                  type="date"
+                  value={birthDateInput}
+                  onChange={(e) => setBirthDateInput(e.target.value)}
+                  className="w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl
+                             focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+                />
+                {birthDateError && <p className="text-sm text-[#D4442A]">{birthDateError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setEditingBirthDate(false)}
+                    disabled={birthDateSaving}
+                    className="flex-1 py-2.5 px-4 bg-white text-[#8C8C80] text-sm font-medium rounded-xl
+                               border border-[#D4D0C8] hover:bg-[#F5F5EC] transition-colors duration-200
+                               disabled:cursor-not-allowed"
+                    type="button"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSaveBirthDate}
+                    disabled={birthDateSaving}
+                    className="flex-1 py-2.5 px-4 bg-[#2D5A3D] text-white text-sm font-semibold rounded-xl
+                               hover:bg-[#245032] transition-colors duration-200 disabled:opacity-60"
+                    type="button"
+                  >
+                    {birthDateSaving ? '저장 중...' : '저장'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-[15px] text-[#8C8C80]">생년월일</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-medium text-[#333]">
+                    {customer.birth_date ? formatDateKR(customer.birth_date) : '미입력'}
+                  </span>
+                  <button
+                    onClick={startEditBirthDate}
+                    className="text-sm font-semibold text-[#2D5A3D] underline"
+                    type="button"
+                  >
+                    수정
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex justify-between">
             <span className="text-[15px] text-[#8C8C80]">가입일</span>
             <span className="text-[15px] font-medium text-[#333]">

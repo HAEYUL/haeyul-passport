@@ -798,6 +798,35 @@ export async function updateMarketingConsent(consent: boolean): Promise<ApiRespo
   }
 }
 
+/**
+ * 로그인된 고객이 본인의 생년월일을 직접 수정합니다.
+ * 성함·회원번호·전화번호는 본인 확인 절차가 없어 셀프 수정 대상에서 제외합니다.
+ */
+export async function updateBirthDate(birthDate: string | null): Promise<ApiResponse<null>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from('customers')
+      .update({ birth_date: birthDate || null })
+      .eq('id', session.customerId);
+
+    if (error) {
+      return { success: false, error: '변경 중 오류가 발생했습니다.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('updateBirthDate 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 // ============================================================
 // 여권 설명서 (로그인 불필요)
 // ============================================================

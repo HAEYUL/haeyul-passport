@@ -131,13 +131,11 @@ export default function PassportHome() {
         {/* 헤더 */}
         <header className="space-y-3">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <div />
-            <BrandLogo height={56} textClassName="text-2xl" />
             <a
               href="https://haeyul-homepage.vercel.app/"
               target="_blank"
               rel="noopener noreferrer"
-              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+              className="justify-self-start flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
                          rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
                          text-[13px] font-bold leading-tight text-center
                          hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
@@ -145,6 +143,18 @@ export default function PassportHome() {
               <span>홈페이지</span>
               <span>둘러보기</span>
             </a>
+            <BrandLogo height={56} textClassName="text-2xl" />
+            <button
+              onClick={handleLogout}
+              type="button"
+              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+                         rounded-xl border-2 border-[#F0C4B8] bg-white text-[#A8391F]
+                         text-[13px] font-bold leading-tight text-center
+                         hover:bg-[#FFF0EA] active:scale-[0.98] transition-all duration-200"
+              id="btn-logout"
+            >
+              로그아웃
+            </button>
           </div>
           <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
           <div className="rounded-xl border border-[#D8D4C8] bg-white px-4 py-2.5">
@@ -156,8 +166,8 @@ export default function PassportHome() {
 
         {/* 고객 정보 카드 */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <h1 className="text-xl font-bold text-[#2D5A3D]">
                 {data.customer.name} 고객님
               </h1>
@@ -165,6 +175,14 @@ export default function PassportHome() {
                 [해율 여권번호] {data.customer.customer_number}
               </p>
             </div>
+            <button
+              onClick={() => setShowMyInfo(true)}
+              type="button"
+              className="flex-shrink-0 min-h-[52px] px-4 rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
+                         text-sm font-bold hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+            >
+              내 정보
+            </button>
           </div>
           <div className="flex items-center justify-between border-t border-[#F0EDE6] pt-2">
             <span className="text-[15px] font-medium text-[#55534A]">최근 방문일</span>
@@ -175,7 +193,7 @@ export default function PassportHome() {
         </div>
 
         {/* 등급 카드 (초록 계열) */}
-        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-5 flex items-center gap-4">
+        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-5 flex items-center gap-3">
           <Image
             src={data.tier.iconSrc}
             alt={data.tier.label}
@@ -194,6 +212,18 @@ export default function PassportHome() {
               {data.customer.visit_count}<span className="text-lg">회</span>
             </p>
           </div>
+          <button
+            onClick={() => setShowHistory(true)}
+            type="button"
+            className="flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+                       rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
+                       text-[13px] font-bold leading-tight text-center
+                       hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+            id="btn-history"
+          >
+            <span>방문</span>
+            <span>기록</span>
+          </button>
         </div>
 
         {/* 오늘의 방문 / 메시지 영역 */}
@@ -328,6 +358,36 @@ export default function PassportHome() {
           )}
         </div>
 
+        {/* 내 할인권 / 여권 설명서 */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              window.location.href = '/passport/rewards';
+            }}
+            className={`flex-1 min-h-[56px] py-3 px-3 text-base font-bold rounded-2xl border-2 shadow-sm
+                       transition-all duration-200
+                       ${data.hasRewardToUse
+                         ? 'bg-[#FFF3D6] text-[#8A5800] border-[#F0D98C] hover:bg-[#FCE9BC]'
+                         : 'bg-white text-[#2D5A3D] border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                       } active:scale-[0.98]`}
+            id="btn-rewards"
+          >
+            내 할인권 {data.availableRewards > 0 && `(${data.availableRewards})`}
+          </button>
+
+          <button
+            onClick={() => {
+              window.location.href = '/guide';
+            }}
+            className="flex-1 min-h-[56px] py-3 px-3 bg-white text-[#2D5A3D] text-base font-bold rounded-2xl
+                       border-2 border-[#D4D0C8] shadow-sm
+                       hover:bg-[#F5F5EC] active:scale-[0.98]
+                       transition-all duration-200"
+          >
+            여권 설명서
+          </button>
+        </div>
+
         {/* 매장별 방문 횟수 */}
         {data.storeVisitBreakdown.length > 0 && (
           <div className="space-y-2">
@@ -352,37 +412,14 @@ export default function PassportHome() {
           </div>
         )}
 
-        {/* 메뉴 버튼들 */}
-        <div className="space-y-4">
-          <button
-            onClick={() => setShowHistory(true)}
-            className="w-full min-h-[56px] py-4 px-6 bg-white text-[#2D5A3D] text-lg font-bold rounded-2xl
-                       border-2 border-[#D4D0C8] shadow-sm
-                       hover:bg-[#F5F5EC] active:scale-[0.98]
-                       transition-all duration-200"
-            id="btn-history"
-          >
-            방문기록 보기
-          </button>
-
-          <button
-            onClick={() => {
-              window.location.href = '/passport/rewards';
-            }}
-            className={`w-full min-h-[56px] py-4 px-6 text-lg font-bold rounded-2xl border-2 shadow-sm
-                       transition-all duration-200
-                       ${data.hasRewardToUse
-                         ? 'bg-[#FFF3D6] text-[#8A5800] border-[#F0D98C] hover:bg-[#FCE9BC]'
-                         : 'bg-white text-[#2D5A3D] border-[#D4D0C8] hover:bg-[#F5F5EC]'
-                       } active:scale-[0.98]`}
-            id="btn-rewards"
-          >
-            내 할인권함 {data.availableRewards > 0 && `(${data.availableRewards})`}
-          </button>
-        </div>
-
-        {/* 하단 문구 + 로그아웃 */}
+        {/* 하단 문구 */}
         <footer className="pt-4 border-t border-[#E8E4DA] space-y-4">
+          <p className="text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
+            봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
+            가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
+            해율을 찾아주시는 한 걸음 한 걸음이<br />
+            자연의 흐름을 이어갑니다. 감사합니다.
+          </p>
           {data.storeVisitBreakdown.length > 0 && (
             <div className="mx-auto w-fit space-y-1 text-sm font-medium text-[#6B6B5E]">
               {data.storeVisitBreakdown.map((s) => (
@@ -393,38 +430,6 @@ export default function PassportHome() {
               ))}
             </div>
           )}
-          <p className="text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
-            봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
-            가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
-            해율을 찾아주시는 한 걸음 한 걸음이<br />
-            자연의 흐름을 이어갑니다. 감사합니다.
-          </p>
-          <div className="flex justify-center gap-3">
-            <button
-              onClick={() => setShowMyInfo(true)}
-              className="min-h-[48px] px-4 py-3 rounded-xl text-[15px] font-bold text-[#1F4A2E] bg-[#F0F7F2]
-                         border-2 border-[#C4DCC9] hover:bg-[#E4F0E8] transition-colors duration-200"
-            >
-              내 정보
-            </button>
-            <button
-              onClick={() => {
-                window.location.href = '/guide';
-              }}
-              className="min-h-[48px] px-4 py-3 rounded-xl text-[15px] font-bold text-[#1F4A2E] bg-[#F0F7F2]
-                         border-2 border-[#C4DCC9] hover:bg-[#E4F0E8] transition-colors duration-200"
-            >
-              여권 설명서
-            </button>
-            <button
-              onClick={handleLogout}
-              className="min-h-[48px] px-4 py-3 rounded-xl text-[15px] font-bold text-[#A8391F] bg-[#FFF0EA]
-                         border-2 border-[#F0C4B8] hover:bg-[#FCDFD3] transition-colors duration-200"
-              id="btn-logout"
-            >
-              로그아웃
-            </button>
-          </div>
         </footer>
       </div>
     </main>
