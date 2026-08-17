@@ -130,13 +130,14 @@ export default function PassportHome() {
       <div className="w-full max-w-sm mx-auto space-y-6">
         {/* 헤더 */}
         <header className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div />
             <BrandLogo height={56} textClassName="text-2xl" />
             <a
               href="https://haeyul-homepage.vercel.app/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
                          rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
                          text-[13px] font-bold leading-tight text-center
                          hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
@@ -145,14 +146,16 @@ export default function PassportHome() {
               <span>둘러보기</span>
             </a>
           </div>
-          <p className="text-[15px] font-medium text-[#55534A] text-center">해율 자연의 흐름 전자여권</p>
-          <p className="text-sm font-medium text-[#55534A] text-center">
-            해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕
-          </p>
+          <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
+          <div className="rounded-xl border border-[#D8D4C8] bg-white px-4 py-2.5">
+            <p className="text-sm font-medium text-[#55534A] text-center">
+              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕
+            </p>
+          </div>
         </header>
 
         {/* 고객 정보 카드 */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] space-y-3">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-2">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-[#2D5A3D]">
@@ -163,7 +166,7 @@ export default function PassportHome() {
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between border-t border-[#F0EDE6] pt-3">
+          <div className="flex items-center justify-between border-t border-[#F0EDE6] pt-2">
             <span className="text-[15px] font-medium text-[#55534A]">최근 방문일</span>
             <span className="text-base font-bold text-[#2C2C2C]">
               {data.recentVisitDate ? formatDateKR(data.recentVisitDate) : '-'}
@@ -172,12 +175,12 @@ export default function PassportHome() {
         </div>
 
         {/* 등급 카드 (초록 계열) */}
-        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-6 flex items-center gap-5">
+        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-5 flex items-center gap-4">
           <Image
             src={data.tier.iconSrc}
             alt={data.tier.label}
-            width={64}
-            height={64}
+            width={56}
+            height={56}
             priority
             className="flex-shrink-0"
           />
