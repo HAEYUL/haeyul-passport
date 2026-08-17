@@ -264,8 +264,12 @@ export interface RewardStatItem {
 }
 
 /**
- * reward_rules(할인권 규칙)별 발급/사용 집계. 반복 규칙(예: 20회부터 5회마다)은
- * 실제로 발급된 모든 회차(20회, 25회, 30회...)를 하나의 규칙 행으로 합산합니다.
+ * reward_rules(할인권 규칙)별 발급/사용 집계. 반복 규칙(예: 해율VIP 5회마다)은
+ * 실제로 발급된 모든 회차(30회, 35회, 40회...)를 하나의 규칙 행으로 합산합니다.
+ *
+ * 규칙이 개편되어도(예: 기존 규칙 비활성화 + 새 규칙 추가) 이미 발급된 할인권이
+ * 통계에서 빠지지 않도록, customer_rewards.reward_rule_id(발급 당시 연결된 규칙 행)가
+ * 아니라 실제 달성한 방문 횟수(threshold_visits)를 지금의 활성 규칙과 매칭합니다.
  */
 export async function getRewardStats(storeId?: string | null): Promise<ApiResponse<RewardStatItem[]>> {
   try {
@@ -288,7 +292,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
 
     let crQuery = supabase
       .from('customer_rewards')
-      .select('reward_rule_id, status')
+      .select('threshold_visits, status')
       .not('reward_rule_id', 'is', null);
     if (storeId) {
       crQuery = crQuery.eq('issued_store_id', storeId);
@@ -299,8 +303,9 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       return { success: false, error: '할인권 발급 현황 조회 중 오류가 발생했습니다.' };
     }
 
+    const activeRules = rules || [];
     const statsMap = new Map<string, RewardStatItem>(
-      (rules || []).map((r) => [
+      activeRules.map((r) => [
         r.id,
         {
           ruleId: r.id,
@@ -315,8 +320,24 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       ])
     );
 
+    // 비반복 규칙은 방문 횟수가 정확히 일치할 때, 반복 규칙은 기준 횟수 이상이면서
+    // 주기의 배수만큼 지났을 때 매칭됩니다.
+    function findMatchingRule(thresholdVisits: number | null) {
+      if (thresholdVisits == null) return undefined;
+      const exact = activeRules.find((r) => !r.is_repeating && r.threshold_visits === thresholdVisits);
+      if (exact) return exact;
+      return activeRules.find(
+        (r) =>
+          r.is_repeating &&
+          r.repeat_interval &&
+          thresholdVisits >= r.threshold_visits &&
+          (thresholdVisits - r.threshold_visits) % r.repeat_interval === 0
+      );
+    }
+
     for (const cr of customerRewards || []) {
-      const stat = cr.reward_rule_id ? statsMap.get(cr.reward_rule_id) : undefined;
+      const rule = findMatchingRule(cr.threshold_visits);
+      const stat = rule ? statsMap.get(rule.id) : undefined;
       if (!stat) continue;
       stat.totalIssued += 1;
       if (cr.status === 'used') {
