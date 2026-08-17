@@ -9,9 +9,10 @@ interface MyInfoProps {
   customer: Customer;
   onBack: () => void;
   onUpdated: () => void;
+  onLogout: () => void;
 }
 
-export default function MyInfo({ customer, onBack, onUpdated }: MyInfoProps) {
+export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfoProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -179,6 +180,17 @@ export default function MyInfo({ customer, onBack, onUpdated }: MyInfoProps) {
             </button>
           </div>
         </div>
+
+        {/* 로그아웃 */}
+        <button
+          onClick={onLogout}
+          type="button"
+          className="w-full min-h-[52px] py-3 px-4 rounded-xl text-base font-bold text-[#A8391F] bg-[#FFF0EA]
+                     border-2 border-[#F0C4B8] hover:bg-[#FCDFD3] transition-colors duration-200"
+          id="btn-logout"
+        >
+          로그아웃
+        </button>
 
         <div className="pb-8" />
       </div>

@@ -36,6 +36,31 @@ export default function PassportHome() {
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
 
+  // 내 정보/방문기록 화면은 라우트 이동 없이 상태로만 전환되므로, 브라우저/기기의
+  // 뒤로가기가 앱을 그냥 벗어나 버리지 않도록 히스토리 항목을 쌓고 popstate로 닫습니다.
+  const openMyInfo = useCallback(() => {
+    window.history.pushState({ passportOverlay: 'myinfo' }, '');
+    setShowMyInfo(true);
+  }, []);
+
+  const openHistory = useCallback(() => {
+    window.history.pushState({ passportOverlay: 'history' }, '');
+    setShowHistory(true);
+  }, []);
+
+  const closeOverlay = useCallback(() => {
+    window.history.back();
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      setShowMyInfo(false);
+      setShowHistory(false);
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const refreshPassportData = useCallback(async () => {
     const result = await getPassportData();
     if (result.success && result.data) {
@@ -111,7 +136,7 @@ export default function PassportHome() {
 
   // 방문기록 화면
   if (showHistory) {
-    return <VisitHistory onBack={() => setShowHistory(false)} />;
+    return <VisitHistory onBack={closeOverlay} />;
   }
 
   // 내 정보 화면
@@ -119,8 +144,9 @@ export default function PassportHome() {
     return (
       <MyInfo
         customer={data.customer}
-        onBack={() => setShowMyInfo(false)}
+        onBack={closeOverlay}
         onUpdated={refreshPassportData}
+        onLogout={handleLogout}
       />
     );
   }
@@ -130,12 +156,14 @@ export default function PassportHome() {
       <div className="w-full max-w-sm mx-auto space-y-6">
         {/* 헤더 */}
         <header className="space-y-3">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="grid grid-cols-[3fr_auto_4fr] items-center gap-2">
+            <div />
+            <BrandLogo height={56} textClassName="text-2xl" />
             <a
               href="https://haeyul-homepage.vercel.app/"
               target="_blank"
               rel="noopener noreferrer"
-              className="justify-self-start flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
+              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
                          rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
                          text-[13px] font-bold leading-tight text-center
                          hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
@@ -143,18 +171,6 @@ export default function PassportHome() {
               <span>홈페이지</span>
               <span>둘러보기</span>
             </a>
-            <BrandLogo height={56} textClassName="text-2xl" />
-            <button
-              onClick={handleLogout}
-              type="button"
-              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
-                         rounded-xl border-2 border-[#F0C4B8] bg-white text-[#A8391F]
-                         text-[13px] font-bold leading-tight text-center
-                         hover:bg-[#FFF0EA] active:scale-[0.98] transition-all duration-200"
-              id="btn-logout"
-            >
-              로그아웃
-            </button>
           </div>
           <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
           <div className="rounded-xl border border-[#D8D4C8] bg-white px-4 py-2.5">
@@ -176,7 +192,7 @@ export default function PassportHome() {
               </p>
             </div>
             <button
-              onClick={() => setShowMyInfo(true)}
+              onClick={openMyInfo}
               type="button"
               className="flex-shrink-0 min-h-[52px] px-4 rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
                          text-sm font-bold hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
@@ -213,7 +229,7 @@ export default function PassportHome() {
             </p>
           </div>
           <button
-            onClick={() => setShowHistory(true)}
+            onClick={openHistory}
             type="button"
             className="flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
                        rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
