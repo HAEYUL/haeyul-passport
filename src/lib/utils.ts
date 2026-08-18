@@ -1,4 +1,4 @@
-import { TIMEZONE } from './constants';
+import { TIMEZONE, STORE_OPEN_HOUR, STORE_CLOSE_HOUR } from './constants';
 
 /**
  * 한국 시간 기준 오늘 날짜 (YYYY-MM-DD)
@@ -14,6 +14,15 @@ export function getNowKST(): Date {
   return new Date(
     new Date().toLocaleString('en-US', { timeZone: TIMEZONE })
   );
+}
+
+/**
+ * 지금이 매장 운영시간(한국시간 기준 오전 10시~오후 9시) 이내인지 확인합니다.
+ * QR 가입/방문 등록을 운영시간에만 허용하는 데 사용합니다.
+ */
+export function isWithinStoreHours(now: Date = getNowKST()): boolean {
+  const hour = now.getHours();
+  return hour >= STORE_OPEN_HOUR && hour < STORE_CLOSE_HOUR;
 }
 
 /**

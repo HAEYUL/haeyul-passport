@@ -9,6 +9,8 @@ import { getCurrentPosition, type GeoCoords } from '@/lib/geolocation';
 interface VisitLandingProps {
   /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
   storeName: string | null;
+  /** 지금이 매장 운영시간(오전 10시~오후 9시) 이내인지 */
+  isOpen: boolean;
 }
 
 /**
@@ -16,7 +18,7 @@ interface VisitLandingProps {
  * - 처음 발급하기
  * - 기존 전자여권 열기
  */
-export default function VisitLanding({ storeName }: VisitLandingProps) {
+export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
   const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
 
@@ -24,8 +26,9 @@ export default function VisitLanding({ storeName }: VisitLandingProps) {
   // 거부/미지원이어도 이 화면 자체는 그대로 진행됩니다 — 실제 등록 차단 여부는
   // 서버에서 좌표 유무에 따라 판단합니다.
   useEffect(() => {
+    if (!isOpen) return;
     getCurrentPosition().then((result) => setGeoCoords(result.coords));
-  }, []);
+  }, [isOpen]);
 
   if (mode === 'register') {
     return <RegisterForm onBack={() => setMode('landing')} geoCoords={geoCoords} />;
@@ -57,40 +60,54 @@ export default function VisitLanding({ storeName }: VisitLandingProps) {
           </p>
         )}
 
-        {/* 버튼 */}
-        <div className="space-y-4">
-          <button
-            onClick={() => setMode('register')}
-            className="w-full py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
-                       shadow-md hover:bg-[#245032] active:scale-[0.98]
-                       transition-all duration-200"
-            id="btn-register"
-          >
-            처음 발급하기
-          </button>
+        {!isOpen ? (
+          <div className="bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl p-6 space-y-2">
+            <p className="text-[17px] font-bold text-[#44443C] leading-relaxed">
+              지금은 매장 운영시간이 아닙니다.
+            </p>
+            <p className="text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
+              매일 오전 10시~오후 9시에<br />
+              가입 및 방문 등록을 이용하실 수 있습니다.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* 버튼 */}
+            <div className="space-y-4">
+              <button
+                onClick={() => setMode('register')}
+                className="w-full py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
+                           shadow-md hover:bg-[#245032] active:scale-[0.98]
+                           transition-all duration-200"
+                id="btn-register"
+              >
+                처음 발급하기
+              </button>
 
-          <button
-            onClick={() => setMode('login')}
-            className="w-full py-4 px-6 bg-white text-[#2D5A3D] text-lg font-semibold rounded-2xl
-                       border-2 border-[#2D5A3D] shadow-sm
-                       hover:bg-[#F5F5EC] active:scale-[0.98]
-                       transition-all duration-200"
-            id="btn-login"
-          >
-            기존 전자여권 열기
-          </button>
-        </div>
+              <button
+                onClick={() => setMode('login')}
+                className="w-full py-4 px-6 bg-white text-[#2D5A3D] text-lg font-semibold rounded-2xl
+                           border-2 border-[#2D5A3D] shadow-sm
+                           hover:bg-[#F5F5EC] active:scale-[0.98]
+                           transition-all duration-200"
+                id="btn-login"
+              >
+                기존 전자여권 열기
+              </button>
+            </div>
 
-        {/* 안내 문구 */}
-        <div className="pt-4 px-2">
-          <p className="text-[15px] text-[#8C8C80] leading-relaxed">
-            앱 설치 없이 간편하게 이용할 수 있습니다.
-          </p>
-          <p className="mt-2 text-[15px] text-[#8C8C80] leading-relaxed">
-            오늘의 방문이 기록되고, 방문할수록<br />
-            해율이 준비한 할인권을 받으실 수 있습니다.
-          </p>
-        </div>
+            {/* 안내 문구 */}
+            <div className="pt-4 px-2">
+              <p className="text-[15px] text-[#8C8C80] leading-relaxed">
+                앱 설치 없이 간편하게 이용할 수 있습니다.
+              </p>
+              <p className="mt-2 text-[15px] text-[#8C8C80] leading-relaxed">
+                오늘의 방문이 기록되고, 방문할수록<br />
+                해율이 준비한 할인권을 받으실 수 있습니다.
+              </p>
+            </div>
+          </>
+        )}
 
         {/* 하단 핵심 문구 */}
         <footer className="pt-6 border-t border-[#E8E4DA]">

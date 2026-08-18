@@ -1,16 +1,18 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { normalizePhone, isValidPhone, getTodayKST } from '@/lib/utils';
+import { normalizePhone, isValidPhone, getTodayKST, isWithinStoreHours } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
-import { REWARD_EXPIRY_MONTHS } from '@/lib/constants';
+import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
+const OUTSIDE_STORE_HOURS_ERROR =
+  `지금은 매장 운영시간이 아닙니다.\n매일 오전 ${STORE_OPEN_HOUR}시~오후 ${STORE_CLOSE_HOUR - 12}시에 이용해 주세요.`;
 
 /**
  * QR로 확인된 매장의 좌표를 조회하고, 클라이언트 좌표와 비교해 위치 확인 결과를 판정합니다.
@@ -56,6 +58,10 @@ export async function registerCustomer(
   formData: FormData
 ): Promise<ApiResponse<RegisterResult>> {
   try {
+    if (!isWithinStoreHours()) {
+      return { success: false, error: OUTSIDE_STORE_HOURS_ERROR };
+    }
+
     const name = (formData.get('name') as string)?.trim();
     const rawPhone = (formData.get('phone') as string)?.trim();
     const birthDate = (formData.get('birth_date') as string)?.trim() || null;
@@ -467,6 +473,10 @@ export async function registerVisit(
     const session = await getSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    if (!isWithinStoreHours()) {
+      return { success: false, error: OUTSIDE_STORE_HOURS_ERROR };
     }
 
     const storeId = await getVerifiedStoreId();

@@ -9,6 +9,10 @@ export const PIN_LOCKOUT_MINUTES = 5;      // 잠금 시간 (분)
 // 시간대
 export const TIMEZONE = 'Asia/Seoul';
 
+// 매장 운영시간 (3개 매장 공통, 한국시간 기준 24시간제)
+export const STORE_OPEN_HOUR = 10;   // 오전 10시부터
+export const STORE_CLOSE_HOUR = 21;  // 오후 9시까지
+
 // 회원번호 접두사
 export const CUSTOMER_NUMBER_PREFIX = 'HY-';
 

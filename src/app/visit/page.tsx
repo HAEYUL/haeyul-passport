@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
 import { getCurrentStoreName } from '@/app/actions';
+import { isWithinStoreHours } from '@/lib/utils';
 import VisitLanding from './_components/VisitLanding';
 
 /**
@@ -17,6 +18,7 @@ export default async function VisitPage() {
   }
 
   const storeName = await getCurrentStoreName();
+  const isOpen = isWithinStoreHours();
 
-  return <VisitLanding storeName={storeName} />;
+  return <VisitLanding storeName={storeName} isOpen={isOpen} />;
 }
