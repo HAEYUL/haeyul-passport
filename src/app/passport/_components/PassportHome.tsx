@@ -25,6 +25,11 @@ const STORE_ACCENTS: Record<string, { border: string; bg: string; text: string }
 };
 const DEFAULT_STORE_ACCENT = { border: '#8C8C80', bg: '#F5F5EC', text: '#44443C' };
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
+
 export default function PassportHome() {
   const [data, setData] = useState<PassportData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +40,31 @@ export default function PassportHome() {
   const [tierUpMessage, setTierUpMessage] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installMessage, setInstallMessage] = useState('');
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  async function handleAddToHome() {
+    setInstallMessage('');
+
+    if (installPrompt) {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+      setInstallPrompt(null);
+      return;
+    }
+
+    setInstallMessage('아이폰은 브라우저 하단의 공유 버튼을 누른 뒤, “홈 화면에 추가”를 선택해 주세요.');
+  }
 
   // 내 정보/방문기록 화면은 라우트 이동 없이 상태로만 전환되므로, 브라우저/기기의
   // 뒤로가기가 앱을 그냥 벗어나 버리지 않도록 히스토리 항목을 쌓고 popstate로 닫습니다.
@@ -439,9 +469,29 @@ export default function PassportHome() {
           {data.storeVisitBreakdown.length > 0 && (
             <div className="mx-auto w-fit space-y-1 text-sm font-medium text-[#6B6B5E]">
               {data.storeVisitBreakdown.map((s) => (
-                <div key={s.storeName} className="flex gap-3">
-                  <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
-                  <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
+                <div key={s.storeName} className="space-y-2">
+                  <div className="flex gap-3">
+                    <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
+                    <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
+                  </div>
+                  {s.storeName === '곤드레밥집' && (
+                    <div className="flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAddToHome}
+                        className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
+                                   px-5 py-2.5 text-base font-bold text-white shadow-sm
+                                   hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
+                      >
+                        홈 바로가기 추가
+                      </button>
+                      {installMessage && (
+                        <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
+                          {installMessage}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
