@@ -566,9 +566,7 @@ function RuleRow({ item, onChanged }: { item: RewardRuleAdminItem; onChanged: ()
 
   return (
     <li
-      className={`bg-white rounded-2xl p-5 shadow-sm border-2 space-y-3 ${
-        item.isActive ? 'border-[#E8E4DA]' : 'border-[#E8E4DA] opacity-50'
-      }`}
+      className="bg-white rounded-2xl p-5 shadow-sm border-2 space-y-3 border-[#E8E4DA]"
     >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-2xl font-extrabold leading-tight">
@@ -598,7 +596,6 @@ function RuleRow({ item, onChanged }: { item: RewardRuleAdminItem; onChanged: ()
           </div>
         )}
       </div>
-      {!item.isActive && <p className="text-sm font-semibold text-[#8A5800]">삭제됨(비활성)</p>}
       {error && <p className="text-sm text-[#D4442A]">{error}</p>}
     </li>
   );
@@ -669,7 +666,7 @@ function CatalogSection() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {items.map((item) => (
+          {items.filter((item) => item.isActive).map((item) => (
             <RuleRow key={item.id} item={item} onChanged={fetchData} />
           ))}
         </ul>
