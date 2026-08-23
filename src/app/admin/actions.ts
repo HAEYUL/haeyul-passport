@@ -367,6 +367,119 @@ export interface RewardUsageItem {
   usedStoreName: string | null;
 }
 
+export interface RewardCustomerItem {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerNumber: string;
+  phone: string;
+  amount: number;
+  thresholdVisits: number;
+  status: RewardStatus;
+  issuedAt: string;
+  usedAt: string | null;
+  issuedStoreName: string;
+  usedStoreName: string | null;
+}
+
+export async function getRewardCustomerList({
+  kind,
+  storeId,
+  ruleThresholdVisits,
+  amount,
+  isRepeating,
+  repeatInterval,
+}: {
+  kind: 'issued' | 'used' | 'unused';
+  storeId?: string | null;
+  ruleThresholdVisits?: number;
+  amount?: number;
+  isRepeating?: boolean;
+  repeatInterval?: number | null;
+}): Promise<ApiResponse<RewardCustomerItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    let request = supabase
+      .from('customer_rewards')
+      .select('id, customer_id, amount, threshold_visits, status, issued_at, used_at, issued_store_id, used_store_id')
+      .not('reward_rule_id', 'is', null)
+      .order('issued_at', { ascending: false })
+      .limit(300);
+
+    if (kind === 'used') {
+      request = request.eq('status', 'used');
+    } else if (kind === 'unused') {
+      request = request.neq('status', 'used');
+    }
+
+    if (storeId) {
+      request = request.eq('issued_store_id', storeId);
+    }
+
+    if (ruleThresholdVisits != null) {
+      if (isRepeating && repeatInterval) {
+        request = request.gte('threshold_visits', ruleThresholdVisits);
+      } else {
+        request = request.eq('threshold_visits', ruleThresholdVisits);
+      }
+    }
+
+    if (amount != null) {
+      request = request.eq('amount', amount);
+    }
+
+    const { data: rewards, error } = await request;
+    if (error || !rewards || rewards.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const customerIds = [...new Set(rewards.map((r) => r.customer_id))];
+    const storeIds = [
+      ...new Set([
+        ...rewards.map((r) => r.issued_store_id),
+        ...rewards.map((r) => r.used_store_id).filter((id): id is string => !!id),
+      ]),
+    ];
+
+    const [{ data: customers }, { data: stores }] = await Promise.all([
+      supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds),
+      supabase.from('stores').select('id, name').in('id', storeIds),
+    ]);
+
+    const customerMap = new Map((customers || []).map((c) => [c.id, c]));
+    const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
+
+    return {
+      success: true,
+      data: rewards.map((reward) => {
+        const customer = customerMap.get(reward.customer_id);
+        return {
+          id: reward.id,
+          customerId: reward.customer_id,
+          customerName: customer?.name || '알 수 없음',
+          customerNumber: customer?.customer_number || '-',
+          phone: customer?.phone || '-',
+          amount: reward.amount ?? 0,
+          thresholdVisits: reward.threshold_visits ?? 0,
+          status: reward.status,
+          issuedAt: reward.issued_at,
+          usedAt: reward.used_at,
+          issuedStoreName: storeMap.get(reward.issued_store_id) || '-',
+          usedStoreName: reward.used_store_id ? storeMap.get(reward.used_store_id) || '-' : null,
+        };
+      }),
+    };
+  } catch (error) {
+    console.error('getRewardCustomerList 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 async function fetchRewardUsage(
   supabase: ReturnType<typeof createAdminClient>,
   statusFilter: 'available' | 'used',
@@ -988,6 +1101,7 @@ export interface VisitRecordItem {
   storeName: string;
   visitDate: string;
   visitTime: string;
+  visitCount: number;
   isCancelled: boolean;
   cancelReason: string | null;
   locationVerified: LocationVerifiedStatus;
@@ -1040,7 +1154,7 @@ async function fetchVisitRecords(
 
   const customerIds = [...new Set(visits.map((v) => v.customer_id))];
   const [{ data: customers }, { data: stores }] = await Promise.all([
-    supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds),
+    supabase.from('customers').select('id, name, customer_number, phone, visit_count').in('id', customerIds),
     supabase.from('stores').select('id, name'),
   ]);
 
@@ -1059,6 +1173,7 @@ async function fetchVisitRecords(
       storeName: storeMap.get(v.store_id) || '알 수 없음',
       visitDate: v.visit_date,
       visitTime: v.visit_time,
+      visitCount: c?.visit_count ?? 0,
       isCancelled: v.is_cancelled,
       cancelReason: v.cancel_reason,
       locationVerified: v.location_verified,

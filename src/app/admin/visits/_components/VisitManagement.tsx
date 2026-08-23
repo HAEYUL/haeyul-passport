@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   getTodayVisitors,
   getVisitRecords,
@@ -9,6 +10,7 @@ import {
   cancelVisit,
   addManualVisit,
   getCustomerList,
+  getCustomerDetail,
   getStores,
   type VisitRecordItem,
   type DuplicateVisitGroup,
@@ -18,18 +20,21 @@ import {
 import type { Store } from '@/types/database';
 import { formatDateKR, getTodayKST, maskPhone } from '@/lib/utils';
 import { getStoreAdminColor } from '@/lib/storeColors';
+import { getVisitTierInfo } from '@/lib/tiers';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
 type Section = 'today' | 'all' | 'duplicates' | 'mismatches' | 'manualAdd';
 
-const SECTIONS: { key: Section; label: string }[] = [
-  { key: 'today', label: '오늘 방문자 목록' },
-  { key: 'all', label: '전체 방문 기록' },
-  { key: 'duplicates', label: '중복 방문 확인' },
-  { key: 'mismatches', label: '비정상 등록 확인' },
-  { key: 'manualAdd', label: '수동 방문 추가' },
+const SECTIONS: { key: Section; label: string; icon: string; desc: string }[] = [
+  { key: 'today', label: '오늘 방문자 목록', icon: '📅', desc: '오늘 방문한 고객' },
+  { key: 'all', label: '전체 방문 기록', icon: '📋', desc: '전체 방문 기록 조회' },
+  { key: 'duplicates', label: '중복 방문 확인', icon: '⚠️', desc: '중복 방문 감지' },
+  { key: 'mismatches', label: '비정상 등록 확인', icon: '❌', desc: '데이터 불일치' },
+  { key: 'manualAdd', label: '수동 방문 추가', icon: '➕', desc: '수동으로 추가' },
 ];
+
+const BOM = String.fromCharCode(0xfeff);
 
 function formatTimeKR(isoStr: string): string {
   return new Date(isoStr).toLocaleTimeString('ko-KR', {
@@ -39,33 +44,68 @@ function formatTimeKR(isoStr: string): string {
   });
 }
 
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function exportVisitCsv(records: VisitRecordItem[], title: string) {
+  const headers = ['순번', '성함', '여권번호', '연락처', '방문매장', '방문시간', '총 방문횟수', '등급', 'QR위치정보', '취소'];
+  const rows = records.map((r, index) => {
+    const tier = getVisitTierInfo(r.visitCount || 0);
+    const locationStatus = r.locationVerified === 'success' ? `확인됨${r.distanceMeters != null ? ` (${r.distanceMeters}m)` : ''}` : r.locationVerified === 'failed' ? `반경 밖${r.distanceMeters != null ? ` (${r.distanceMeters}m)` : ''}` : '확인 안 됨';
+    return [
+      String(index + 1),
+      r.customerName,
+      r.customerNumber,
+      r.phone,
+      r.storeName,
+      formatTimeKR(r.visitTime),
+      `${r.visitCount || 0}회`,
+      tier.label,
+      locationStatus,
+      r.isCancelled ? '취소' : '정상',
+    ];
+  });
+
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${title}_${getTodayKST()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function TabButton({
   label,
   active,
   onClick,
+  icon,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  icon?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+      className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
         active
-          ? 'bg-[#2D5A3D] text-white'
-          : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+          ? 'bg-[#2D5A3D] text-white shadow-md'
+          : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
       }`}
     >
+      {icon && <span>{icon}</span>}
       {label}
     </button>
   );
 }
 
-/**
- * 취소 버튼 + 인라인 사유 입력을 담당하는 공용 컴포넌트
- */
 function CancelVisitControl({
   visitId,
   onCancelled,
@@ -145,19 +185,119 @@ function LocationBadge({ status, distanceMeters }: { status: VisitRecordItem['lo
   if (status === 'failed') {
     return (
       <span className="px-2 py-0.5 rounded-full text-xs font-bold text-white bg-[#D4442A] whitespace-nowrap">
-        ⚠ 반경 밖{distanceMeters != null && ` (${distanceMeters}m)`}
+        반경 밖{distanceMeters != null && ` (${distanceMeters}m)`}
       </span>
     );
   }
   return <span className="text-xs text-[#6B6B5E] whitespace-nowrap">확인 안 됨</span>;
 }
 
+function CustomerDetailPanel({ customerId, onClose }: { customerId: string | null; onClose: () => void }) {
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof getCustomerDetail>>['data'] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!customerId) {
+      setDetail(null);
+      setError('');
+      return;
+    }
+
+    let ignore = false;
+    const fetchDetail = async () => {
+      const result = await getCustomerDetail(customerId);
+      if (ignore) return;
+      if (result.success && result.data) {
+        setDetail(result.data);
+        setError('');
+      } else {
+        setError(result.error || '고객 정보를 불러올 수 없습니다.');
+      }
+    };
+
+    fetchDetail();
+    return () => {
+      ignore = true;
+    };
+  }, [customerId]);
+
+  if (!customerId) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#E8E4DA] bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#F0EDE6]">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-[#6B6B5E]">고객 정보</p>
+          <h3 className="text-xl font-bold text-[#2D5A3D]">{detail?.customer.name ?? '고객 정보'}</h3>
+        </div>
+        <button type="button" onClick={onClose} className="text-sm text-[#6B6B5E] underline">
+          닫기
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
+          {error}
+        </div>
+      )}
+
+      {!detail ? (
+        <div className="mt-4 h-28 rounded-xl bg-[#E8E8E0] animate-pulse" />
+      ) : (
+        <div className="mt-4 space-y-4 text-[15px] text-[#333]">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[#F8F7F2] p-3">
+              <p className="text-[11px] text-[#6B6B5E]">여권번호</p>
+              <p className="mt-1 font-semibold text-[#2D5A3D]">{detail.customer.customer_number}</p>
+            </div>
+            <div className="rounded-xl bg-[#F8F7F2] p-3">
+              <p className="text-[11px] text-[#6B6B5E]">연락처</p>
+              <p className="mt-1 font-semibold">{maskPhone(detail.customer.phone)}</p>
+            </div>
+            <div className="rounded-xl bg-[#F8F7F2] p-3">
+              <p className="text-[11px] text-[#6B6B5E]">총 방문횟수</p>
+              <p className="mt-1 font-semibold">{detail.customer.visit_count}회</p>
+            </div>
+            <div className="rounded-xl bg-[#F8F7F2] p-3">
+              <p className="text-[11px] text-[#6B6B5E]">등급</p>
+              <p className="mt-1 font-semibold">{getVisitTierInfo(detail.customer.visit_count).label}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-[#F8F7F2] p-3">
+            <p className="text-[11px] text-[#6B6B5E]">최근 방문 매장</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {detail.visits.slice(0, 5).map((visit, idx) => (
+                <span key={`${visit.visitDate}-${idx}`} className="rounded-full bg-white border border-[#E8E4DA] px-2.5 py-1 text-[11px] text-[#2D5A3D]">
+                  {visit.storeName}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <Link href={`/admin/customers/${customerId}`} className="inline-flex items-center text-sm font-semibold text-[#2D5A3D] underline">
+              상세 페이지로 이동
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VisitRecordTable({
   records,
   onChanged,
+  selectedCustomerId,
+  onCustomerClick,
 }: {
   records: VisitRecordItem[];
   onChanged: () => void;
+  selectedCustomerId: string | null;
+  onCustomerClick: (customerId: string) => void;
 }) {
   if (records.length === 0) {
     return (
@@ -168,59 +308,80 @@ function VisitRecordTable({
   }
 
   return (
-    <ul className="space-y-3">
-      {records.map((r) => {
-        const color = getStoreAdminColor(r.storeName);
-        const locationFailed = r.locationVerified === 'failed' && !r.isCancelled;
-        return (
-          <li
-            key={r.id}
-            className={`rounded-2xl border-2 border-l-[6px] p-4 shadow-sm ${r.isCancelled ? 'opacity-60' : ''}`}
-            style={{
-              borderColor: locationFailed ? '#F0B8A8' : '#E8E4DA',
-              borderLeftColor: color.border,
-              backgroundColor: locationFailed ? '#FFF0EC' : '#FFFFFF',
-            }}
-          >
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-lg font-extrabold" style={{ color: color.text }}>
+    <div className="overflow-x-auto rounded-2xl border border-[#E8E4DA] bg-white shadow-sm">
+      <table className="min-w-[1200px] w-full text-[13px]">
+        <thead className="bg-[#F6F3ED]">
+          <tr className="border-b border-[#E8E4DA] text-left text-[11px] font-semibold tracking-[0.02em] text-[#6B6B5E]">
+            <th className="px-3 py-2.5">순번</th>
+            <th className="px-3 py-2.5">성함</th>
+            <th className="px-3 py-2.5">여권번호</th>
+            <th className="px-3 py-2.5">연락처</th>
+            <th className="px-3 py-2.5">방문매장</th>
+            <th className="px-3 py-2.5">방문시간</th>
+            <th className="px-3 py-2.5">총 방문횟수</th>
+            <th className="px-3 py-2.5">등급</th>
+            <th className="px-3 py-2.5">QR위치정보</th>
+            <th className="px-3 py-2.5 text-right">취소</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((r, index) => {
+            const color = getStoreAdminColor(r.storeName);
+            const tier = getVisitTierInfo(r.visitCount || 0);
+            const selected = selectedCustomerId === r.customerId;
+            return (
+              <tr
+                key={r.id}
+                className={`border-b border-[#F0EDE6] last:border-0 hover:bg-[#F9F6F2] transition-colors ${selected ? 'bg-[#F3F8F4]' : ''}`}
+                onClick={() => onCustomerClick(r.customerId)}
+                style={{ cursor: 'pointer' }}
+              >
+                <td className="px-3 py-2.5 whitespace-nowrap text-[#555]">{index + 1}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap font-semibold text-[#2D5A3D]">{r.customerName}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-[#555]">{r.customerNumber}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-[#555]">{maskPhone(r.phone)}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span
+                    className="inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold"
+                    style={{
+                      borderColor: color.border,
+                      backgroundColor: color.bg,
+                      color: color.text,
+                    }}
+                  >
                     {r.storeName}
                   </span>
-                  <span className="text-lg font-extrabold text-[#232320]">{formatTimeKR(r.visitTime)}</span>
-                  <span className="text-sm font-medium text-[#6B6B5E]">{formatDateKR(r.visitDate)}</span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap text-base">
-                  <span className="font-bold text-[#232320]">{r.customerName}</span>
-                  <span className="text-sm text-[#555]">{r.customerNumber}</span>
-                  <span className="font-bold text-[#232320]">{maskPhone(r.phone)}</span>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  {r.isCancelled ? (
-                    <span className="text-xs font-semibold text-[#6B6B5E]">
-                      취소됨{r.cancelReason ? ` · ${r.cancelReason}` : ''}
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-[#2D5A3D]">정상</span>
-                  )}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-[#333]">{formatTimeKR(r.visitTime)}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-[#333]">{r.visitCount || 0}회</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className="inline-flex items-center rounded-full border border-[#D4D0C8] bg-[#F5F5EC] px-2 py-1 text-[11px] font-semibold text-[#2D5A3D]">
+                    {tier.label}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <LocationBadge status={r.locationVerified} distanceMeters={r.distanceMeters} />
-                </div>
-              </div>
-              <div className="flex-shrink-0">
-                {!r.isCancelled && <CancelVisitControl visitId={r.id} onCancelled={onChanged} />}
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+                </td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  {r.isCancelled ? (
+                    <span className="text-[11px] text-[#6B6B5E]">{r.cancelReason ? `취소됨 · ${r.cancelReason}` : '취소됨'}</span>
+                  ) : (
+                    <CancelVisitControl visitId={r.id} onCancelled={onChanged} />
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function TodayVisitorsSection({ storeId }: { storeId: string | null }) {
   const [records, setRecords] = useState<VisitRecordItem[] | null>(null);
   const [error, setError] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const result = await getTodayVisitors(storeId);
@@ -234,21 +395,43 @@ function TodayVisitorsSection({ storeId }: { storeId: string | null }) {
 
   useEffect(() => {
     setRecords(null);
+    setSelectedCustomerId(null);
     fetchData();
   }, [fetchData]);
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#6B6B5E]">오늘({formatDateKR(getTodayKST())}) 방문한 고객 목록입니다.</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-[#6B6B5E]">오늘({formatDateKR(getTodayKST())}) 방문한 고객 목록입니다.</p>
+        {records && records.length > 0 && (
+          <button
+            type="button"
+            onClick={() => exportVisitCsv(records, '오늘_방문자_목록')}
+            className="px-3 py-2 text-sm font-semibold text-[#2D5A3D] border border-[#D4D0C8] rounded-xl bg-white hover:bg-[#F5F5EC] transition-colors"
+          >
+            엑셀로 다운로드
+          </button>
+        )}
+      </div>
+
       {error && (
         <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
           {error}
         </div>
       )}
+
       {!records ? (
         <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
       ) : (
-        <VisitRecordTable records={records} onChanged={fetchData} />
+        <>
+          <VisitRecordTable
+            records={records}
+            onChanged={fetchData}
+            selectedCustomerId={selectedCustomerId}
+            onCustomerClick={setSelectedCustomerId}
+          />
+          <CustomerDetailPanel customerId={selectedCustomerId} onClose={() => setSelectedCustomerId(null)} />
+        </>
       )}
     </div>
   );
@@ -260,6 +443,7 @@ function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
   const [dateTo, setDateTo] = useState('');
   const [records, setRecords] = useState<VisitRecordItem[] | null>(null);
   const [error, setError] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const result = await getVisitRecords(query, dateFrom || undefined, dateTo || undefined, storeId);
@@ -286,8 +470,7 @@ function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="이름 · 전화번호 검색"
-          className="flex-1 min-w-[200px] px-4 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl
-                     bg-white placeholder-[#B0B0A0] focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+          className="flex-1 min-w-[200px] px-4 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl bg-white placeholder-[#B0B0A0] focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
         />
         <input
           type="date"
@@ -302,6 +485,15 @@ function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
           onChange={(e) => setDateTo(e.target.value)}
           className="px-3 py-2.5 text-sm border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
         />
+        {records && records.length > 0 && (
+          <button
+            type="button"
+            onClick={() => exportVisitCsv(records, '전체_방문_기록')}
+            className="px-3 py-2 text-sm font-semibold text-[#2D5A3D] border border-[#D4D0C8] rounded-xl bg-white hover:bg-[#F5F5EC] transition-colors"
+          >
+            엑셀로 다운로드
+          </button>
+        )}
       </div>
 
       {error && (
@@ -313,7 +505,15 @@ function AllVisitRecordsSection({ storeId }: { storeId: string | null }) {
       {!records ? (
         <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
       ) : (
-        <VisitRecordTable records={records} onChanged={fetchData} />
+        <>
+          <VisitRecordTable
+            records={records}
+            onChanged={fetchData}
+            selectedCustomerId={selectedCustomerId}
+            onCustomerClick={setSelectedCustomerId}
+          />
+          <CustomerDetailPanel customerId={selectedCustomerId} onClose={() => setSelectedCustomerId(null)} />
+        </>
       )}
     </div>
   );
@@ -642,19 +842,21 @@ export default function VisitManagement() {
   const [section, setSection] = useState<Section>('today');
   const [storeId, setStoreId] = useState<string | null>(null);
 
+  const currentSection = SECTIONS.find((s) => s.key === section);
+
   return (
-    <main className="flex flex-col min-h-screen px-6 py-8">
+    <main className="flex flex-col min-h-screen px-6 py-8 bg-[#FAFAF8]">
       <div className="w-full max-w-4xl mx-auto space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">방문관리</h1>
-          <p className="text-sm text-[#6B6B5E]">방문 기록을 조회하고, 이상 여부를 점검할 수 있습니다.</p>
+        <header className="bg-gradient-to-r from-[#2D5A3D] to-[#1F3D2A] rounded-2xl px-6 py-8 text-white shadow-lg">
+          <h1 className="text-3xl font-extrabold mb-1">📋 방문관리</h1>
+          <p className="text-[#E8F0E6] text-sm font-medium">방문 기록을 조회하고, 이상 여부를 점검할 수 있습니다.</p>
         </header>
 
         <AdminNav active="visits" />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           {SECTIONS.map((s) => (
-            <TabButton key={s.key} label={s.label} active={section === s.key} onClick={() => setSection(s.key)} />
+            <TabButton key={s.key} label={s.label} icon={s.icon} active={section === s.key} onClick={() => setSection(s.key)} />
           ))}
         </div>
 
@@ -662,11 +864,18 @@ export default function VisitManagement() {
           <StoreFilterBar value={storeId} onChange={setStoreId} />
         )}
 
-        {section === 'today' && <TodayVisitorsSection storeId={storeId} />}
-        {section === 'all' && <AllVisitRecordsSection storeId={storeId} />}
-        {section === 'duplicates' && <DuplicateVisitsSection />}
-        {section === 'mismatches' && <MismatchesSection />}
-        {section === 'manualAdd' && <ManualAddSection />}
+        <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
+          <div className="mb-5 pb-4 border-b border-[#F0EDE6]">
+            <h2 className="text-lg font-bold text-[#2D5A3D]">{currentSection?.icon} {currentSection?.label}</h2>
+            <p className="text-sm text-[#6B6B5E] mt-1">{currentSection?.desc}</p>
+          </div>
+
+          {section === 'today' && <TodayVisitorsSection storeId={storeId} />}
+          {section === 'all' && <AllVisitRecordsSection storeId={storeId} />}
+          {section === 'duplicates' && <DuplicateVisitsSection />}
+          {section === 'mismatches' && <MismatchesSection />}
+          {section === 'manualAdd' && <ManualAddSection />}
+        </div>
       </div>
     </main>
   );

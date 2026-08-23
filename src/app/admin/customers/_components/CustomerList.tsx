@@ -206,14 +206,14 @@ export default function CustomerList() {
   }
 
   return (
-    <main className="flex flex-col min-h-screen px-6 py-8">
+    <main className="flex flex-col min-h-screen px-6 py-8 bg-[#FAFAF8]">
       <div className="w-full max-w-4xl mx-auto space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">{title}</h1>
-          <p className="text-sm text-[#6B6B5E]">{description}</p>
+        <header className="bg-gradient-to-r from-[#2D5A3D] to-[#1F3D2A] rounded-2xl px-6 py-8 text-white shadow-lg">
+          <h1 className="text-3xl font-extrabold mb-1">👥 {title}</h1>
+          <p className="text-[#E8F0E6] text-sm font-medium">{description}</p>
           {filter !== 'all' && (
-            <Link href="/admin/customers" className="inline-block text-sm text-[#2D5A3D] underline">
-              전체 고객 보기
+            <Link href="/admin/customers" className="inline-flex text-sm font-semibold text-[#B8E8C8] hover:text-white underline underline-offset-2 mt-2">
+              ← 전체 고객으로 돌아가기
             </Link>
           )}
         </header>
@@ -246,40 +246,40 @@ export default function CustomerList() {
         )}
 
         {!isTierMenu && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             <Link
               href="/admin/customers?filter=tier"
-              className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
                 filter === 'tier'
-                  ? 'bg-[#2D5A3D] text-white'
-                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
               }`}
             >
-              등급
+              📊 등급
             </Link>
             <Link
               href="/admin/customers?filter=birthdayThisMonth"
-              className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
                 filter === 'birthdayThisMonth'
-                  ? 'bg-[#2D5A3D] text-white'
-                  : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
               }`}
             >
-              이번달 생일고객
+              🎂 이번달 생일
             </Link>
           </div>
         )}
 
         {filter === 'longAbsent' && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {LONG_ABSENT_DAY_OPTIONS.map((days) => (
               <Link
                 key={days}
                 href={`/admin/customers?filter=longAbsent&days=${days}`}
-                className={`min-h-[44px] inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 ${
+                className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   longAbsentDays === days
-                    ? 'bg-[#2D5A3D] text-white'
-                    : 'bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC]'
+                    ? 'bg-[#2D5A3D] text-white shadow-md'
+                    : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
                 }`}
               >
                 {days}일 이상
@@ -293,16 +293,16 @@ export default function CustomerList() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="이름 · 전화번호 검색"
-            className="w-full px-4 py-3.5 text-[17px] border-2 border-[#D4D0C8] rounded-xl
-                       bg-white placeholder-[#B0B0A0]
-                       focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+            placeholder="이름 · 전화번호로 검색..."
+            className="w-full px-5 py-3.5 text-[16px] border-2 border-[#E8E4DA] rounded-xl
+                       bg-white placeholder-[#A8A89C]
+                       focus:border-[#2D5A3D] focus:ring-2 focus:ring-[#2D5A3D] focus:ring-opacity-20 focus:outline-none transition-all duration-200 shadow-sm"
           />
         )}
 
         {error && (
-          <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
-            {error}
+          <div className="bg-[#FFF8F0] border-2 border-[#F0D4B8] text-[#996633] px-5 py-4 rounded-xl text-[15px] font-medium shadow-sm">
+            ⚠️ {error}
           </div>
         )}
 
@@ -331,34 +331,33 @@ export default function CustomerList() {
           )
         ) : (
           <>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers)}
                 disabled={!customers || customers.length === 0}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#2D5A3D] text-white
-                           hover:bg-[#245032] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
+                           hover:bg-[#F5F5EC] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-sm"
               >
-                엑셀로 저장
+                📊 엑셀 저장
               </button>
               <button
                 type="button"
                 onClick={() => setShowSmsModal(true)}
                 disabled={selectedIds.size === 0}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
-                           border-2 border-[#D4D0C8] hover:bg-[#F5F5EC] transition-colors duration-200
-                           disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-5 py-3 rounded-xl text-sm font-semibold bg-[#2D5A3D] text-white
+                           hover:bg-[#245032] hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                문자보내기 ({selectedIds.size})
+                💬 문자 ({selectedIds.size})
               </button>
               <button
                 type="button"
                 disabled
                 title="추후 지원 예정입니다."
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D]
-                           border-2 border-[#D4D0C8] opacity-40 cursor-not-allowed"
+                className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#999] border border-[#E8E4DA]
+                           opacity-50 cursor-not-allowed"
               >
-                톡보내기
+                💭 톡
               </button>
             </div>
 

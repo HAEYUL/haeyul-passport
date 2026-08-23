@@ -26,13 +26,13 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="block bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA]
-                 hover:bg-[#F5F5EC] transition-colors duration-200"
+      className="block bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]
+                 hover:shadow-lg hover:scale-105 transition-all duration-200"
     >
-      <p className="text-sm text-[#6B6B5E]">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${accent || 'text-[#2D5A3D]'}`}>
+      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">{label}</p>
+      <p className={`mt-3 text-3xl font-extrabold ${accent || 'text-[#2D5A3D]'}`}>
         {value.toLocaleString()}
-        <span className="ml-1 text-base font-bold">{unit}</span>
+        <span className="ml-2 text-sm font-bold text-[#6B6B5E]">{unit}</span>
       </p>
     </Link>
   );
@@ -57,16 +57,16 @@ function HeroStatCard({
   return (
     <Link
       href={href}
-      className={`block rounded-2xl p-5 shadow-sm border-2 transition-colors duration-200 ${
+      className={`block rounded-2xl p-6 shadow-md border transition-all duration-200 hover:shadow-lg hover:scale-105 ${
         isReward
-          ? 'bg-[#FFF3D6] border-[#F0D98C] hover:bg-[#FCEAC0]'
-          : 'bg-white border-[#E8E4DA] hover:bg-[#F5F5EC]'
+          ? 'bg-gradient-to-br from-[#FFF3D6] to-[#FFF8E8] border-[#F0D98C]'
+          : 'bg-white border-[#E8E4DA]'
       }`}
     >
-      <p className={`text-sm font-semibold ${isReward ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>{label}</p>
-      <p className={`mt-2 text-4xl font-extrabold leading-tight ${isReward ? 'text-[#8A5800]' : 'text-[#2D5A3D]'}`}>
+      <p className={`text-xs font-semibold tracking-[0.08em] uppercase ${isReward ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>{label}</p>
+      <p className={`mt-3 text-4xl font-extrabold leading-tight ${isReward ? 'text-[#8A5800]' : 'text-[#2D5A3D]'}`}>
         {value.toLocaleString()}
-        <span className="ml-1 text-lg font-bold">{unit}</span>
+        <span className="ml-2 text-lg font-bold text-[#6B6B5E]">{unit}</span>
       </p>
     </Link>
   );
@@ -103,12 +103,16 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
     fetchVipVisitors();
   }, [fetchVipVisitors]);
 
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('ko-KR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
   return (
-    <main className="flex flex-col min-h-screen px-6 py-8">
+    <main className="flex flex-col min-h-screen px-6 py-8 bg-[#FAFAF8]">
       <div className="w-full max-w-2xl mx-auto space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-bold text-[#2D5A3D]">관리자 대시보드</h1>
-          <p className="text-sm text-[#6B6B5E]">{username}님 로그인 중</p>
+        <header className="bg-gradient-to-r from-[#2D5A3D] to-[#1F3D2A] rounded-2xl px-6 py-8 text-white shadow-lg">
+          <h1 className="text-3xl font-extrabold mb-1">📊 관리자 대시보드</h1>
+          <p className="text-[#E8F0E6] text-sm font-medium">{username}님 로그인 중</p>
+          <p className="text-[#D4DDD0] text-xs mt-2 tracking-wide">{dateStr}</p>
         </header>
 
         <AdminNav active="dashboard" />
@@ -116,19 +120,19 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
         <StoreFilterBar value={storeId} onChange={setStoreId} />
 
         {vipVisitors.length > 0 && (
-          <div className="bg-[#FFFDF0] border-2 border-[#E8D88C] rounded-2xl px-5 py-4">
-            <p className="text-[15px] font-semibold text-[#8A5800]">
-              오늘 방문한 해율푸드 VIP 고객: {vipVisitors.map((v) => v.name).join(', ')}님
+          <div className="bg-gradient-to-r from-[#FFFDF0] to-[#FFF8E8] border-2 border-[#E8D88C] rounded-2xl px-6 py-5 shadow-sm">
+            <p className="text-[15px] font-semibold text-[#8A5800] mb-2">
+              ⭐ 오늘 방문한 VIP 고객: <span className="font-bold">{vipVisitors.map((v) => v.name).join(', ')}님</span>
             </p>
-            <Link href="/admin/vip" className="text-sm text-[#8A5800] underline">
-              VIP관리에서 보기
+            <Link href="/admin/vip" className="inline-flex text-sm font-semibold text-[#8A5800] hover:text-[#6B4200] underline underline-offset-2">
+              VIP 관리에서 상세 보기 →
             </Link>
           </div>
         )}
 
         {error && (
-          <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
-            {error}
+          <div className="bg-[#FFF8F0] border-2 border-[#F0D4B8] text-[#996633] px-5 py-4 rounded-xl text-[15px] font-medium shadow-sm">
+            ⚠️ {error}
           </div>
         )}
 
@@ -136,12 +140,12 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-28 rounded-2xl bg-[#E8E8E0] animate-pulse" />
+                <div key={i} className="h-32 rounded-2xl bg-gradient-to-br from-[#E8E8E0] to-[#D4D0C8] animate-pulse" />
               ))}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-24 rounded-2xl bg-[#E8E8E0] animate-pulse" />
+                <div key={i} className="h-24 rounded-2xl bg-gradient-to-br from-[#E8E8E0] to-[#D4D0C8] animate-pulse" />
               ))}
             </div>
           </div>
