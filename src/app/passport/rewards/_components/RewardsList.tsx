@@ -144,7 +144,7 @@ export default function RewardsList() {
                   </div>
 
                   <p className={`text-xs font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
-                    전 매장 사용가능
+                    전 매장 사용가능 <span className="font-normal">(단, 포장은 할인권 사용이 불가합니다.)</span>
                   </p>
 
                   <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? 'border-[#F0D98C] text-[#7A5B10]' : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>
