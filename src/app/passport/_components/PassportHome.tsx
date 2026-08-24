@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
-import { VIP_MESSAGE } from '@/lib/tiers';
+import { VIP_MESSAGE, VIP_ONGOING_MESSAGE } from '@/lib/tiers';
 import { getCurrentPositionWithRetry } from '@/lib/geolocation';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
@@ -115,7 +115,7 @@ export default function PassportHome() {
     if (result.success && result.data) {
       const { visitCount, newCouponAmounts, tier, tierUpgraded } = result.data;
       const tierLine = tier.isMaxTier
-        ? VIP_MESSAGE
+        ? (visitCount === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE)
         : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
       setVisitMessage(
         `오늘도 자연의 흐름이 여권에 기록되었습니다.\n현재까지 총 ${visitCount}회 방문하셨습니다.\n${tierLine}`
@@ -377,7 +377,7 @@ export default function PassportHome() {
         <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-2xl p-6 space-y-4">
           {data.tier.isMaxTier ? (
             <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
-              {VIP_MESSAGE}
+              {data.customer.visit_count === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE}
             </p>
           ) : (
             <div className="space-y-2">
