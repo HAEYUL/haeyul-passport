@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import RegisterForm from './RegisterForm';
 import LoginForm from './LoginForm';
 import BrandLogo from '@/components/BrandLogo';
-import { getCurrentPosition, type GeoCoords } from '@/lib/geolocation';
+import { getCurrentPositionWithRetry, type GeoCoords } from '@/lib/geolocation';
 
 interface VisitLandingProps {
   /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
@@ -27,7 +27,7 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
   // 서버에서 좌표 유무에 따라 판단합니다.
   useEffect(() => {
     if (!isOpen) return;
-    getCurrentPosition().then((result) => setGeoCoords(result.coords));
+    getCurrentPositionWithRetry().then((result) => setGeoCoords(result.coords));
   }, [isOpen]);
 
   if (mode === 'register') {
