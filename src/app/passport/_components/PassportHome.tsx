@@ -472,33 +472,29 @@ export default function PassportHome() {
           {data.storeVisitBreakdown.length > 0 && (
             <div className="mx-auto w-fit space-y-1 text-sm font-medium text-[#6B6B5E]">
               {data.storeVisitBreakdown.map((s) => (
-                <div key={s.storeName} className="space-y-2">
-                  <div className="flex gap-3">
-                    <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
-                    <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
-                  </div>
-                  {s.storeName === '곤드레밥집' && (
-                    <div className="flex flex-col items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAddToHome}
-                        className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
-                                   px-5 py-2.5 text-base font-bold text-white shadow-sm
-                                   hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
-                      >
-                        홈 바로가기 추가
-                      </button>
-                      {installMessage && (
-                        <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
-                          {installMessage}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                <div key={s.storeName} className="flex gap-3">
+                  <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
+                  <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
                 </div>
               ))}
             </div>
           )}
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddToHome}
+              className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
+                         px-5 py-2.5 text-base font-bold text-white shadow-sm
+                         hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
+            >
+              홈 바로가기 추가
+            </button>
+            {installMessage && (
+              <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
+                {installMessage}
+              </p>
+            )}
+          </div>
         </footer>
       </div>
     </main>
