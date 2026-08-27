@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { getVipCustomers, updateCustomerAdminNote, type VipCustomerItem } from '@/app/admin/actions';
-import { formatDateKR } from '@/lib/utils';
+import { formatDateKR, getTodayKST } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
+import SmsComposeModal from '../../customers/_components/SmsComposeModal';
 
 function AdminNoteCell({
   customerId,
@@ -25,7 +27,8 @@ function AdminNoteCell({
         <p className="text-[#555] whitespace-pre-line">{note || '메모 없음'}</p>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setValue(note || '');
             setEditing(true);
           }}
@@ -51,7 +54,7 @@ function AdminNoteCell({
   }
 
   return (
-    <div className="space-y-1 min-w-[200px]">
+    <div className="space-y-1 min-w-[200px]" onClick={(e) => e.stopPropagation()}>
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -77,9 +80,44 @@ function AdminNoteCell({
   );
 }
 
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+// CSV를 엑셀에서 열 때 한글이 깨지지 않도록 붙이는 UTF-8 BOM
+const BOM = String.fromCharCode(0xfeff);
+
+function exportVipCustomersCsv(customers: VipCustomerItem[]) {
+  const headers = ['고객명', '여권번호', '연락처', 'VIP 달성일', '총 방문 횟수', '최근 방문일', '감사 할인권', '관리자 메모'];
+  const rows = customers.map((c) => [
+    c.name,
+    c.customerNumber,
+    c.phone,
+    c.vipAchievedAt ? formatDateKR(c.vipAchievedAt) : '-',
+    `${c.visitCount}회`,
+    c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-',
+    c.giftUsed ? '사용 완료' : '미사용',
+    c.adminNote || '',
+  ]);
+
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `VIP고객명단_${getTodayKST()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function VipManagement() {
+  const router = useRouter();
   const [customers, setCustomers] = useState<VipCustomerItem[] | null>(null);
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showSmsModal, setShowSmsModal] = useState(false);
 
   const fetchData = useCallback(async () => {
     const result = await getVipCustomers();
@@ -94,6 +132,23 @@ export default function VipManagement() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  function toggleSelectAll() {
+    if (!customers) return;
+    setSelectedIds((prev) => (prev.size === customers.length ? new Set() : new Set(customers.map((c) => c.id))));
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
@@ -111,6 +166,28 @@ export default function VipManagement() {
           </div>
         )}
 
+        {customers && customers.length > 0 && (
+          <div className="flex justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => exportVipCustomersCsv(customers)}
+              className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
+                         hover:bg-[#F5F5EC] transition-all duration-200 hover:shadow-sm"
+            >
+              📊 엑셀 저장
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSmsModal(true)}
+              disabled={selectedIds.size === 0}
+              className="px-5 py-3 rounded-xl text-sm font-semibold bg-[#2D5A3D] text-white
+                         hover:bg-[#245032] hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              💬 문자 ({selectedIds.size})
+            </button>
+          </div>
+        )}
+
         {!customers ? (
           <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
         ) : customers.length === 0 ? (
@@ -119,9 +196,18 @@ export default function VipManagement() {
           </div>
         ) : (
           <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
-            <table className="w-full text-sm min-w-[920px]">
+            <table className="w-full text-sm min-w-[960px]">
               <thead>
                 <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
+                  <th className="px-4 py-3 font-medium w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === customers.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 accent-[#2D5A3D]"
+                      aria-label="전체 선택"
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">고객명</th>
                   <th className="px-4 py-3 font-medium">여권번호</th>
                   <th className="px-4 py-3 font-medium">연락처</th>
@@ -134,7 +220,20 @@ export default function VipManagement() {
               </thead>
               <tbody>
                 {customers.map((c) => (
-                  <tr key={c.id} className="border-b border-[#F0EDE6] last:border-0 align-top">
+                  <tr
+                    key={c.id}
+                    onClick={() => router.push(`/admin/customers/${c.id}`)}
+                    className="border-b border-[#F0EDE6] last:border-0 align-top cursor-pointer hover:bg-[#F5F5EC] transition-colors duration-200"
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        className="w-4 h-4 accent-[#2D5A3D]"
+                        aria-label={`${c.name} 선택`}
+                      />
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{c.name}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-[#555]">{c.customerNumber}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-[#555]">{c.phone}</td>
@@ -162,6 +261,14 @@ export default function VipManagement() {
           </div>
         )}
       </div>
+
+      {showSmsModal && customers && (
+        <SmsComposeModal
+          customerIds={[...selectedIds]}
+          consentedCount={customers.filter((c) => selectedIds.has(c.id) && c.marketingConsent).length}
+          onClose={() => setShowSmsModal(false)}
+        />
+      )}
     </main>
   );
 }

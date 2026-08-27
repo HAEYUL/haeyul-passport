@@ -1508,6 +1508,7 @@ export interface VipCustomerItem {
   recentVisitDate: string | null;
   giftUsed: boolean;
   adminNote: string | null;
+  marketingConsent: boolean;
 }
 
 /**
@@ -1526,7 +1527,7 @@ export async function getVipCustomers(storeId?: string | null): Promise<ApiRespo
 
     let customersQuery = supabase
       .from('customers')
-      .select('id, name, customer_number, phone, visit_count, admin_note')
+      .select('id, name, customer_number, phone, visit_count, admin_note, marketing_consent')
       .eq('is_active', true)
       .gte('visit_count', vipMinVisits)
       .order('visit_count', { ascending: false });
@@ -1573,6 +1574,7 @@ export async function getVipCustomers(storeId?: string | null): Promise<ApiRespo
         recentVisitDate: latestVisitMap.get(c.id) || null,
         giftUsed: rewardInfo?.status === 'used',
         adminNote: c.admin_note,
+        marketingConsent: c.marketing_consent,
       };
     });
 
