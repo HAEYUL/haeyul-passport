@@ -172,7 +172,7 @@ export async function registerCustomer(
           error: '이미 가입된 번호입니다.',
         };
       }
-      return { success: false, error: '회원 등록 중 오류가 발생했습니다.' };
+      return { success: false, error: '회원 등록 중 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.' };
     }
 
     // ─── 개인정보 동의 기록 ─────────────────────────
@@ -237,7 +237,7 @@ export async function registerCustomer(
     };
   } catch (error) {
     console.error('registerCustomer 오류:', error);
-    return { success: false, error: '서버 오류가 발생했습니다.' };
+    return { success: false, error: '서버 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.' };
   }
 }
 
