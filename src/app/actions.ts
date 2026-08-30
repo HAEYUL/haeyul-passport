@@ -1,21 +1,18 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { normalizePhone, isValidPhone, getTodayKST, isWithinStoreHours } from '@/lib/utils';
+import { normalizePhone, isValidPhone, getTodayKST, isWithinStoreHours, birthDigitsToISODate } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
-import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR } from '@/lib/constants';
+import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR, AUDIT_ACTION } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
 const OUTSIDE_STORE_HOURS_ERROR =
   `지금은 매장 운영시간이 아닙니다.\n매일 오전 ${STORE_OPEN_HOUR}시~오후 ${STORE_CLOSE_HOUR - 12}시에 이용해 주세요.`;
-
-// TEMP: GPS 위치 제한 임시 비활성화 (요청에 따른 일시 조치, 테스트 후 false로 되돌릴 것)
-const LOCATION_CHECK_DISABLED = true;
 
 /**
  * QR로 확인된 매장의 좌표를 조회하고, 클라이언트 좌표와 비교해 위치 확인 결과를 판정합니다.
@@ -27,10 +24,6 @@ async function checkStoreLocation(
   clientLat: number | null,
   clientLng: number | null
 ) {
-  if (LOCATION_CHECK_DISABLED) {
-    return { status: 'unavailable' as const, distanceMeters: null };
-  }
-
   const { data: store } = await supabase
     .from('stores')
     .select('latitude, longitude, radius_meters')
@@ -71,7 +64,7 @@ export async function registerCustomer(
 
     const name = (formData.get('name') as string)?.trim();
     const rawPhone = (formData.get('phone') as string)?.trim();
-    const birthDate = (formData.get('birth_date') as string)?.trim() || null;
+    const birthDigits = (formData.get('birth_date_digits') as string)?.trim() || '';
     const marketingConsent = formData.get('marketing_consent') === 'true';
     const privacyConsent = formData.get('privacy_consent') === 'true';
 
@@ -86,6 +79,11 @@ export async function registerCustomer(
 
     if (!isValidPhone(rawPhone)) {
       return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
     }
 
     if (!privacyConsent) {
@@ -230,6 +228,7 @@ export async function loginCustomer(
   try {
     const name = (formData.get('name') as string)?.trim();
     const rawPhone = (formData.get('phone') as string)?.trim();
+    const birthDigits = (formData.get('birth_date_digits') as string)?.trim() || '';
 
     if (!name || !rawPhone) {
       return { success: false, error: '성함과 휴대전화 번호를 입력해 주세요.' };
@@ -237,6 +236,11 @@ export async function loginCustomer(
 
     if (!isValidPhone(rawPhone)) {
       return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
     }
 
     const phone = normalizePhone(rawPhone);
@@ -255,6 +259,25 @@ export async function loginCustomer(
         success: false,
         error: '일치하는 회원 정보가 없습니다. 성함과 전화번호를 다시 확인해 주세요.',
       };
+    }
+
+    if (customer.birth_date) {
+      // 이미 등록된 생년월일이 있으면 본인확인으로 대조합니다.
+      if (customer.birth_date !== birthDate) {
+        return { success: false, error: '생년월일이 일치하지 않습니다. 다시 확인해 주세요.' };
+      }
+    } else {
+      // 처음 로그인 시 생년월일이 없던 기존 고객은 이번 입력값을 그대로 등록합니다.
+      const { error: updateError } = await supabase
+        .from('customers')
+        .update({ birth_date: birthDate })
+        .eq('id', customer.id);
+
+      if (updateError) {
+        console.error('생년월일 등록 실패:', updateError);
+      } else {
+        customer.birth_date = birthDate;
+      }
     }
 
     // 세션 설정
@@ -279,10 +302,23 @@ export async function loginCustomer(
 // ============================================================
 
 /**
+ * 로그인 세션을 조회하고, 유효하면 만료시각을 60일로 다시 연장합니다(슬라이딩 세션).
+ * 활동이 있을 때마다 갱신되므로, 60일 안에 한 번이라도 다시 방문하는 고객은
+ * 로그인이 끊기지 않고 계속 유지됩니다.
+ */
+async function requireSession() {
+  const session = await getSession();
+  if (session) {
+    await setSession(session);
+  }
+  return session;
+}
+
+/**
  * 현재 로그인된 고객 세션 확인
  */
 export async function getCurrentSession() {
-  return getSession();
+  return requireSession();
 }
 
 /**
@@ -349,7 +385,7 @@ async function getRewardProgressMessage(
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -477,7 +513,7 @@ export async function registerVisit(
   longitude?: number | null
 ): Promise<ApiResponse<VisitResult>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -591,7 +627,7 @@ export interface VisitHistoryData {
 
 export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -663,7 +699,7 @@ export interface RewardItem {
  */
 export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -723,7 +759,7 @@ export async function confirmRewardUse(
   customerRewardId: string
 ): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -786,7 +822,7 @@ export async function confirmRewardUse(
  */
 export async function updateMarketingConsent(consent: boolean): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -821,7 +857,7 @@ export async function updateMarketingConsent(consent: boolean): Promise<ApiRespo
  */
 export async function updateBirthDate(birthDate: string | null): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -840,6 +876,51 @@ export async function updateBirthDate(birthDate: string | null): Promise<ApiResp
     return { success: true };
   } catch (error) {
     console.error('updateBirthDate 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 회원 탈퇴 — 고객이 직접 요청하는 완전 삭제입니다.
+ * 관리자의 deleteCustomer와 동일하게 방문기록·할인권·동의기록까지 CASCADE로
+ * 함께 삭제되며(가입 시 안내한 "탈퇴 시까지 보관" 정책에 따른 것), 되돌릴 수
+ * 없습니다. 탈퇴 사실 자체는 audit_logs에 admin_id 없이 남겨 추적할 수 있게 합니다.
+ */
+export async function withdrawCustomer(): Promise<ApiResponse<null>> {
+  try {
+    const session = await requireSession();
+    if (!session) {
+      return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase
+      .from('customers')
+      .select()
+      .eq('id', session.customerId)
+      .single();
+
+    const { error } = await supabase.from('customers').delete().eq('id', session.customerId);
+
+    if (error) {
+      return { success: false, error: '탈퇴 처리 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: null,
+      action: AUDIT_ACTION.CUSTOMER_WITHDRAW,
+      target_type: 'customer',
+      target_id: session.customerId,
+      before_data: before ?? null,
+      after_data: null,
+    });
+
+    await clearSession();
+
+    return { success: true };
+  } catch (error) {
+    console.error('withdrawCustomer 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

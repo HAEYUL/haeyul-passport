@@ -26,6 +26,18 @@ export function isWithinStoreHours(now: Date = getNowKST()): boolean {
 }
 
 /**
+ * 지금부터 오늘 매장 마감시각(STORE_CLOSE_HOUR)까지 남은 초를 반환합니다.
+ * QR 스캔 확인 쿠키가 "그날 영업 종료 시점까지" 유효하도록 만드는 데 사용합니다.
+ * 이미 마감시각이 지난 경우엔 짧은 기본값(10분)으로 폴백합니다.
+ */
+export function secondsUntilStoreClose(now: Date = getNowKST()): number {
+  const closeToday = new Date(now);
+  closeToday.setHours(STORE_CLOSE_HOUR, 0, 0, 0);
+  const diffMs = closeToday.getTime() - now.getTime();
+  return diffMs > 0 ? Math.floor(diffMs / 1000) : 60 * 10;
+}
+
+/**
  * 한국 시간 기준 "오늘" 하루의 시작/끝 시각을 UTC ISO 문자열로 반환합니다.
  * TIMESTAMPTZ 컬럼(예: used_at)을 "오늘(KST)" 기준으로 필터링할 때 사용합니다.
  */
@@ -168,6 +180,27 @@ export function formatDateKR(dateStr: string): string {
     day: 'numeric',
     timeZone: TIMEZONE,
   });
+}
+
+/**
+ * 생년월일 6자리(YYMMDD, 주민번호 앞자리 형식)를 'YYYY-MM-DD'로 변환합니다.
+ * 연도는 세기 구분자 없이 입력받으므로, 현재 연도 뒤 2자리보다 크면 1900년대,
+ * 작거나 같으면 2000년대로 판단합니다. 형식이 잘못됐거나 존재할 수 없는
+ * 월/일이면 null을 반환합니다.
+ */
+export function birthDigitsToISODate(digits: string): string | null {
+  if (!/^\d{6}$/.test(digits)) return null;
+
+  const yy = parseInt(digits.slice(0, 2), 10);
+  const mm = parseInt(digits.slice(2, 4), 10);
+  const dd = parseInt(digits.slice(4, 6), 10);
+
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const nowYY = new Date().getFullYear() % 100;
+  const year = (yy <= nowYY ? 2000 : 1900) + yy;
+
+  return `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
 }
 
 /**

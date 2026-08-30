@@ -2625,7 +2625,7 @@ export async function sendSmsToCustomers(
 
     const finalMessage =
       messageType === 'ad'
-        ? `(광고) ${trimmedMessage}\n무료수신거부 ${normalizePhone(process.env.ALIGO_SENDER || '')}`
+        ? `(광고) [해율푸드] ${trimmedMessage}\n무료수신거부 ${normalizePhone(process.env.ALIGO_SENDER || '')}`
         : trimmedMessage;
 
     const receivers = validTargets.map((c) => c.phone.replace(/\D/g, ''));

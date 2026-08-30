@@ -47,6 +47,7 @@ export const AUDIT_ACTION = {
   TABLE_UPDATE: 'table_update',
   CUSTOMER_UPDATE: 'customer_update',
   CUSTOMER_DELETE: 'customer_delete',
+  CUSTOMER_WITHDRAW: 'customer_withdraw',
   QR_REISSUE: 'qr_reissue',
   STORE_LOCATION_UPDATE: 'store_location_update',
   SMS_SEND: 'sms_send',

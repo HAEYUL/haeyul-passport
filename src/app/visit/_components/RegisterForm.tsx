@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { registerCustomer } from '@/app/actions';
 import type { GeoCoords } from '@/lib/geolocation';
+import BirthDateKeypad from '@/components/BirthDateKeypad';
 
 interface RegisterFormProps {
   onBack: () => void;
@@ -22,6 +23,7 @@ interface RegisterFormProps {
 export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [birthDigits, setBirthDigits] = useState('');
 
   // 필수·선택 동의 모두 기본 미체크(옵트인)로 시작하며, "모두 동의합니다"로 한 번에 묶어 체크할 수 있습니다.
   const [privacyConsent, setPrivacyConsent] = useState(false);
@@ -43,6 +45,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
     const formData = new FormData(form);
     formData.set('privacy_consent', privacyConsent.toString());
     formData.set('marketing_consent', marketingConsent.toString());
+    formData.set('birth_date_digits', birthDigits);
 
     const result = await registerCustomer(formData);
 
@@ -132,21 +135,8 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
             />
           </div>
 
-          {/* 생년월일 (선택) */}
-          <div>
-            <label htmlFor="input-birth" className="block text-base font-medium text-[#333] mb-2">
-              생년월일 <span className="text-sm text-[#AAA]">(선택)</span>
-            </label>
-            <input
-              id="input-birth"
-              name="birth_date"
-              type="date"
-              className="w-full px-4 py-3.5 text-[17px] border-2 border-[#D4D0C8] rounded-xl
-                         bg-white text-[#555]
-                         focus:border-[#2D5A3D] focus:outline-none
-                         transition-colors duration-200"
-            />
-          </div>
+          {/* 생년월일 (필수, 6자리 숫자) */}
+          <BirthDateKeypad value={birthDigits} onChange={setBirthDigits} required />
 
           {/* 구분선 */}
           <hr className="border-[#E8E4DA]" />
@@ -268,11 +258,11 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
           {/* 가입 버튼 */}
           <button
             type="submit"
-            disabled={isLoading || !privacyConsent}
+            disabled={isLoading || !privacyConsent || birthDigits.length !== 6}
             className={`w-full py-4 px-6 text-lg font-semibold rounded-2xl shadow-md
                        transition-all duration-200
                        ${
-                         privacyConsent
+                         privacyConsent && birthDigits.length === 6
                            ? 'bg-[#2D5A3D] text-white hover:bg-[#245032] active:scale-[0.98]'
                            : 'bg-[#CCC] text-white cursor-not-allowed'
                        }`}

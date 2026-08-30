@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { loginCustomer } from '@/app/actions';
+import BirthDateKeypad from '@/components/BirthDateKeypad';
 
 interface LoginFormProps {
   onBack: () => void;
@@ -14,6 +15,7 @@ interface LoginFormProps {
 export default function LoginForm({ onBack }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [birthDigits, setBirthDigits] = useState('');
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -21,6 +23,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    formData.set('birth_date_digits', birthDigits);
 
     const result = await loginCustomer(formData);
 
@@ -55,7 +58,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
             기존 전자여권 열기
           </h1>
           <p className="mt-2 text-[15px] text-[#8C8C80]">
-            가입하신 성함과 휴대전화 번호를<br />
+            가입하신 성함, 휴대전화 번호, 생년월일을<br />
             입력해 주세요.
           </p>
         </header>
@@ -108,10 +111,17 @@ export default function LoginForm({ onBack }: LoginFormProps) {
             />
           </div>
 
+          {/* 생년월일 6자리 (본인확인) */}
+          <BirthDateKeypad value={birthDigits} onChange={setBirthDigits} required />
+          <p className="text-sm text-[#8C8C80] leading-relaxed -mt-2">
+            처음 등록하신 분은 이번에 입력하신 생년월일이 그대로 등록되며,
+            다음부터는 같은 기기에서 별도 입력 없이 자동으로 열립니다.
+          </p>
+
           {/* 로그인 버튼 */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || birthDigits.length !== 6}
             className="w-full py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
                        shadow-md hover:bg-[#245032] active:scale-[0.98]
                        transition-all duration-200 disabled:bg-[#CCC] disabled:cursor-not-allowed"
