@@ -26,6 +26,10 @@ export const REWARD_STATUS = {
 // 선물 유효기간 (발급일로부터, 개월)
 export const REWARD_EXPIRY_MONTHS = 6;
 
+// 생일축하 쿠폰
+export const BIRTHDAY_COUPON_AMOUNT = 3000;      // 할인 금액(원)
+export const BIRTHDAY_COUPON_VALID_DAYS = 30;    // 유효기간(발급일로부터, 일)
+
 // 동의 유형
 export const CONSENT_TYPE = {
   PRIVACY: 'privacy',
@@ -51,6 +55,7 @@ export const AUDIT_ACTION = {
   QR_REISSUE: 'qr_reissue',
   STORE_LOCATION_UPDATE: 'store_location_update',
   SMS_SEND: 'sms_send',
+  BIRTHDAY_COUPON_ISSUE: 'birthday_coupon_issue',
 } as const;
 
 // 매장 정보

@@ -141,7 +141,7 @@ export default function RewardsList() {
                           {reward.amount.toLocaleString()}원
                         </p>
                         <p className={`mt-0.5 text-[15px] font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
-                          {reward.thresholdVisits}회 방문 기념
+                          {reward.source === 'birthday' ? '생일축하 쿠폰' : `${reward.thresholdVisits}회 방문 기념`}
                         </p>
                       </div>
                     </div>
@@ -153,7 +153,10 @@ export default function RewardsList() {
                   </p>
 
                   <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? 'border-[#F0D98C] text-[#7A5B10]' : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>
-                    <p>발급일: {formatDateKR(reward.issuedAt)} · {reward.issuedStoreName}</p>
+                    <p>
+                      발급일: {formatDateKR(reward.issuedAt)}
+                      {reward.issuedStoreName && ` · ${reward.issuedStoreName}`}
+                    </p>
                     {reward.status === 'used' && reward.usedAt && (
                       <p>
                         사용일: {formatDateKR(reward.usedAt)}

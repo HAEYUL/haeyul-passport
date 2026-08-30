@@ -17,21 +17,36 @@ export default function SmsComposeModal({ customerIds, consentedCount, onClose }
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<SmsSendResult | null>(null);
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
-  const byteLength = estimateSmsByteLength(message);
+  // 실제 발송 시 광고문자에는 "(광고) [해율푸드] " 접두어와 무료수신거부 안내가
+  // 자동으로 붙는데(admin/actions.ts sendSmsToCustomers 참고), 미리보기가 이걸
+  // 반영하지 않으면 경계선에 걸린 문자가 "단문인 줄 알았는데 실제로는 장문"으로
+  // 나가는 착오가 생길 수 있어 여기서도 동일하게 붙여서 계산합니다. 실제 발신번호는
+  // 서버 환경변수라 클라이언트에서 알 수 없어, 같은 자릿수의 표본 번호로 대체합니다.
+  const AD_PREFIX = '(광고) [해율푸드] ';
+  const AD_SUFFIX_SAMPLE = '\n무료수신거부 010-0000-0000';
+  const previewMessage = messageType === 'ad' ? `${AD_PREFIX}${message}${AD_SUFFIX_SAMPLE}` : message;
+  const byteLength = estimateSmsByteLength(previewMessage);
   const isLms = byteLength > SMS_BYTE_LIMIT;
   const targetCount = messageType === 'ad' ? consentedCount : customerIds.length;
   const excludedPreview = messageType === 'ad' ? customerIds.length - consentedCount : 0;
 
-  async function handleSend() {
+  function handleSendClick() {
     if (!message.trim()) {
       setError('문자 내용을 입력해 주세요.');
       return;
     }
+    setError('');
+    setConfirming(true);
+  }
+
+  async function handleConfirmSend() {
     setSending(true);
     setError('');
     const res = await sendSmsToCustomers(customerIds, message, messageType);
     setSending(false);
+    setConfirming(false);
     if (res.success && res.data) {
       setResult(res.data);
     } else {
@@ -120,27 +135,57 @@ export default function SmsComposeModal({ customerIds, consentedCount, onClose }
               </div>
             )}
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={sending}
-                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-[#D4D0C8] text-[#2D5A3D]
-                           font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={sending || targetCount === 0}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-[#2D5A3D] text-white font-semibold
-                           hover:bg-[#245032] transition-colors duration-200
-                           disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {sending ? '발송 중...' : `${targetCount}명에게 발송`}
-              </button>
-            </div>
+            {confirming ? (
+              <div className="bg-[#FFF8F0] border border-[#F0D4B8] rounded-xl p-4 space-y-3">
+                <p className="text-[15px] text-[#996633] leading-relaxed">
+                  {targetCount}명에게 문자를 발송하시겠습니까?<br />
+                  발송 후에는 취소할 수 없습니다.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(false)}
+                    disabled={sending}
+                    className="flex-1 px-4 py-2.5 rounded-xl border-2 border-[#D4D0C8] text-[#6B6B5E]
+                               font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    다시 작성
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSend}
+                    disabled={sending}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-[#D4442A] text-white font-semibold
+                               hover:bg-[#B93A22] transition-colors duration-200
+                               disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {sending ? '발송 중...' : '발송 확정'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={sending}
+                  className="flex-1 px-4 py-2.5 rounded-xl border-2 border-[#D4D0C8] text-[#2D5A3D]
+                             font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendClick}
+                  disabled={sending || targetCount === 0}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#2D5A3D] text-white font-semibold
+                             hover:bg-[#245032] transition-colors duration-200
+                             disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {`${targetCount}명에게 발송`}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

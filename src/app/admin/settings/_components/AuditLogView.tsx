@@ -21,6 +21,7 @@ const ACTION_LABELS: Record<string, string> = {
   qr_reissue: 'QR 재발행',
   store_location_update: '매장 위치 설정 변경',
   sms_send: '문자 발송',
+  birthday_coupon_issue: '생일축하 쿠폰 자동발급',
 };
 
 function formatDateTimeKR(iso: string): string {
@@ -40,25 +41,73 @@ function formatDateTimeKR(iso: string): string {
 export default function AuditLogView() {
   const [logs, setLogs] = useState<AuditLogItem[] | null>(null);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [action, setAction] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const fetchLogs = useCallback(async () => {
-    const result = await getAuditLogs();
+    setLogs(null);
+    const result = await getAuditLogs({
+      query: query.trim() || undefined,
+      action: action || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    });
     if (result.success && result.data) {
       setLogs(result.data);
+      setError('');
     } else if (!result.success) {
       setError(result.error || '활동 이력을 불러올 수 없습니다.');
     }
-  }, []);
+  }, [query, action, dateFrom, dateTo]);
 
   useEffect(() => {
-    fetchLogs();
+    const timer = setTimeout(fetchLogs, 300);
+    return () => clearTimeout(timer);
   }, [fetchLogs]);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-[#6B6B5E]">
-        최근 활동 {logs?.length ?? 0}건을 보여줍니다 (방문취소·할인권복구·고객삭제·회원탈퇴·QR재발행·문자발송 등).
+        최근 활동 이력입니다 (방문취소·할인권복구·고객삭제·회원탈퇴·QR재발행·문자발송 등). 최근 300건 안에서 검색합니다.
       </p>
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="고객명·사유 검색"
+          className="flex-1 min-w-[200px] px-4 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl
+                     bg-white placeholder-[#B0B0A0] focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+        />
+        <select
+          value={action}
+          onChange={(e) => setAction(e.target.value)}
+          className="px-3 py-2.5 text-sm border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
+        >
+          <option value="">전체 작업</option>
+          {Object.entries(ACTION_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="px-3 py-2.5 text-sm border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
+        />
+        <span className="self-center text-[#6B6B5E] text-sm">~</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="px-3 py-2.5 text-sm border-2 border-[#D4D0C8] rounded-xl bg-white focus:border-[#2D5A3D] focus:outline-none"
+        />
+      </div>
 
       {error && (
         <div className="bg-[#FFF3E4] border border-[#EAC28E] text-[#7A4A16] px-4 py-3 rounded-xl text-sm">
@@ -74,7 +123,7 @@ export default function AuditLogView() {
         </div>
       ) : logs.length === 0 ? (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-          <p className="text-[15px] text-[#6B6B5E]">아직 기록된 활동이 없습니다.</p>
+          <p className="text-[15px] text-[#6B6B5E]">조건에 맞는 활동 이력이 없습니다.</p>
         </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">

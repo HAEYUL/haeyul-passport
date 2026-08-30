@@ -366,10 +366,14 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     >
                       <div>
                         <p className="text-[15px] font-medium text-[#333]">
-                          {r.amount.toLocaleString()}원 할인권 <span className="text-xs text-[#6B6B5E]">({r.thresholdVisits}회)</span>
+                          {r.amount.toLocaleString()}원 할인권{' '}
+                          <span className="text-xs text-[#6B6B5E]">
+                            ({r.source === 'birthday' ? '생일축하' : `${r.thresholdVisits}회`})
+                          </span>
                         </p>
                         <p className="text-xs text-[#6B6B5E]">
-                          발급일: {formatDateKR(r.issuedAt)} · {r.issuedStoreName}
+                          발급일: {formatDateKR(r.issuedAt)}
+                          {r.issuedStoreName && ` · ${r.issuedStoreName}`}
                         </p>
                         {r.status === 'used' && r.usedAt && (
                           <p className="text-xs text-[#6B6B5E]">

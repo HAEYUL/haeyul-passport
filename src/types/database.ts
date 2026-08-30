@@ -105,6 +105,8 @@ export interface RewardRule {
   is_repeating: boolean;
   repeat_interval: number | null;
   is_active: boolean;
+  /** 생일축하 쿠폰 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
+  is_birthday: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -122,13 +124,20 @@ export interface CustomerReward {
   /** 발급 시점에 고정된 할인 금액(원). 이후 규칙 금액이 바뀌어도 변하지 않음 */
   amount: number | null;
   status: RewardStatus;
+  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) */
+  source: 'visit' | 'birthday';
+  /** 명시적으로 지정된 만료 시각(예: 생일축하 쿠폰의 30일). 없으면 issued_at + 6개월로 계산 */
+  expires_at: string | null;
+  /** 생일축하 쿠폰의 중복 발급 방지용 발급 연도. source가 'birthday'일 때만 값이 있음 */
+  birthday_year: number | null;
   issued_at: string;
   requested_at: string | null;
   request_table_id: string | null;
   used_at: string | null;
   confirmed_by: string | null;
   table_id_used: string | null;
-  issued_store_id: string;
+  /** 방문 인증 없이 발급되는 생일축하 쿠폰은 특정 매장이 없어 null */
+  issued_store_id: string | null;
   used_store_id: string | null;
   created_at: string;
 }
