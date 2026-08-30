@@ -79,8 +79,8 @@ function HeroStatCard({
   );
 }
 
-/** 선택한 연월의 신규가입 인원만 조회하는 카드 */
-function MonthlySignupSection({ storeId }: { storeId: string | null }) {
+/** 선택한 연월의 신규가입 인원만 조회하는 카드 (다른 StatCard와 같은 크기) */
+function MonthlySignupCard({ storeId }: { storeId: string | null }) {
   const [month, setMonth] = useState(getTodayKST().slice(0, 7));
   const [count, setCount] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -103,22 +103,18 @@ function MonthlySignupSection({ storeId }: { storeId: string | null }) {
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">📆 월별 신규가입</p>
-          <p className="mt-3 text-3xl font-extrabold text-[#2D5A3D]">
-            {count === null ? '···' : count.toLocaleString()}
-            <span className="ml-2 text-sm font-bold text-[#6B6B5E]">명</span>
-          </p>
-        </div>
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="rounded-lg border border-[#D4D0C8] px-3 py-2 text-sm text-[#333]"
-        />
-      </div>
-      {error && <p className="mt-2 text-sm text-[#D4442A]">{error}</p>}
+      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">📆 월별 신규가입</p>
+      <p className="mt-3 text-3xl font-extrabold text-[#2D5A3D]">
+        {count === null ? '···' : count.toLocaleString()}
+        <span className="ml-2 text-sm font-bold text-[#6B6B5E]">명</span>
+      </p>
+      <input
+        type="month"
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        className="mt-2 w-full rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-xs text-[#333]"
+      />
+      {error && <p className="mt-1 text-xs text-[#D4442A]">{error}</p>}
     </div>
   );
 }
@@ -242,6 +238,7 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
                 unit="명"
                 href="/admin/customers?filter=newThisMonth"
               />
+              <MonthlySignupCard storeId={storeId} />
               <StatCard
                 label="미사용 할인권"
                 value={stats.unclaimedRewards}
@@ -270,8 +267,6 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
                 accent="text-[#D4442A]"
               />
             </div>
-
-            <MonthlySignupSection storeId={storeId} />
           </div>
         )}
       </div>

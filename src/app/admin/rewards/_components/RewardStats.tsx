@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   getRewardStats,
   getRewardAmountByStore,
@@ -685,6 +685,7 @@ function AmountByStoreSection() {
   const [endMonth, setEndMonth] = useState(thisMonth);
   const [items, setItems] = useState<RewardAmountByStoreItem[] | null>(null);
   const [error, setError] = useState('');
+  const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
 
   const { dateFrom, dateTo } =
     period === 'thisMonth'
@@ -712,10 +713,6 @@ function AmountByStoreSection() {
       usedAmount: acc.usedAmount + it.usedAmount,
     }),
     { issuedAmount: 0, usedAmount: 0 }
-  );
-
-  const breakdownRows = (items || []).flatMap((it) =>
-    it.usedBreakdown.map((b) => ({ storeId: it.storeId, storeName: it.storeName, ...b }))
   );
 
   return (
@@ -781,52 +778,55 @@ function AmountByStoreSection() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => (
-                  <tr key={it.storeId} className="border-b border-[#F0EDE6] last:border-0">
-                    <td className="px-4 py-3 whitespace-nowrap font-semibold text-[#2D5A3D]">{it.storeName}</td>
-                    <td className="px-4 py-3 text-right text-[#333]">{it.issuedAmount.toLocaleString()}원</td>
-                    <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.issuedCount}건</td>
-                    <td className="px-4 py-3 text-right text-[#8A5800] font-semibold">{it.usedAmount.toLocaleString()}원</td>
-                    <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.usedCount}건</td>
-                  </tr>
-                ))}
+                {items.map((it) => {
+                  const isExpanded = expandedStoreId === it.storeId;
+                  return (
+                    <Fragment key={it.storeId}>
+                      <tr className="border-b border-[#F0EDE6] last:border-0">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedStoreId(isExpanded ? null : it.storeId)}
+                            className="flex items-center gap-1 font-semibold text-[#2D5A3D] hover:underline"
+                          >
+                            <span className={`text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                            {it.storeName}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#333]">{it.issuedAmount.toLocaleString()}원</td>
+                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.issuedCount}건</td>
+                        <td className="px-4 py-3 text-right text-[#8A5800] font-semibold">{it.usedAmount.toLocaleString()}원</td>
+                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.usedCount}건</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-[#F0EDE6] last:border-0 bg-[#F8F7F2]">
+                          <td colSpan={5} className="px-4 py-3">
+                            <p className="mb-2 text-xs font-semibold text-[#6B6B5E]">{it.storeName} — 쿠폰 금액별 사용 수량</p>
+                            {it.usedBreakdown.length === 0 ? (
+                              <p className="text-sm text-[#8C8C80]">사용된 할인권이 없습니다.</p>
+                            ) : (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {it.usedBreakdown.map((b) => (
+                                    <tr key={`${b.amount}_${b.source}`} className="border-b border-[#EDE9DE] last:border-0">
+                                      <td className="py-1.5 text-[#333]">
+                                        {b.amount.toLocaleString()}원
+                                        <span className="ml-1 text-xs text-[#8C8C80]">{b.source === 'birthday' ? '(생일)' : '(방문)'}</span>
+                                      </td>
+                                      <td className="py-1.5 text-right text-[#6B6B5E]">{b.count}건</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
-
-          <div>
-            <p className="mb-2 text-sm font-semibold text-[#2D5A3D]">쿠폰 금액별 사용 수량 상세</p>
-            <div className="overflow-x-auto bg-white rounded-2xl border border-[#E8E4DA]">
-              <table className="w-full text-sm min-w-[420px]">
-                <thead>
-                  <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
-                    <th className="px-4 py-3 font-medium">매장</th>
-                    <th className="px-4 py-3 font-medium text-right">쿠폰 금액</th>
-                    <th className="px-4 py-3 font-medium text-right">사용 건수</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {breakdownRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-[#8C8C80]">
-                        사용된 할인권이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    breakdownRows.map((row) => (
-                      <tr key={`${row.storeId}_${row.amount}_${row.source}`} className="border-b border-[#F0EDE6] last:border-0">
-                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-[#2D5A3D]">{row.storeName}</td>
-                        <td className="px-4 py-3 text-right text-[#333]">
-                          {row.amount.toLocaleString()}원
-                          <span className="ml-1 text-xs text-[#8C8C80]">{row.source === 'birthday' ? '(생일)' : '(방문)'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{row.count}건</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
           </div>
         </>
       )}
