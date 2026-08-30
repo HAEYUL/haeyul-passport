@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { updateMarketingConsent, updateBirthDate, withdrawCustomer } from '@/app/actions';
-import { formatDateKR } from '@/lib/utils';
+import { formatDateKR, isoDateToBirthDigits } from '@/lib/utils';
+import BirthDateKeypad from '@/components/BirthDateKeypad';
 import type { Customer } from '@/types/database';
 
 interface MyInfoProps {
@@ -18,7 +19,7 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
   const [error, setError] = useState('');
 
   const [editingBirthDate, setEditingBirthDate] = useState(false);
-  const [birthDateInput, setBirthDateInput] = useState(customer.birth_date || '');
+  const [birthDigits, setBirthDigits] = useState(customer.birth_date ? isoDateToBirthDigits(customer.birth_date) : '');
   const [birthDateSaving, setBirthDateSaving] = useState(false);
   const [birthDateError, setBirthDateError] = useState('');
 
@@ -58,7 +59,7 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
   }
 
   function startEditBirthDate() {
-    setBirthDateInput(customer.birth_date || '');
+    setBirthDigits(customer.birth_date ? isoDateToBirthDigits(customer.birth_date) : '');
     setBirthDateError('');
     setEditingBirthDate(true);
   }
@@ -67,7 +68,7 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
     setBirthDateSaving(true);
     setBirthDateError('');
 
-    const result = await updateBirthDate(birthDateInput || null);
+    const result = await updateBirthDate(birthDigits);
 
     setBirthDateSaving(false);
 
@@ -119,15 +120,8 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
           </div>
           <div className="border-t border-[#F0EDE6] pt-3">
             {editingBirthDate ? (
-              <div className="space-y-2">
-                <span className="text-[15px] text-[#8C8C80]">생년월일</span>
-                <input
-                  type="date"
-                  value={birthDateInput}
-                  onChange={(e) => setBirthDateInput(e.target.value)}
-                  className="w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl
-                             focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
-                />
+              <div className="space-y-3">
+                <BirthDateKeypad value={birthDigits} onChange={setBirthDigits} required />
                 {birthDateError && <p className="text-sm text-[#D4442A]">{birthDateError}</p>}
                 <div className="flex gap-2 pt-1">
                   <button
@@ -142,7 +136,7 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
                   </button>
                   <button
                     onClick={handleSaveBirthDate}
-                    disabled={birthDateSaving}
+                    disabled={birthDateSaving || birthDigits.length !== 6}
                     className="flex-1 py-2.5 px-4 bg-[#2D5A3D] text-white text-sm font-semibold rounded-xl
                                hover:bg-[#245032] transition-colors duration-200 disabled:opacity-60"
                     type="button"

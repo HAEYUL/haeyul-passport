@@ -204,6 +204,15 @@ export function birthDigitsToISODate(digits: string): string | null {
 }
 
 /**
+ * 'YYYY-MM-DD' 형식의 생년월일을 6자리(YYMMDD)로 변환합니다.
+ * 생년월일 수정 화면에서 기존 값을 숫자판에 미리 채워 넣을 때 사용합니다.
+ */
+export function isoDateToBirthDigits(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  return `${year.slice(2)}${month}${day}`;
+}
+
+/**
  * 전화번호 형식 정규화
  * 010-1234-5678 → 010-1234-5678 (하이픈 유지)
  * 01012345678 → 010-1234-5678 (하이픈 추가)

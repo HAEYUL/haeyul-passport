@@ -886,19 +886,28 @@ export async function updateMarketingConsent(consent: boolean): Promise<ApiRespo
 /**
  * 로그인된 고객이 본인의 생년월일을 직접 수정합니다.
  * 성함·회원번호·전화번호는 본인 확인 절차가 없어 셀프 수정 대상에서 제외합니다.
+ * 생년월일은 로그인 시 본인확인 수단으로도 쓰이기 때문에, 비워서(null로)
+ * 저장하는 것은 허용하지 않습니다 — 값을 지울 수 있게 하면, 다음 로그인 때
+ * "미등록 상태에서 처음 입력한 값을 그대로 등록"하는 로직이 악용되어 이름+
+ * 전화번호만 아는 제3자가 생년월일을 새로 설정하고 로그인할 수 있게 됩니다.
  */
-export async function updateBirthDate(birthDate: string | null): Promise<ApiResponse<null>> {
+export async function updateBirthDate(birthDigits: string): Promise<ApiResponse<null>> {
   try {
     const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
 
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
+    }
+
     const supabase = createAdminClient();
 
     const { error } = await supabase
       .from('customers')
-      .update({ birth_date: birthDate || null })
+      .update({ birth_date: birthDate })
       .eq('id', session.customerId);
 
     if (error) {
