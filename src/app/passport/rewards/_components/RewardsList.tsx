@@ -1,8 +1,50 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import Image from 'next/image';
 import { getRewards, confirmRewardUse, type RewardItem } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
+import { getTierUpDefinition } from '@/lib/tiers';
+
+/**
+ * 할인권 카드를 종류별로 다르게 보이게 하기 위한 스타일 세트.
+ * 일반 방문 쿠폰(노랑) / 생일 선물(핑크) / 등급 업그레이드 선물(그린)을 시각적으로 구분합니다.
+ */
+const REWARD_CARD_STYLES = {
+  visit: {
+    usableBg: 'bg-[#FFF3D6] border-[#F0D98C] shadow-sm',
+    accentText: 'text-[#8A5800]',
+    borderTop: 'border-[#F0D98C]',
+    subText: 'text-[#7A5B10]',
+  },
+  birthday: {
+    usableBg: 'bg-[#FDEAF0] border-[#F3B8CE] shadow-sm',
+    accentText: 'text-[#B23A63]',
+    borderTop: 'border-[#F3B8CE]',
+    subText: 'text-[#9C3358]',
+  },
+  tierUp: {
+    usableBg: 'bg-[#E9F3EC] border-[#BFE0C8] shadow-sm',
+    accentText: 'text-[#1F4A2E]',
+    borderTop: 'border-[#BFE0C8]',
+    subText: 'text-[#1F4A2E]',
+  },
+} as const;
+
+function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; kind: keyof typeof REWARD_CARD_STYLES } {
+  if (reward.source === 'birthday') {
+    return { text: '생일 축하 선물', icon: <span className="text-2xl leading-none mt-0.5">🎂</span>, kind: 'birthday' };
+  }
+  const tier = getTierUpDefinition(reward.thresholdVisits);
+  if (tier) {
+    return {
+      text: `${tier.label} 등급 업그레이드 축하 선물`,
+      icon: <Image src={tier.iconSrc} alt="" width={28} height={28} className="mt-0.5" />,
+      kind: 'tierUp',
+    };
+  }
+  return { text: `${reward.thresholdVisits}회 방문 기념`, icon: <span className="text-2xl leading-none mt-0.5">🎫</span>, kind: 'visit' };
+}
 
 function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isExpired: boolean }) {
   if (status === 'used') {
@@ -124,35 +166,35 @@ export default function RewardsList() {
           <ul className="space-y-4">
             {rewards.map((reward) => {
               const isUsable = reward.status !== 'used' && !reward.isExpired;
+              const { text: rewardLabel, icon: rewardIcon, kind } = getRewardLabel(reward);
+              const style = REWARD_CARD_STYLES[kind];
               return (
                 <li
                   key={reward.id}
                   className={`rounded-2xl p-5 space-y-3 border-2 ${
-                    isUsable
-                      ? 'bg-[#FFF3D6] border-[#F0D98C] shadow-sm'
-                      : 'bg-[#F5F5EC] border-[#E0E0D0]'
+                    isUsable ? style.usableBg : 'bg-[#F5F5EC] border-[#E0E0D0]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2">
-                      <span className="text-2xl leading-none mt-0.5">🎫</span>
+                      {rewardIcon}
                       <div>
-                        <p className={`text-2xl font-extrabold leading-tight ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
+                        <p className={`text-2xl font-extrabold leading-tight ${isUsable ? style.accentText : 'text-[#6B6B5E]'}`}>
                           {reward.amount.toLocaleString()}원
                         </p>
-                        <p className={`mt-0.5 text-[15px] font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
-                          {reward.source === 'birthday' ? '생일축하 쿠폰' : `${reward.thresholdVisits}회 방문 기념`}
+                        <p className={`mt-0.5 text-[15px] font-semibold ${isUsable ? style.accentText : 'text-[#6B6B5E]'}`}>
+                          {rewardLabel}
                         </p>
                       </div>
                     </div>
                     <StatusBadge status={reward.status} isExpired={reward.isExpired} />
                   </div>
 
-                  <p className={`text-xs font-semibold ${isUsable ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>
+                  <p className={`text-xs font-semibold ${isUsable ? style.accentText : 'text-[#6B6B5E]'}`}>
                     전 매장 사용가능 <span className="font-normal">(단, 포장은 할인권 사용이 불가합니다.)</span>
                   </p>
 
-                  <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? 'border-[#F0D98C] text-[#7A5B10]' : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>
+                  <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? `${style.borderTop} ${style.subText}` : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>
                     <p>
                       발급일: {formatDateKR(reward.issuedAt)}
                       {reward.issuedStoreName && ` · ${reward.issuedStoreName}`}

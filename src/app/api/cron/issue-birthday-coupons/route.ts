@@ -97,7 +97,7 @@ export async function GET(request: Request) {
     }
 
     const receivers = toIssue.map((c) => (c.phone as string).replace(/\D/g, ''));
-    const message = `[해율푸드] 생일을 진심으로 축하드립니다! 감사의 마음을 담아 ${BIRTHDAY_COUPON_AMOUNT.toLocaleString()}원 생일축하 쿠폰을 드렸습니다. 전자여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${BIRTHDAY_COUPON_VALID_DAYS}일)`;
+    const message = `[해율푸드] 생일을 진심으로 축하드립니다! 🎂 저희 마음을 담아 ${BIRTHDAY_COUPON_AMOUNT.toLocaleString()}원 생일 축하 선물을 준비했어요. 전자여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${BIRTHDAY_COUPON_VALID_DAYS}일)`;
 
     let smsSuccessCount: number | null = null;
     try {

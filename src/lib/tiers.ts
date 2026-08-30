@@ -37,6 +37,14 @@ export function getAllTiers(): TierDefinition[] {
   return TIER_DEFINITIONS.map((t) => ({ ...t }));
 }
 
+/**
+ * 방문 할인권의 기준 횟수가 등급 승급 시점과 일치하면 그 등급 정의를 반환합니다.
+ * 새싹(1회)은 가입 시점이라 등급업 쿠폰 대상에서 제외합니다.
+ */
+export function getTierUpDefinition(thresholdVisits: number): TierDefinition | null {
+  return TIER_DEFINITIONS.find((t) => t.minVisits === thresholdVisits && t.minVisits > 1) ?? null;
+}
+
 export interface VisitTierInfo {
   key: VisitTierKey;
   label: string;

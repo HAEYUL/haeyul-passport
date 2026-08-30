@@ -13,7 +13,7 @@ export const STORE_CLOSE_HOUR = 21;  // 오후 9시까지
 export const REWARD_EXPIRY_MONTHS = 6;
 
 // 생일축하 쿠폰
-export const BIRTHDAY_COUPON_AMOUNT = 3000;      // 할인 금액(원)
+export const BIRTHDAY_COUPON_AMOUNT = 5000;      // 할인 금액(원)
 export const BIRTHDAY_COUPON_VALID_DAYS = 30;    // 유효기간(발급일로부터, 일)
 
 // 감사 로그 액션
