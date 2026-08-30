@@ -103,16 +103,14 @@ function MonthlySignupCard({ storeId }: { storeId: string | null }) {
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
-      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">📆 월별 신규가입</p>
-      <p className="mt-3 text-3xl font-extrabold text-[#2D5A3D]">
-        {count === null ? '···' : count.toLocaleString()}
-        <span className="ml-2 text-sm font-bold text-[#6B6B5E]">명</span>
+      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase whitespace-nowrap">
+        월별 신규가입({count === null ? '···' : count.toLocaleString()}명)
       </p>
       <input
         type="month"
         value={month}
         onChange={(e) => setMonth(e.target.value)}
-        className="mt-2 w-full rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-xs text-[#333]"
+        className="mt-3 w-full rounded-lg border border-[#D4D0C8] px-2 py-1 text-xs text-[#333]"
       />
       {error && <p className="mt-1 text-xs text-[#D4442A]">{error}</p>}
     </div>
