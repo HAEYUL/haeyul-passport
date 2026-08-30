@@ -51,7 +51,16 @@ $$ LANGUAGE plpgsql STABLE;
 
 -- 4. customer_rewards에 발급 유형/유효기간/생일연도 컬럼 추가
 ALTER TABLE customer_rewards ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'visit';
-ALTER TABLE customer_rewards ADD CONSTRAINT chk_customer_rewards_source CHECK (source IN ('visit', 'birthday'));
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_customer_rewards_source'
+  ) THEN
+    ALTER TABLE customer_rewards ADD CONSTRAINT chk_customer_rewards_source CHECK (source IN ('visit', 'birthday'));
+  END IF;
+END $$;
+
 ALTER TABLE customer_rewards ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 ALTER TABLE customer_rewards ADD COLUMN IF NOT EXISTS birthday_year INTEGER;
 
