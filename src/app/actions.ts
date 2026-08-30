@@ -337,13 +337,6 @@ async function requireSession() {
 }
 
 /**
- * 현재 로그인된 고객 세션 확인
- */
-export async function getCurrentSession() {
-  return requireSession();
-}
-
-/**
  * 로그아웃
  */
 export async function logout() {

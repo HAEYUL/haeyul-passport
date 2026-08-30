@@ -145,15 +145,6 @@ export async function changeAdminPassword(
   }
 }
 
-export interface AdminSessionInfo {
-  adminId: string;
-  username: string;
-}
-
-export async function getAdminSessionInfo(): Promise<AdminSessionInfo | null> {
-  return getAdminSession();
-}
-
 // ============================================================
 // 대시보드 통계
 // ============================================================

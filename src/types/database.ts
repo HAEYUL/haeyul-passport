@@ -209,15 +209,6 @@ export interface SuspiciousActivity {
   created_at: string;
 }
 
-/** employee_pin_attempts 테이블 */
-export interface EmployeePinAttempt {
-  id: string;
-  ip_address: string;
-  attempts: number;
-  locked_until: string | null;
-  last_attempt: string;
-}
-
 // ============================================================
 // API 요청/응답 타입 (추후 단계에서 확장)
 // ============================================================

@@ -12,10 +12,3 @@ export async function getVerifiedStoreId(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get(COOKIE_NAME)?.value || null;
 }
-
-/**
- * 어느 매장이든 최근 QR 스캔이 확인된 상태인지만 필요할 때 사용합니다.
- */
-export async function isQrVerified(): Promise<boolean> {
-  return (await getVerifiedStoreId()) !== null;
-}
