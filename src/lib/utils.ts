@@ -75,6 +75,15 @@ export function addMonthsToDateString(dateStr: string, months: number): string {
 }
 
 /**
+ * `<input type="month">` 값('YYYY-MM')을 그 달의 시작일/종료일('YYYY-MM-DD')로 변환합니다.
+ */
+export function getMonthRange(month: string): { start: string; end: string } {
+  const start = `${month}-01`;
+  const end = subtractDaysFromDateString(addMonthsToDateString(start, 1), 1);
+  return { start, end };
+}
+
+/**
  * TIMESTAMPTZ(ISO) 값을 한국 시간 기준 날짜('YYYY-MM-DD')로 변환합니다.
  */
 export function toKSTDateString(isoString: string): string {

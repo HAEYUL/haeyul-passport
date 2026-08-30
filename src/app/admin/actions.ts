@@ -402,6 +402,12 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
   }
 }
 
+export interface RewardAmountBreakdownItem {
+  amount: number;
+  source: 'visit' | 'birthday';
+  count: number;
+}
+
 export interface RewardAmountByStoreItem {
   storeId: string;
   storeName: string;
@@ -409,6 +415,8 @@ export interface RewardAmountByStoreItem {
   issuedCount: number;
   usedAmount: number;
   usedCount: number;
+  /** 사용된 할인권을 금액×종류별로 쪼갠 상세 (금액 오름차순) */
+  usedBreakdown: RewardAmountBreakdownItem[];
 }
 
 /**
@@ -418,7 +426,8 @@ export interface RewardAmountByStoreItem {
  * 따로 보여주고, 사용될 때는 실제로 사용된 매장의 사용 금액에 포함됩니다.
  */
 export async function getRewardAmountByStore(
-  period: 'thisMonth' | 'all' = 'thisMonth'
+  dateFrom: string,
+  dateTo: string
 ): Promise<ApiResponse<RewardAmountByStoreItem[]>> {
   try {
     const admin = await getAdminSession();
@@ -437,21 +446,22 @@ export async function getRewardAmountByStore(
       return { success: false, error: '매장 목록 조회 중 오류가 발생했습니다.' };
     }
 
-    let issuedQuery = supabase
+    const fromISO = `${dateFrom}T00:00:00+09:00`;
+    const toISO = `${dateTo}T23:59:59+09:00`;
+
+    const issuedQuery = supabase
       .from('customer_rewards')
       .select('amount, issued_store_id')
-      .not('reward_rule_id', 'is', null);
-    let usedQuery = supabase
+      .not('reward_rule_id', 'is', null)
+      .gte('issued_at', fromISO)
+      .lte('issued_at', toISO);
+    const usedQuery = supabase
       .from('customer_rewards')
-      .select('amount, used_store_id')
+      .select('amount, source, used_store_id')
       .eq('status', 'used')
-      .not('reward_rule_id', 'is', null);
-
-    if (period === 'thisMonth') {
-      const monthStartISO = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
-      issuedQuery = issuedQuery.gte('issued_at', monthStartISO);
-      usedQuery = usedQuery.gte('used_at', monthStartISO);
-    }
+      .not('reward_rule_id', 'is', null)
+      .gte('used_at', fromISO)
+      .lte('used_at', toISO);
 
     const [{ data: issuedRows, error: issuedError }, { data: usedRows, error: usedError }] = await Promise.all([
       issuedQuery,
@@ -478,12 +488,22 @@ export async function getRewardAmountByStore(
     }
 
     const usedMap = new Map<string, { amount: number; count: number }>();
+    const usedBreakdownMap = new Map<string, Map<string, RewardAmountBreakdownItem>>();
     for (const r of usedRows || []) {
       if (!r.used_store_id) continue;
       const cur = usedMap.get(r.used_store_id) || { amount: 0, count: 0 };
       cur.amount += r.amount ?? 0;
       cur.count += 1;
       usedMap.set(r.used_store_id, cur);
+
+      const amount = r.amount ?? 0;
+      const source = (r.source as 'visit' | 'birthday') ?? 'visit';
+      const breakdownKey = `${amount}_${source}`;
+      const storeBreakdown = usedBreakdownMap.get(r.used_store_id) || new Map();
+      const item = storeBreakdown.get(breakdownKey) || { amount, source, count: 0 };
+      item.count += 1;
+      storeBreakdown.set(breakdownKey, item);
+      usedBreakdownMap.set(r.used_store_id, storeBreakdown);
     }
 
     const result: RewardAmountByStoreItem[] = (stores || []).map((s) => ({
@@ -493,6 +513,7 @@ export async function getRewardAmountByStore(
       issuedCount: issuedMap.get(s.id)?.count ?? 0,
       usedAmount: usedMap.get(s.id)?.amount ?? 0,
       usedCount: usedMap.get(s.id)?.count ?? 0,
+      usedBreakdown: [...(usedBreakdownMap.get(s.id)?.values() ?? [])].sort((a, b) => a.amount - b.amount),
     }));
 
     if (birthdayIssuedCount > 0) {
@@ -503,6 +524,7 @@ export async function getRewardAmountByStore(
         issuedCount: birthdayIssuedCount,
         usedAmount: 0,
         usedCount: 0,
+        usedBreakdown: [],
       });
     }
 

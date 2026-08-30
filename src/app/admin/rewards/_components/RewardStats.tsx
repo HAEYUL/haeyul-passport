@@ -19,7 +19,7 @@ import {
   type RewardRuleAdminItem,
   type RewardRuleInput,
 } from '@/app/admin/actions';
-import { formatDateKR } from '@/lib/utils';
+import { formatDateKR, getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
@@ -679,20 +679,28 @@ function CatalogSection() {
 }
 
 function AmountByStoreSection() {
-  const [period, setPeriod] = useState<'thisMonth' | 'all'>('thisMonth');
+  const thisMonth = getTodayKST().slice(0, 7);
+  const [period, setPeriod] = useState<'thisMonth' | 'custom'>('thisMonth');
+  const [startMonth, setStartMonth] = useState(thisMonth);
+  const [endMonth, setEndMonth] = useState(thisMonth);
   const [items, setItems] = useState<RewardAmountByStoreItem[] | null>(null);
   const [error, setError] = useState('');
 
+  const { dateFrom, dateTo } =
+    period === 'thisMonth'
+      ? { dateFrom: getMonthRange(thisMonth).start, dateTo: getMonthRange(thisMonth).end }
+      : { dateFrom: getMonthRange(startMonth).start, dateTo: getMonthRange(endMonth).end };
+
   const fetchData = useCallback(async () => {
     setItems(null);
-    const result = await getRewardAmountByStore(period);
+    const result = await getRewardAmountByStore(dateFrom, dateTo);
     if (result.success && result.data) {
       setItems(result.data);
       setError('');
     } else if (!result.success) {
       setError(result.error || '집계를 불러올 수 없습니다.');
     }
-  }, [period]);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     fetchData();
@@ -706,11 +714,34 @@ function AmountByStoreSection() {
     { issuedAmount: 0, usedAmount: 0 }
   );
 
+  const breakdownRows = (items || []).flatMap((it) =>
+    it.usedBreakdown.map((b) => ({ storeId: it.storeId, storeName: it.storeName, ...b }))
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <TabButton label="이번달" active={period === 'thisMonth'} onClick={() => setPeriod('thisMonth')} />
-        <TabButton label="전체 기간" active={period === 'all'} onClick={() => setPeriod('all')} />
+        <TabButton label="기간 선택" active={period === 'custom'} onClick={() => setPeriod('custom')} />
+        {period === 'custom' && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <input
+              type="month"
+              value={startMonth}
+              max={endMonth}
+              onChange={(e) => setStartMonth(e.target.value)}
+              className="rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-[#333]"
+            />
+            <span className="text-[#8C8C80]">~</span>
+            <input
+              type="month"
+              value={endMonth}
+              min={startMonth}
+              onChange={(e) => setEndMonth(e.target.value)}
+              className="rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-[#333]"
+            />
+          </div>
+        )}
       </div>
 
       {error && (
@@ -761,6 +792,41 @@ function AmountByStoreSection() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-[#2D5A3D]">쿠폰 금액별 사용 수량 상세</p>
+            <div className="overflow-x-auto bg-white rounded-2xl border border-[#E8E4DA]">
+              <table className="w-full text-sm min-w-[420px]">
+                <thead>
+                  <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
+                    <th className="px-4 py-3 font-medium">매장</th>
+                    <th className="px-4 py-3 font-medium text-right">쿠폰 금액</th>
+                    <th className="px-4 py-3 font-medium text-right">사용 건수</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakdownRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-[#8C8C80]">
+                        사용된 할인권이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    breakdownRows.map((row) => (
+                      <tr key={`${row.storeId}_${row.amount}_${row.source}`} className="border-b border-[#F0EDE6] last:border-0">
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-[#2D5A3D]">{row.storeName}</td>
+                        <td className="px-4 py-3 text-right text-[#333]">
+                          {row.amount.toLocaleString()}원
+                          <span className="ml-1 text-xs text-[#8C8C80]">{row.source === 'birthday' ? '(생일)' : '(방문)'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{row.count}건</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}

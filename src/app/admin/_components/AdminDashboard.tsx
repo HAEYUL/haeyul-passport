@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { getDashboardStats, getTodayVipVisitors, type DashboardStats, type TodayVipVisitor } from '@/app/admin/actions';
+import {
+  getDashboardStats,
+  getTodayVipVisitors,
+  getSignupTrend,
+  type DashboardStats,
+  type TodayVipVisitor,
+} from '@/app/admin/actions';
+import { getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from './AdminNav';
 import StoreFilterBar from './StoreFilterBar';
 
@@ -69,6 +76,50 @@ function HeroStatCard({
         <span className="ml-2 text-lg font-bold text-[#6B6B5E]">{unit}</span>
       </p>
     </Link>
+  );
+}
+
+/** 선택한 연월의 신규가입 인원만 조회하는 카드 */
+function MonthlySignupSection({ storeId }: { storeId: string | null }) {
+  const [month, setMonth] = useState(getTodayKST().slice(0, 7));
+  const [count, setCount] = useState<number | null>(null);
+  const [error, setError] = useState('');
+
+  const fetchCount = useCallback(async () => {
+    setCount(null);
+    const { start, end } = getMonthRange(month);
+    const result = await getSignupTrend('month', start, end, storeId);
+    if (result.success && result.data) {
+      setCount(result.data.total);
+      setError('');
+    } else if (!result.success) {
+      setError(result.error || '조회할 수 없습니다.');
+    }
+  }, [month, storeId]);
+
+  useEffect(() => {
+    fetchCount();
+  }, [fetchCount]);
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">📆 월별 신규가입</p>
+          <p className="mt-3 text-3xl font-extrabold text-[#2D5A3D]">
+            {count === null ? '···' : count.toLocaleString()}
+            <span className="ml-2 text-sm font-bold text-[#6B6B5E]">명</span>
+          </p>
+        </div>
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="rounded-lg border border-[#D4D0C8] px-3 py-2 text-sm text-[#333]"
+        />
+      </div>
+      {error && <p className="mt-2 text-sm text-[#D4442A]">{error}</p>}
+    </div>
   );
 }
 
@@ -219,6 +270,8 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
                 accent="text-[#D4442A]"
               />
             </div>
+
+            <MonthlySignupSection storeId={storeId} />
           </div>
         )}
       </div>
