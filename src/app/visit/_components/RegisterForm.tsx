@@ -248,10 +248,16 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 onChange={(e) => setMarketingConsent(e.target.checked)}
                 className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
-              <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">
-                <span className="text-[#AAA]">[선택]</span>{' '}
-                혜택 및 소식 수신에 동의합니다.
-              </label>
+              <div className="flex-1">
+                <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">
+                  <span className="text-[#AAA]">[선택]</span>{' '}
+                  혜택 및 소식 수신에 동의합니다.
+                </label>
+                <p className="mt-1 text-sm text-[#999] leading-relaxed">
+                  해율푸드(해율만두전골·곤드레밥집·정담명가 남원추어탕) 통합으로 발송되며,
+                  동의는 언제든 &apos;내 정보&apos; 화면에서 철회할 수 있습니다.
+                </p>
+              </div>
             </div>
           </div>
 

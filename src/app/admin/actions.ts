@@ -99,6 +99,52 @@ export async function adminLogout() {
   await clearAdminSession();
 }
 
+/**
+ * 관리자 비밀번호 변경 — 현재 비밀번호 확인 후에만 교체합니다.
+ * 해시 생성은 DB(set_admin_password, pgcrypto)에서만 이뤄집니다.
+ */
+export async function changeAdminPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    if (!currentPassword || !newPassword) {
+      return { success: false, error: '현재 비밀번호와 새 비밀번호를 모두 입력해 주세요.' };
+    }
+
+    if (newPassword.length < 8) {
+      return { success: false, error: '새 비밀번호는 8자 이상이어야 합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: changed, error } = await supabase.rpc('set_admin_password', {
+      p_admin_id: admin.adminId,
+      p_current_password: currentPassword,
+      p_new_password: newPassword,
+    });
+
+    if (error) {
+      console.error('changeAdminPassword 오류:', error);
+      return { success: false, error: '서버 오류가 발생했습니다.' };
+    }
+
+    if (!changed) {
+      return { success: false, error: '현재 비밀번호가 일치하지 않습니다.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('changeAdminPassword 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 export interface AdminSessionInfo {
   adminId: string;
   username: string;

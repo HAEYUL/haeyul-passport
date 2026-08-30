@@ -792,7 +792,7 @@ export async function confirmRewardUse(
       return { success: false, error: '유효기간이 지난 할인권입니다.\n사용하실 수 없습니다.' };
     }
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from('customer_rewards')
       .update({
         status: 'used',
@@ -800,10 +800,16 @@ export async function confirmRewardUse(
         used_store_id: storeId,
       })
       .eq('id', customerRewardId)
-      .neq('status', 'used');
+      .neq('status', 'used')
+      .select('id');
 
     if (error) {
       return { success: false, error: '처리 중 오류가 발생했습니다.' };
+    }
+
+    if (!updated || updated.length === 0) {
+      // 이 요청이 처리되기 전에 다른 곳(다른 매장 등)에서 이미 사용 처리됨
+      return { success: false, error: '이미 사용된 할인권입니다.' };
     }
 
     return { success: true };
