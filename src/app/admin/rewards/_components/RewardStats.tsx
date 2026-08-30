@@ -811,7 +811,9 @@ function AmountByStoreSection() {
                                     <tr key={`${b.amount}_${b.source}`} className="border-b border-[#EDE9DE] last:border-0">
                                       <td className="py-1.5 text-[#333]">
                                         {b.amount.toLocaleString()}원
-                                        <span className="ml-1 text-xs text-[#8C8C80]">{b.source === 'birthday' ? '(생일)' : '(방문)'}</span>
+                                        <span className="ml-1 text-xs text-[#8C8C80]">
+                                          {b.source === 'birthday' ? '(생일)' : b.source === 'comeback' ? '(컴백)' : '(방문)'}
+                                        </span>
                                       </td>
                                       <td className="py-1.5 text-right text-[#6B6B5E]">{b.count}건</td>
                                     </tr>

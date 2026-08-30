@@ -695,10 +695,10 @@ export interface RewardItem {
   id: string;
   /** 할인 금액(원) */
   amount: number;
-  /** 이 할인권이 해당하는 방문 횟수 기준. 생일축하 쿠폰이면 의미 없음(0) */
+  /** 이 할인권이 해당하는 방문 횟수 기준. 생일·컴백 쿠폰이면 의미 없음(0) */
   thresholdVisits: number;
-  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) */
-  source: 'visit' | 'birthday';
+  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) | 'comeback'(컴백 쿠폰) */
+  source: 'visit' | 'birthday' | 'comeback';
   status: RewardStatus;
   issuedAt: string;
   usedAt: string | null;
@@ -753,7 +753,7 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       id: cr.id,
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
-      source: (cr.source as 'visit' | 'birthday') ?? 'visit',
+      source: (cr.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
       status: cr.status,
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,

@@ -29,11 +29,20 @@ const REWARD_CARD_STYLES = {
     borderTop: 'border-[#BFE0C8]',
     subText: 'text-[#1F4A2E]',
   },
+  comeback: {
+    usableBg: 'bg-[#FFEADB] border-[#F0BE94] shadow-sm',
+    accentText: 'text-[#B2560C]',
+    borderTop: 'border-[#F0BE94]',
+    subText: 'text-[#9C4A0A]',
+  },
 } as const;
 
 function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; kind: keyof typeof REWARD_CARD_STYLES } {
   if (reward.source === 'birthday') {
     return { text: '생일 축하 선물', icon: <span className="text-2xl leading-none mt-0.5">🎂</span>, kind: 'birthday' };
+  }
+  if (reward.source === 'comeback') {
+    return { text: '다시 만나 반가워요 선물', icon: <span className="text-2xl leading-none mt-0.5">🧡</span>, kind: 'comeback' };
   }
   const tier = getTierUpDefinition(reward.thresholdVisits);
   if (tier) {

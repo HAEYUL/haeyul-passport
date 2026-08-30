@@ -16,6 +16,11 @@ export const REWARD_EXPIRY_MONTHS = 6;
 export const BIRTHDAY_COUPON_AMOUNT = 5000;      // 할인 금액(원)
 export const BIRTHDAY_COUPON_VALID_DAYS = 30;    // 유효기간(발급일로부터, 일)
 
+// 컴백(장기 미방문 복귀 유도) 쿠폰
+export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기간(일)이 지나면 발급 대상
+export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
+export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
+
 // 감사 로그 액션
 export const AUDIT_ACTION = {
   VISIT_CANCEL: 'visit_cancel',
@@ -36,4 +41,5 @@ export const AUDIT_ACTION = {
   STORE_LOCATION_UPDATE: 'store_location_update',
   SMS_SEND: 'sms_send',
   BIRTHDAY_COUPON_ISSUE: 'birthday_coupon_issue',
+  COMEBACK_COUPON_ISSUE: 'comeback_coupon_issue',
 } as const;

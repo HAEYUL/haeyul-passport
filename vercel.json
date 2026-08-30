@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/issue-birthday-coupons",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/issue-comeback-coupons",
+      "schedule": "0 1 * * *"
     }
   ]
 }

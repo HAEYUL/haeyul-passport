@@ -395,7 +395,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
 
 export interface RewardAmountBreakdownItem {
   amount: number;
-  source: 'visit' | 'birthday';
+  source: 'visit' | 'birthday' | 'comeback';
   count: number;
 }
 
@@ -442,7 +442,7 @@ export async function getRewardAmountByStore(
 
     const issuedQuery = supabase
       .from('customer_rewards')
-      .select('amount, issued_store_id')
+      .select('amount, source, issued_store_id')
       .not('reward_rule_id', 'is', null)
       .gte('issued_at', fromISO)
       .lte('issued_at', toISO);
@@ -464,12 +464,15 @@ export async function getRewardAmountByStore(
     }
 
     const issuedMap = new Map<string, { amount: number; count: number }>();
-    let birthdayIssuedAmount = 0;
-    let birthdayIssuedCount = 0;
+    // 생일·컴백 쿠폰은 특정 매장 없이 발급되므로 source별로 따로 집계합니다.
+    const noStoreIssuedMap = new Map<string, { amount: number; count: number }>();
     for (const r of issuedRows || []) {
       if (!r.issued_store_id) {
-        birthdayIssuedAmount += r.amount ?? 0;
-        birthdayIssuedCount += 1;
+        const key = r.source ?? 'birthday';
+        const cur = noStoreIssuedMap.get(key) || { amount: 0, count: 0 };
+        cur.amount += r.amount ?? 0;
+        cur.count += 1;
+        noStoreIssuedMap.set(key, cur);
         continue;
       }
       const cur = issuedMap.get(r.issued_store_id) || { amount: 0, count: 0 };
@@ -488,7 +491,7 @@ export async function getRewardAmountByStore(
       usedMap.set(r.used_store_id, cur);
 
       const amount = r.amount ?? 0;
-      const source = (r.source as 'visit' | 'birthday') ?? 'visit';
+      const source = (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit';
       const breakdownKey = `${amount}_${source}`;
       const storeBreakdown = usedBreakdownMap.get(r.used_store_id) || new Map();
       const item = storeBreakdown.get(breakdownKey) || { amount, source, count: 0 };
@@ -507,12 +510,16 @@ export async function getRewardAmountByStore(
       usedBreakdown: [...(usedBreakdownMap.get(s.id)?.values() ?? [])].sort((a, b) => a.amount - b.amount),
     }));
 
-    if (birthdayIssuedCount > 0) {
+    const noStoreLabels: Record<string, string> = {
+      birthday: '생일쿠폰(매장무관 발급)',
+      comeback: '컴백쿠폰(매장무관 발급)',
+    };
+    for (const [source, agg] of noStoreIssuedMap) {
       result.push({
-        storeId: 'birthday',
-        storeName: '생일쿠폰(매장무관 발급)',
-        issuedAmount: birthdayIssuedAmount,
-        issuedCount: birthdayIssuedCount,
+        storeId: source,
+        storeName: noStoreLabels[source] ?? `${source}(매장무관 발급)`,
+        issuedAmount: agg.amount,
+        issuedCount: agg.count,
         usedAmount: 0,
         usedCount: 0,
         usedBreakdown: [],
@@ -2084,7 +2091,7 @@ export interface CustomerRewardItem {
   id: string;
   amount: number;
   thresholdVisits: number;
-  source: 'visit' | 'birthday';
+  source: 'visit' | 'birthday' | 'comeback';
   status: RewardStatus;
   issuedAt: string;
   requestedAt: string | null;
@@ -2166,7 +2173,7 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
           id: r.id,
           amount: r.amount ?? 0,
           thresholdVisits: r.threshold_visits ?? 0,
-          source: (r.source as 'visit' | 'birthday') ?? 'visit',
+          source: (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
           status: r.status,
           issuedAt: r.issued_at,
           requestedAt: r.requested_at,
