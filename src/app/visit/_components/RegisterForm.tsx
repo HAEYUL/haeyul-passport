@@ -23,10 +23,16 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 개인정보 필수 동의는 기본 체크, 마케팅 선택 동의는 기본 미체크(옵트인)로 시작합니다.
-  const [privacyConsent, setPrivacyConsent] = useState(true);
+  // 필수·선택 동의 모두 기본 미체크(옵트인)로 시작하며, "모두 동의합니다"로 한 번에 묶어 체크할 수 있습니다.
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
+  const allConsent = privacyConsent && marketingConsent;
+
+  function handleAllConsentChange(checked: boolean) {
+    setPrivacyConsent(checked);
+    setMarketingConsent(checked);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -145,8 +151,22 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
           {/* 구분선 */}
           <hr className="border-[#E8E4DA]" />
 
-          {/* 개인정보 동의 (필수) */}
+          {/* 전체 동의 */}
           <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-[#F5F5EC] rounded-xl px-4 py-3">
+              <input
+                id="check-all"
+                type="checkbox"
+                checked={allConsent}
+                onChange={(e) => handleAllConsentChange(e.target.checked)}
+                className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+              />
+              <label htmlFor="check-all" className="text-[16px] font-semibold text-[#333] cursor-pointer">
+                모두 동의합니다
+              </label>
+            </div>
+
+            {/* 개인정보 동의 (필수) */}
             <div className="flex items-start gap-3">
               <input
                 id="check-privacy"
