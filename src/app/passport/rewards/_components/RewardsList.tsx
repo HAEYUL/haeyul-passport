@@ -31,6 +31,7 @@ export default function RewardsList() {
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [confirmingReward, setConfirmingReward] = useState<RewardItem | null>(null);
 
   const fetchRewards = useCallback(async () => {
     const result = await getRewards();
@@ -48,7 +49,11 @@ export default function RewardsList() {
     window.location.href = '/passport';
   }
 
-  async function handleConfirm(id: string) {
+  async function handleConfirmUse() {
+    if (!confirmingReward) return;
+    const id = confirmingReward.id;
+
+    setConfirmingReward(null);
     setActionLoadingId(id);
     setError('');
 
@@ -159,7 +164,7 @@ export default function RewardsList() {
 
                   {isUsable && (
                     <button
-                      onClick={() => handleConfirm(reward.id)}
+                      onClick={() => setConfirmingReward(reward)}
                       disabled={actionLoadingId === reward.id}
                       className="w-full min-h-[52px] py-3 px-4 bg-[#2D5A3D] text-white text-base font-bold rounded-xl
                                  shadow-sm hover:bg-[#245032] active:scale-[0.98]
@@ -176,6 +181,40 @@ export default function RewardsList() {
 
         <div className="pb-8" />
       </div>
+
+      {/* 할인권 사용 확인 모달 */}
+      {confirmingReward && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-6 py-8">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 space-y-5 shadow-lg">
+            <div className="space-y-2">
+              <p className="text-xl font-bold text-[#2D5A3D]">
+                {confirmingReward.amount.toLocaleString()}원 할인권을 사용하시겠습니까?
+              </p>
+              <p className="text-[15px] font-medium text-[#7A4A16] bg-[#FFF3E4] border border-[#EAC28E] rounded-xl px-4 py-3">
+                사용 후에는 취소할 수 없습니다.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmingReward(null)}
+                className="flex-1 min-h-[52px] py-3 px-4 bg-white text-[#55534A] text-base font-bold rounded-xl
+                           border-2 border-[#D4D0C8] active:scale-[0.98] transition-all duration-200"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUse}
+                className="flex-1 min-h-[52px] py-3 px-4 bg-[#2D5A3D] text-white text-base font-bold rounded-xl
+                           shadow-sm hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
+              >
+                사용 확정
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
