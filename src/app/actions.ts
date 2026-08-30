@@ -14,6 +14,9 @@ const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니�
 const OUTSIDE_STORE_HOURS_ERROR =
   `지금은 매장 운영시간이 아닙니다.\n매일 오전 ${STORE_OPEN_HOUR}시~오후 ${STORE_CLOSE_HOUR - 12}시에 이용해 주세요.`;
 
+// TEMP: GPS 위치 제한 임시 비활성화 (요청에 따른 일시 조치, 테스트 후 false로 되돌릴 것)
+const LOCATION_CHECK_DISABLED = true;
+
 /**
  * QR로 확인된 매장의 좌표를 조회하고, 클라이언트 좌표와 비교해 위치 확인 결과를 판정합니다.
  * 반경 밖으로 확인된 경우(status: 'failed') 호출부에서 등록 자체를 막아야 합니다.
@@ -24,6 +27,10 @@ async function checkStoreLocation(
   clientLat: number | null,
   clientLng: number | null
 ) {
+  if (LOCATION_CHECK_DISABLED) {
+    return { status: 'unavailable' as const, distanceMeters: null };
+  }
+
   const { data: store } = await supabase
     .from('stores')
     .select('latitude, longitude, radius_meters')
