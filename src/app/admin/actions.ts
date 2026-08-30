@@ -2716,3 +2716,65 @@ export async function sendSmsToCustomers(
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
+
+// ============================================================
+// 활동 이력 (감사 로그)
+// ============================================================
+
+export interface AuditLogItem {
+  id: string;
+  adminUsername: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * 최근 관리자/시스템 활동 이력을 조회합니다.
+ * 방문취소·할인권복구·고객삭제·회원탈퇴·QR재발행·SMS발송 등은 각 처리 시점에
+ * 이미 audit_logs에 기록되고 있으며, 이 함수는 그 기록을 읽어오기만 합니다.
+ */
+export async function getAuditLogs(limit = 100): Promise<ApiResponse<AuditLogItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select('id, admin_id, action, target_type, target_id, reason, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      return { success: false, error: '활동 이력을 불러올 수 없습니다.' };
+    }
+
+    const adminIds = [...new Set((logs || []).map((l) => l.admin_id).filter((id): id is string => !!id))];
+    const adminUsernameMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase.from('admin_users').select('id, username').in('id', adminIds);
+      (admins || []).forEach((a) => adminUsernameMap.set(a.id, a.username));
+    }
+
+    const result: AuditLogItem[] = (logs || []).map((l) => ({
+      id: l.id,
+      adminUsername: l.admin_id ? adminUsernameMap.get(l.admin_id) ?? null : null,
+      action: l.action,
+      targetType: l.target_type,
+      targetId: l.target_id,
+      reason: l.reason,
+      createdAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getAuditLogs 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
