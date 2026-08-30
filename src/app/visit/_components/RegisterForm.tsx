@@ -23,9 +23,9 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 개인정보 동의 체크 (기본 동의 상태로 시작하며, 원하지 않으면 직접 체크를 해제합니다)
+  // 개인정보 필수 동의는 기본 체크, 마케팅 선택 동의는 기본 미체크(옵트인)로 시작합니다.
   const [privacyConsent, setPrivacyConsent] = useState(true);
-  const [marketingConsent, setMarketingConsent] = useState(true);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
