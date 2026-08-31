@@ -8,11 +8,16 @@ import {
   updateCustomer,
   deleteCustomer,
   updateCustomerAdminNote,
+  getCustomerSmsHistory,
+  getCustomerAuditHistory,
   type CustomerDetail as CustomerDetailData,
+  type CustomerSmsHistoryItem,
+  type CustomerAuditHistoryItem,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getVisitTierInfo } from '@/lib/tiers';
 import { getStoreAdminColor } from '@/lib/storeColors';
+import { AUDIT_ACTION_LABELS } from '@/lib/constants';
 
 interface CustomerDetailProps {
   customerId: string;
@@ -67,6 +72,9 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState('');
 
+  const [smsHistory, setSmsHistory] = useState<CustomerSmsHistoryItem[] | null>(null);
+  const [auditHistory, setAuditHistory] = useState<CustomerAuditHistoryItem[] | null>(null);
+
   const fetchDetail = useCallback(async () => {
     const result = await getCustomerDetail(customerId);
     if (result.success && result.data) {
@@ -75,6 +83,19 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
       setError(result.error || '고객 정보를 불러올 수 없습니다.');
     }
   }, [customerId]);
+
+  const fetchHistory = useCallback(async () => {
+    const [smsResult, auditResult] = await Promise.all([
+      getCustomerSmsHistory(customerId),
+      getCustomerAuditHistory(customerId),
+    ]);
+    if (smsResult.success && smsResult.data) setSmsHistory(smsResult.data);
+    if (auditResult.success && auditResult.data) setAuditHistory(auditResult.data);
+  }, [customerId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   useEffect(() => {
     fetchDetail();
@@ -483,6 +504,59 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       </li>
                     );
                   })}
+                </ul>
+              )}
+            </div>
+
+            {/* 문자 발송 이력 */}
+            <div className="space-y-2">
+              <h2 className="text-base font-semibold text-[#555]">문자 발송 이력</h2>
+              {!smsHistory ? (
+                <div className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+              ) : smsHistory.length === 0 ? (
+                <p className="text-[15px] text-[#6B6B5E] py-2">발송된 문자가 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {smsHistory.map((s) => (
+                    <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#2D5A3D]">
+                          {AUDIT_ACTION_LABELS[s.action] || s.action}
+                        </span>
+                        <span className="text-xs text-[#6B6B5E]">{formatDateKR(s.sentAt)}</span>
+                      </div>
+                      {s.message && (
+                        <p className="mt-1 text-sm text-[#555] whitespace-pre-line">{s.message}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* 정보 변경 이력 */}
+            <div className="space-y-2">
+              <h2 className="text-base font-semibold text-[#555]">정보 변경 이력</h2>
+              {!auditHistory ? (
+                <div className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+              ) : auditHistory.length === 0 ? (
+                <p className="text-[15px] text-[#6B6B5E] py-2">변경 이력이 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {auditHistory.map((a) => (
+                    <li key={a.id} className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#2D5A3D]">
+                          {AUDIT_ACTION_LABELS[a.action] || a.action}
+                        </span>
+                        <span className="text-xs text-[#6B6B5E]">{formatDateKR(a.createdAt)}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-[#6B6B5E]">
+                        {a.adminUsername ? `처리자: ${a.adminUsername}` : '처리자: 시스템'}
+                        {a.reason && ` · ${a.reason}`}
+                      </p>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>

@@ -136,6 +136,10 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     title: '생년월일 미입력 고객',
     description: '생년월일을 등록하지 않아 생일쿠폰을 받을 수 없는 고객 목록입니다. 등록을 유도하는 안내 문자에 활용하세요.',
   },
+  tierUpThisMonth: {
+    title: '이번달 등급 승급 고객',
+    description: '이번 달에 등급이 올라(5·10·20·30회) 등급 업그레이드 축하 선물을 받은 고객 목록입니다.',
+  },
 };
 
 const LONG_ABSENT_DAY_OPTIONS = [30, 60, 90] as const;
@@ -152,7 +156,8 @@ function isCustomerListFilter(value: string | null): value is CustomerListFilter
     value === 'tier' ||
     value === 'birthdayThisMonth' ||
     value === 'visitedStore' ||
-    value === 'missingBirthDate'
+    value === 'missingBirthDate' ||
+    value === 'tierUpThisMonth'
   );
 }
 
@@ -383,6 +388,16 @@ export default function CustomerList() {
               }`}
             >
               🎈 생일 미입력
+            </Link>
+            <Link
+              href="/admin/customers?filter=tierUpThisMonth"
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
+                filter === 'tierUpThisMonth'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
+              }`}
+            >
+              🎉 이번달 등급승급
             </Link>
           </div>
         )}

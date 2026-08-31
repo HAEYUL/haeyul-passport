@@ -1070,6 +1070,7 @@ export interface CustomerListItem {
  * - visitedStore: storeId 매장을 한 번이라도 방문한 고객 (가입 매장과 무관 — 신메뉴 안내 등
  *   특정 매장 방문객 전체에게 안내할 때 사용. storeId가 없으면 빈 목록)
  * - missingBirthDate: 생년월일을 등록하지 않은 고객 (생일쿠폰을 받을 수 없는 고객 — 등록 유도 안내용)
+ * - tierUpThisMonth: 이번 달에 등급이 승급(5·10·20·30회 등급 축하 할인권 발급)된 고객
  */
 export type CustomerListFilter =
   | 'all'
@@ -1082,7 +1083,8 @@ export type CustomerListFilter =
   | 'tier'
   | 'birthdayThisMonth'
   | 'visitedStore'
-  | 'missingBirthDate';
+  | 'missingBirthDate'
+  | 'tierUpThisMonth';
 
 export async function getCustomerList(
   query: string,
@@ -1161,6 +1163,18 @@ export async function getCustomerList(
         .eq('is_active', true)
         .is('birth_date', null);
       idFilter = (customersWithoutBirthDate || []).map((c) => c.id);
+    } else if (filter === 'tierUpThisMonth') {
+      const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
+      const tierUpThresholds = getAllTiers()
+        .filter((t) => t.minVisits > 1)
+        .map((t) => t.minVisits);
+      const { data: tierUpRewards } = await supabase
+        .from('customer_rewards')
+        .select('customer_id')
+        .in('threshold_visits', tierUpThresholds)
+        .not('reward_rule_id', 'is', null)
+        .gte('issued_at', monthStart);
+      idFilter = [...new Set((tierUpRewards || []).map((r) => r.customer_id))];
     }
 
     if (idFilter && idFilter.length === 0) {
@@ -2156,6 +2170,104 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
   }
 }
 
+export interface CustomerSmsHistoryItem {
+  id: string;
+  action: string;
+  message: string | null;
+  sentAt: string;
+}
+
+/**
+ * 이 고객에게 발송된 문자 이력 (수동 대량발송, 생일쿠폰, 컴백쿠폰 자동발송 포함).
+ * 각 발송의 audit_logs.after_data.customerIds 배열에 이 고객 ID가 포함돼 있는지로 찾습니다.
+ */
+export async function getCustomerSmsHistory(customerId: string): Promise<ApiResponse<CustomerSmsHistoryItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('id, action, after_data, created_at')
+      .in('action', [AUDIT_ACTION.SMS_SEND, AUDIT_ACTION.BIRTHDAY_COUPON_ISSUE, AUDIT_ACTION.COMEBACK_COUPON_ISSUE])
+      .contains('after_data', { customerIds: [customerId] })
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      return { success: false, error: '문자 발송 이력을 불러올 수 없습니다.' };
+    }
+
+    const result: CustomerSmsHistoryItem[] = (data || []).map((l) => ({
+      id: l.id,
+      action: l.action,
+      message: (l.after_data as { message?: string } | null)?.message ?? null,
+      sentAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getCustomerSmsHistory 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface CustomerAuditHistoryItem {
+  id: string;
+  action: string;
+  adminUsername: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * 이 고객의 정보 변경 이력 (수정/삭제/탈퇴 등, target_type='customer' 기준).
+ */
+export async function getCustomerAuditHistory(customerId: string): Promise<ApiResponse<CustomerAuditHistoryItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('id, admin_id, action, reason, created_at')
+      .eq('target_type', 'customer')
+      .eq('target_id', customerId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      return { success: false, error: '변경 이력을 불러올 수 없습니다.' };
+    }
+
+    const adminIds = [...new Set((data || []).map((l) => l.admin_id).filter((id): id is string => !!id))];
+    const adminUsernameMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase.from('admin_users').select('id, username').in('id', adminIds);
+      (admins || []).forEach((a) => adminUsernameMap.set(a.id, a.username));
+    }
+
+    const result: CustomerAuditHistoryItem[] = (data || []).map((l) => ({
+      id: l.id,
+      action: l.action,
+      adminUsername: l.admin_id ? adminUsernameMap.get(l.admin_id) ?? null : null,
+      reason: l.reason,
+      createdAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getCustomerAuditHistory 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 // ============================================================
 // 고객 정보 수정 / 삭제
 // ============================================================
@@ -2857,6 +2969,7 @@ export async function sendSmsToCustomers(
         successCount: sendResult.successCount,
         errorCount: sendResult.errorCount,
         message: finalMessage,
+        customerIds: validTargets.map((c) => c.id),
       },
     });
 

@@ -113,7 +113,12 @@ export async function GET(request: Request) {
       target_type: 'system',
       target_id: null,
       before_data: null,
-      after_data: { issuedCount: toIssue.length, smsSuccessCount },
+      after_data: {
+        issuedCount: toIssue.length,
+        smsSuccessCount,
+        customerIds: toIssue.map((c) => c.id),
+        message,
+      },
       reason: `${todayKST} 생일축하 쿠폰 자동 발급`,
     });
 

@@ -2,27 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getAuditLogs, type AuditLogItem } from '@/app/admin/actions';
-
-const ACTION_LABELS: Record<string, string> = {
-  visit_cancel: '방문 취소',
-  visit_add: '방문 추가',
-  reward_restore: '할인권 복구',
-  reward_catalog_update: '할인권 카탈로그 수정',
-  reward_rule_create: '할인권 규칙 생성',
-  reward_rule_update: '할인권 규칙 수정',
-  reward_rule_delete: '할인권 규칙 삭제',
-  employee_create: '직원 등록',
-  employee_update: '직원 정보 수정',
-  table_create: '테이블 등록',
-  table_update: '테이블 정보 수정',
-  customer_update: '고객 정보 수정',
-  customer_delete: '고객 삭제(관리자)',
-  customer_withdraw: '회원 탈퇴(고객 본인)',
-  qr_reissue: 'QR 재발행',
-  store_location_update: '매장 위치 설정 변경',
-  sms_send: '문자 발송',
-  birthday_coupon_issue: '생일축하 쿠폰 자동발급',
-};
+import { AUDIT_ACTION_LABELS as ACTION_LABELS } from '@/lib/constants';
 
 function formatDateTimeKR(iso: string): string {
   return new Date(iso).toLocaleString('ko-KR', {
