@@ -42,6 +42,28 @@ export default function PassportHome() {
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installMessage, setInstallMessage] = useState('');
+  const [showScrollHint, setShowScrollHint] = useState(false);
+
+  // 화면이 한 번에 안 보이고 스크롤이 필요할 때만, 하단에 "더 있음" 표시를 보여줍니다.
+  // 스크롤을 시작하면(내용을 이미 인지했다고 보고) 자동으로 사라집니다.
+  useEffect(() => {
+    function checkScrollable() {
+      setShowScrollHint(document.documentElement.scrollHeight > window.innerHeight + 40);
+    }
+    const timer = setTimeout(checkScrollable, 100);
+    function handleScroll() {
+      if (window.scrollY > 24) {
+        setShowScrollHint(false);
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', checkScrollable);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', checkScrollable);
+    };
+  }, [data]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -497,6 +519,20 @@ export default function PassportHome() {
           </div>
         </footer>
       </div>
+
+      {showScrollHint && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-x-0 bottom-0 z-30 flex justify-center pb-3 pt-10 pointer-events-none"
+          style={{ background: 'linear-gradient(to bottom, rgba(250,250,245,0) 0%, rgba(250,250,245,0.95) 55%)' }}
+        >
+          <div className="w-10 h-10 rounded-full bg-white shadow-md border border-[#E8E4DA] flex items-center justify-center animate-bounce">
+            <svg className="w-5 h-5 text-[#2D5A3D]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
