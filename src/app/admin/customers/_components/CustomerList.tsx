@@ -54,6 +54,10 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     title: '이번달 생일 고객',
     description: '이번 달이 생일인 고객 목록입니다.',
   },
+  visitedStore: {
+    title: '매장별 방문 고객',
+    description: '위에서 매장을 선택하면, 가입 매장과 무관하게 그 매장을 한 번이라도 방문한 고객 전체를 볼 수 있습니다. (신메뉴 안내 등 매장별 문자 발송에 사용)',
+  },
 };
 
 const LONG_ABSENT_DAY_OPTIONS = [30, 60, 90] as const;
@@ -68,7 +72,8 @@ function isCustomerListFilter(value: string | null): value is CustomerListFilter
     value === 'vip' ||
     value === 'longAbsent' ||
     value === 'tier' ||
-    value === 'birthdayThisMonth'
+    value === 'birthdayThisMonth' ||
+    value === 'visitedStore'
   );
 }
 
@@ -267,6 +272,16 @@ export default function CustomerList() {
             >
               🎂 이번달 생일
             </Link>
+            <Link
+              href="/admin/customers?filter=visitedStore"
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
+                filter === 'visitedStore'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
+              }`}
+            >
+              🏪 매장별 방문자
+            </Link>
           </div>
         )}
 
@@ -369,7 +384,11 @@ export default function CustomerList() {
               </div>
             ) : customers.length === 0 ? (
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
-                <p className="text-[15px] text-[#6B6B5E]">검색 결과가 없습니다.</p>
+                <p className="text-[15px] text-[#6B6B5E]">
+                  {filter === 'visitedStore' && !storeId
+                    ? '위에서 매장을 선택해 주세요.'
+                    : '검색 결과가 없습니다.'}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">

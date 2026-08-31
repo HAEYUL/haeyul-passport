@@ -1061,6 +1061,8 @@ export interface CustomerListItem {
  * - longAbsent: 최근 방문일로부터 일정 기간 이상 방문이 없는 고객
  * - tier: 특정 방문 등급(tierKey)에 해당하는 고객
  * - birthdayThisMonth: 이번 달이 생일인 고객
+ * - visitedStore: storeId 매장을 한 번이라도 방문한 고객 (가입 매장과 무관 — 신메뉴 안내 등
+ *   특정 매장 방문객 전체에게 안내할 때 사용. storeId가 없으면 빈 목록)
  */
 export type CustomerListFilter =
   | 'all'
@@ -1071,7 +1073,8 @@ export type CustomerListFilter =
   | 'vip'
   | 'longAbsent'
   | 'tier'
-  | 'birthdayThisMonth';
+  | 'birthdayThisMonth'
+  | 'visitedStore';
 
 export async function getCustomerList(
   query: string,
@@ -1132,6 +1135,17 @@ export async function getCustomerList(
       idFilter = (customers || [])
         .filter((c) => c.birth_date && c.birth_date.slice(5, 7) === currentMonth)
         .map((c) => c.id);
+    } else if (filter === 'visitedStore') {
+      if (!storeId) {
+        idFilter = [];
+      } else {
+        const { data: visits } = await supabase
+          .from('visits')
+          .select('customer_id')
+          .eq('store_id', storeId)
+          .eq('is_cancelled', false);
+        idFilter = [...new Set((visits || []).map((v) => v.customer_id))];
+      }
     }
 
     if (idFilter && idFilter.length === 0) {
@@ -1149,7 +1163,7 @@ export async function getCustomerList(
       request = request.in('id', idFilter);
     }
 
-    if (storeId) {
+    if (storeId && filter !== 'visitedStore') {
       request = request.eq('signup_store_id', storeId);
     }
 
