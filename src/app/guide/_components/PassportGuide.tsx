@@ -1,13 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getRewardCatalog, type RewardRuleCatalogItem } from '@/app/actions';
-import { getAllTiers } from '@/lib/tiers';
+import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
 
 const tiers = getAllTiers();
+
+/**
+ * 방문 할인권 카드를 종류별로 다르게 보이게 하기 위한 스타일 세트.
+ * 기본 방문 할인권(노랑) / 등급업 축하 할인권(그린) / VIP 축하쿠폰(퍼플)을 구분합니다.
+ */
+const REWARD_CATALOG_STYLES = {
+  default: { bg: 'bg-[#FFF3D6] border-[#F0D98C]', accent: 'text-[#8A5800]' },
+  tierUp: { bg: 'bg-[#E9F3EC] border-[#BFE0C8]', accent: 'text-[#1F4A2E]' },
+  vip: { bg: 'bg-[#F1EAFB] border-[#D2BFF0]', accent: 'text-[#5B3A96]' },
+} as const;
+
+function getCatalogCardInfo(r: RewardRuleCatalogItem): {
+  kind: keyof typeof REWARD_CATALOG_STYLES;
+  label: string | null;
+  icon: ReactNode;
+} {
+  if (r.isRepeating) {
+    return { kind: 'vip', label: null, icon: <span className="text-2xl leading-none">👑</span> };
+  }
+  const tier = getTierUpDefinition(r.thresholdVisits);
+  if (tier?.key === 'vip') {
+    return { kind: 'vip', label: 'VIP 축하쿠폰', icon: <span className="text-2xl leading-none">👑</span> };
+  }
+  if (tier) {
+    return {
+      kind: 'tierUp',
+      label: '등급업 축하 할인권',
+      icon: <Image src={tier.iconSrc} alt="" width={28} height={28} />,
+    };
+  }
+  return { kind: 'default', label: null, icon: <span className="text-2xl leading-none">🎫</span> };
+}
 
 export default function PassportGuide() {
   const router = useRouter();
@@ -89,24 +121,31 @@ export default function PassportGuide() {
             </div>
           ) : (
             <ul className="space-y-2.5">
-              {rewards.map((r) => (
-                <li
-                  key={r.thresholdVisits}
-                  className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-xl px-4 py-3.5 flex items-center gap-3"
-                >
-                  <span className="text-2xl leading-none">🎫</span>
-                  <p className="text-2xl font-extrabold text-[#8A5800] flex-1">{r.amount.toLocaleString()}원</p>
-                  <span className="flex-shrink-0 text-[15px] font-bold text-[#8A5800] text-right leading-snug">
-                    {r.isRepeating ? (
-                      <>
-                        해율VIP<br />{r.repeatInterval}회마다
-                      </>
-                    ) : (
-                      `${r.thresholdVisits}회`
-                    )}
-                  </span>
-                </li>
-              ))}
+              {rewards.map((r) => {
+                const { kind, label, icon } = getCatalogCardInfo(r);
+                const style = REWARD_CATALOG_STYLES[kind];
+                return (
+                  <li
+                    key={r.thresholdVisits}
+                    className={`${style.bg} border-2 rounded-xl px-4 py-3.5 flex items-center gap-3`}
+                  >
+                    {icon}
+                    <div className="flex-1">
+                      <p className={`text-2xl font-extrabold ${style.accent}`}>{r.amount.toLocaleString()}원</p>
+                      {label && <p className={`text-[13px] font-bold ${style.accent}`}>{label}</p>}
+                    </div>
+                    <span className={`flex-shrink-0 text-[15px] font-bold ${style.accent} text-right leading-snug`}>
+                      {r.isRepeating ? (
+                        <>
+                          해율VIP<br />{r.repeatInterval}회마다
+                        </>
+                      ) : (
+                        `${r.thresholdVisits}회`
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
           <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
