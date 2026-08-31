@@ -387,6 +387,9 @@ export default function PassportHome() {
                 매장 방문 확인이 필요합니다.<br />
                 매장의 QR코드를 다시 스캔해 주세요.
               </p>
+              <p className="mt-1 text-sm font-medium text-[#6B6B5E]">
+                QR 인증은 방문 당일 매장 영업시간까지만 유효해요.
+              </p>
             </div>
           )
         )}
@@ -432,6 +435,13 @@ export default function PassportHome() {
           {data.availableRewards > 0 && (
             <p className="text-[15px] font-semibold text-[#8A5800] text-center">
               지금 사용 가능한 할인권 {data.availableRewards}개가 있어요
+            </p>
+          )}
+
+          {data.soonExpiringReward && (
+            <p className="text-[15px] font-bold text-[#D4442A] text-center">
+              ⏰ {data.soonExpiringReward.amount.toLocaleString()}원 할인권이{' '}
+              {data.soonExpiringReward.daysLeft <= 0 ? '오늘' : `${data.soonExpiringReward.daysLeft}일 후`} 만료돼요
             </p>
           )}
         </div>
@@ -483,14 +493,20 @@ export default function PassportHome() {
                       {STORE_ADDRESSES[s.storeName] ?? ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
                     <p className="text-xl font-extrabold" style={{ color: accent.text }}>
                       {s.count}<span className="text-sm font-semibold">회</span>
                     </p>
                     {url && (
-                      <svg className="w-4 h-4" style={{ color: accent.text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                      </svg>
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-full bg-white border-2 px-2.5 py-1.5 text-xs font-bold whitespace-nowrap"
+                        style={{ borderColor: accent.border, color: accent.text }}
+                      >
+                        위치보기
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
                     )}
                   </div>
                 </>
@@ -541,6 +557,9 @@ export default function PassportHome() {
                 {installMessage}
               </p>
             )}
+            <p className="text-center text-xs text-[#8C8C80]">
+              © 2026 해율푸드. All rights reserved.
+            </p>
           </div>
         </footer>
       </div>

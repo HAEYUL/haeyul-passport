@@ -9,6 +9,7 @@ import {
   birthDigitsToISODate,
   toKSTDateString,
   addMonthsToDateString,
+  daysBetweenDateStrings,
 } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
@@ -364,6 +365,19 @@ export interface PassportData {
   rewardProgressMessage: string;
   /** 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함) */
   storeVisitBreakdown: StoreVisitCount[];
+  /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
+  soonExpiringReward: { amount: number; daysLeft: number } | null;
+}
+
+/** 할인권 만료 알림 기준(일). 이 기간 이내로 남으면 홈 화면에 임박 알림을 띄웁니다. */
+const REWARD_EXPIRY_WARNING_DAYS = 7;
+
+/** customer_rewards 행의 실제 만료일('YYYY-MM-DD')을 계산합니다. expires_at이 없으면 발급일+6개월. */
+function computeExpiryDateKST(issuedAt: string, expiresAt: string | null): string {
+  if (expiresAt) {
+    return toKSTDateString(expiresAt);
+  }
+  return addMonthsToDateString(toKSTDateString(issuedAt), REWARD_EXPIRY_MONTHS);
 }
 
 /**
@@ -456,12 +470,25 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     // 사용 가능한 할인권 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 할인권만 — 옛 실물 선물 기록은 제외)
     const { data: rewards } = await supabase
       .from('customer_rewards')
-      .select('id, status, issued_at')
+      .select('id, status, amount, issued_at, expires_at')
       .eq('customer_id', customer.id)
       .not('reward_rule_id', 'is', null)
       .neq('status', 'used');
 
-    const availableRewards = (rewards || []).filter((r) => !isRewardExpired(r.issued_at)).length;
+    const unexpiredRewards = (rewards || []).filter((r) => !isRewardExpiredAt(r.issued_at, r.expires_at));
+    const availableRewards = unexpiredRewards.length;
+
+    // 만료까지 REWARD_EXPIRY_WARNING_DAYS일 이내로 남은 할인권 중 가장 임박한 것
+    const todayForExpiry = getTodayKST();
+    let soonExpiringReward: { amount: number; daysLeft: number } | null = null;
+    for (const r of unexpiredRewards) {
+      const expiryDateKST = computeExpiryDateKST(r.issued_at, r.expires_at);
+      const daysLeft = daysBetweenDateStrings(todayForExpiry, expiryDateKST);
+      if (daysLeft <= REWARD_EXPIRY_WARNING_DAYS && (!soonExpiringReward || daysLeft < soonExpiringReward.daysLeft)) {
+        soonExpiringReward = { amount: r.amount ?? 0, daysLeft };
+      }
+    }
+
     const tier = getVisitTierInfo(customer.visit_count);
 
     // 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함)
@@ -500,6 +527,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         storeName,
         rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
         storeVisitBreakdown,
+        soonExpiringReward,
       },
     };
   } catch (error) {
