@@ -208,7 +208,7 @@ export default function PassportHome() {
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
-      <div className="w-full max-w-sm mx-auto space-y-4">
+      <div className="w-full max-w-sm mx-auto space-y-3">
         {/* 헤더 */}
         <header className="space-y-3">
           <div className="grid grid-cols-[3fr_auto_4fr] items-center gap-2">
@@ -236,7 +236,7 @@ export default function PassportHome() {
         </header>
 
         {/* 고객 정보 카드 */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-[#D4D0C8] space-y-2">
+        <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-[#2D5A3D]">
@@ -264,7 +264,7 @@ export default function PassportHome() {
         </div>
 
         {/* 등급 카드 (초록 계열) */}
-        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-4 flex items-center gap-3">
+        <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] rounded-2xl p-3 flex items-center gap-3">
           <Image
             src={data.tier.iconSrc}
             alt={data.tier.label}
@@ -299,13 +299,13 @@ export default function PassportHome() {
 
         {/* 오늘의 방문 / 메시지 영역 */}
         {visitMessage && (
-          <div className="bg-[#F0F7F2] border-2 border-[#C4DCC9] text-[#1F4A2E] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
+          <div className="bg-[#F0F7F2] border-2 border-[#8FC49F] text-[#1F4A2E] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
             {visitMessage}
           </div>
         )}
 
         {visitError && (
-          <div className="bg-[#FFF3E4] border-2 border-[#EAC28E] text-[#7A4A16] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line space-y-2">
+          <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line space-y-2">
             <p>{visitError}</p>
             {!data.todayVisited && (
               <button
@@ -320,7 +320,7 @@ export default function PassportHome() {
         )}
 
         {tierUpMessage && (
-          <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] px-5 py-4 rounded-2xl text-center space-y-2">
+          <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] px-4 py-3 rounded-2xl text-center space-y-2">
             <Image
               src={data.tier.iconSrc}
               alt={data.tier.label}
@@ -335,7 +335,7 @@ export default function PassportHome() {
         )}
 
         {newCouponAmounts.length > 0 && (
-          <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] px-5 py-4 rounded-2xl text-center space-y-2">
+          <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] px-4 py-3 rounded-2xl text-center space-y-2">
             <p className="text-xl font-extrabold text-[#8A5800]">🎉 축하드립니다!</p>
             <p className="text-[17px] font-semibold text-[#5A3E00] leading-relaxed">
               새로운 할인권이 도착했습니다.<br />
@@ -348,7 +348,7 @@ export default function PassportHome() {
         {/* 방문 확인 및 기록 */}
         {!data.todayVisited && !visitMessage && (
           data.qrVerified ? (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-[#D4D0C8] text-center space-y-3">
+            <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] text-center space-y-2">
               <p className="text-[17px] font-semibold text-[#1F4A2E] leading-relaxed">
                 {data.storeName ?? '매장'} 방문이 확인되었습니다.<br />
                 오늘의 방문을 기록하시겠습니까?
@@ -375,7 +375,7 @@ export default function PassportHome() {
               </button>
             </div>
           ) : (
-            <div className="text-center py-4 px-4 bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl">
+            <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
               <p className="text-[17px] font-semibold text-[#44443C] leading-relaxed">
                 매장 방문 확인이 필요합니다.<br />
                 매장의 QR코드를 다시 스캔해 주세요.
@@ -385,7 +385,7 @@ export default function PassportHome() {
         )}
 
         {data.todayVisited && !visitMessage && (
-          <div className="text-center py-4 px-4 bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl">
+          <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
             <p className="text-[17px] font-semibold text-[#1F4A2E]">
               ✅ 오늘의 자연이 이미 기록되었습니다.
             </p>
@@ -396,7 +396,7 @@ export default function PassportHome() {
         )}
 
         {/* 다음 혜택까지 카드 (주황/노랑 계열) */}
-        <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-2xl p-4 space-y-3">
+        <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] rounded-2xl p-3 space-y-2">
           {data.tier.isMaxTier ? (
             <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
               {data.customer.visit_count === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE}
@@ -407,7 +407,7 @@ export default function PassportHome() {
                 <span>{data.tier.label}</span>
                 <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회</span>
               </div>
-              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#F0D98C]">
+              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#DFBE5C]">
                 <div
                   className="h-full bg-[#D99A2B] rounded-full transition-all duration-500"
                   style={{ width: `${data.tier.progressPercent}%` }}
@@ -484,7 +484,7 @@ export default function PassportHome() {
         )}
 
         {/* 하단 문구 */}
-        <footer className="pt-4 border-t border-[#E8E4DA] space-y-4">
+        <footer className="pt-3 border-t border-[#E8E4DA] space-y-3">
           <p className="text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
             봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
             가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
