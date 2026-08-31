@@ -397,7 +397,8 @@ async function getRewardProgressMessage(
     .from('reward_rules')
     .select('id, threshold_visits, amount, is_repeating, repeat_interval')
     .eq('is_active', true)
-    .eq('is_birthday', false);
+    .eq('is_birthday', false)
+    .eq('is_comeback', false);
 
   const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
     id: r.id,
@@ -1010,6 +1011,7 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
       .select('threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
       .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {

@@ -322,6 +322,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       .select('id, threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
       .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (rulesError) {
@@ -839,6 +840,7 @@ export async function getRewardRules(): Promise<ApiResponse<RewardRuleAdminItem[
       .from('reward_rules')
       .select('id, threshold_visits, amount, is_repeating, repeat_interval, is_active')
       .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
