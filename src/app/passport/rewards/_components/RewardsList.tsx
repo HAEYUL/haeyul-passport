@@ -208,6 +208,7 @@ export default function RewardsList() {
                       발급일: {formatDateKR(reward.issuedAt)}
                       {reward.issuedStoreName && ` · ${reward.issuedStoreName}`}
                     </p>
+                    {isUsable && <p>유효기간: {formatDateKR(reward.expiresAt)}까지</p>}
                     {reward.status === 'used' && reward.usedAt && (
                       <p>
                         사용일: {formatDateKR(reward.usedAt)}

@@ -737,6 +737,8 @@ export interface RewardItem {
   usedStoreName: string | null;
   /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 30일) */
   isExpired: boolean;
+  /** 유효기간 만료일('YYYY-MM-DD', KST) */
+  expiresAt: string;
 }
 
 /**
@@ -789,6 +791,7 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       issuedStoreName: cr.issued_store_id ? storeNameMap[cr.issued_store_id] || '-' : null,
       usedStoreName: cr.used_store_id ? storeNameMap[cr.used_store_id] || '-' : null,
       isExpired: cr.status !== 'used' && isRewardExpiredAt(cr.issued_at, cr.expires_at),
+      expiresAt: computeExpiryDateKST(cr.issued_at, cr.expires_at),
     }));
 
     return { success: true, data: result };
