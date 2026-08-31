@@ -169,7 +169,7 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
             <p className="text-[15px] font-semibold text-[#8A5800] mb-2">
               ⭐ 오늘 방문한 VIP 고객: <span className="font-bold">{vipVisitors.map((v) => v.name).join(', ')}님</span>
             </p>
-            <Link href="/admin/vip" className="inline-flex text-sm font-semibold text-[#8A5800] hover:text-[#6B4200] underline underline-offset-2">
+            <Link href="/admin/customers?filter=vip" className="inline-flex text-sm font-semibold text-[#8A5800] hover:text-[#6B4200] underline underline-offset-2">
               VIP 관리에서 상세 보기 →
             </Link>
           </div>

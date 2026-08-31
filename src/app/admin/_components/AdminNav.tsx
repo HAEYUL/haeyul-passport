@@ -4,15 +4,19 @@ import Link from 'next/link';
 import { adminLogout } from '@/app/admin/actions';
 
 interface AdminNavProps {
-  active: 'dashboard' | 'customers' | 'visits' | 'rewards' | 'vip' | 'settings';
+  active: 'dashboard' | 'customers' | 'visits' | 'rewards' | 'settings';
 }
 
-const TABS: { key: AdminNavProps['active']; href: string; label: string; icon: string }[] = [
+/**
+ * "VIP관리"는 별도 페이지가 아니라 고객관리 화면의 VIP 필터로 통합되어 있어서,
+ * key가 active 값(customers)과 일치하지 않아 항상 비활성 스타일로만 표시됩니다.
+ */
+const TABS: { key: AdminNavProps['active'] | 'vip'; href: string; label: string; icon: string }[] = [
   { key: 'dashboard', href: '/admin', label: '대시보드', icon: '📊' },
   { key: 'customers', href: '/admin/customers', label: '고객관리', icon: '👥' },
   { key: 'visits', href: '/admin/visits', label: '방문관리', icon: '📍' },
   { key: 'rewards', href: '/admin/rewards', label: '할인권관리', icon: '🎁' },
-  { key: 'vip', href: '/admin/vip', label: 'VIP관리', icon: '⭐' },
+  { key: 'vip', href: '/admin/customers?filter=vip', label: 'VIP관리', icon: '⭐' },
   { key: 'settings', href: '/admin/settings', label: '설정', icon: '⚙️' },
 ];
 

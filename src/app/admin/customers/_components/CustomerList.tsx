@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   getCustomerList,
   getTierBreakdown,
+  updateCustomerAdminNote,
   type CustomerListItem,
   type CustomerListFilter,
   type TierBreakdownItem,
@@ -16,6 +17,79 @@ import { getStoreAdminColor } from '@/lib/storeColors';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 import SmsComposeModal from './SmsComposeModal';
+
+function AdminNoteCell({
+  customerId,
+  note,
+  onSaved,
+}: {
+  customerId: string;
+  note: string | null;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(note || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!editing) {
+    return (
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[#555] whitespace-pre-line">{note || '메모 없음'}</p>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setValue(note || '');
+            setEditing(true);
+          }}
+          className="flex-shrink-0 text-xs text-[#2D5A3D] underline"
+        >
+          수정
+        </button>
+      </div>
+    );
+  }
+
+  async function handleSave() {
+    setLoading(true);
+    setError('');
+    const result = await updateCustomerAdminNote(customerId, value);
+    setLoading(false);
+    if (result.success) {
+      setEditing(false);
+      onSaved();
+    } else {
+      setError(result.error || '저장 중 오류가 발생했습니다.');
+    }
+  }
+
+  return (
+    <div className="space-y-1 min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        rows={2}
+        placeholder="메모를 입력하세요"
+        className="w-full px-2 py-1.5 text-sm border-2 border-[#D4D0C8] rounded-lg focus:border-[#2D5A3D] focus:outline-none resize-none"
+      />
+      {error && <p className="text-[10px] text-[#D4442A]">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={() => setEditing(false)} disabled={loading} className="text-xs text-[#6B6B5E] underline">
+          취소
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={loading}
+          className="text-xs font-semibold text-[#2D5A3D] underline disabled:opacity-50"
+        >
+          {loading ? '저장 중...' : '저장'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const FILTER_INFO: Record<CustomerListFilter, { title: string; description: string }> = {
   all: {
@@ -58,6 +132,10 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     title: '매장별 방문 고객',
     description: '위에서 매장을 선택하면, 가입 매장과 무관하게 그 매장을 한 번이라도 방문한 고객 전체를 볼 수 있습니다. (신메뉴 안내 등 매장별 문자 발송에 사용)',
   },
+  missingBirthDate: {
+    title: '생년월일 미입력 고객',
+    description: '생년월일을 등록하지 않아 생일쿠폰을 받을 수 없는 고객 목록입니다. 등록을 유도하는 안내 문자에 활용하세요.',
+  },
 };
 
 const LONG_ABSENT_DAY_OPTIONS = [30, 60, 90] as const;
@@ -73,7 +151,8 @@ function isCustomerListFilter(value: string | null): value is CustomerListFilter
     value === 'longAbsent' ||
     value === 'tier' ||
     value === 'birthdayThisMonth' ||
-    value === 'visitedStore'
+    value === 'visitedStore' ||
+    value === 'missingBirthDate'
   );
 }
 
@@ -88,18 +167,31 @@ function csvCell(value: string): string {
 // CSV를 엑셀에서 열 때 한글이 깨지지 않도록 붙이는 UTF-8 BOM
 const BOM = String.fromCharCode(0xfeff);
 
-function exportCustomersCsv(customers: CustomerListItem[]) {
+function exportCustomersCsv(customers: CustomerListItem[], isVip: boolean) {
   const headers = ['성함', '여권번호', '연락처', '방문 횟수', '등급', '가입일', '최근 방문일', '혜택·소식 수신동의'];
-  const rows = customers.map((c) => [
-    c.name,
-    c.customerNumber,
-    c.phone,
-    `${c.visitCount}회`,
-    getVisitTierInfo(c.visitCount).label,
-    formatDateKR(c.createdAt),
-    c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-',
-    c.marketingConsent ? '동의' : '미동의',
-  ]);
+  if (isVip) {
+    headers.push('VIP 달성일', '감사 할인권', '관리자 메모');
+  }
+  const rows = customers.map((c) => {
+    const row = [
+      c.name,
+      c.customerNumber,
+      c.phone,
+      `${c.visitCount}회`,
+      getVisitTierInfo(c.visitCount).label,
+      formatDateKR(c.createdAt),
+      c.recentVisitDate ? formatDateKR(c.recentVisitDate) : '-',
+      c.marketingConsent ? '동의' : '미동의',
+    ];
+    if (isVip) {
+      row.push(
+        c.vipAchievedAt ? formatDateKR(c.vipAchievedAt) : '-',
+        c.giftUsed ? '사용 완료' : '미사용',
+        c.adminNote || ''
+      );
+    }
+    return row;
+  });
 
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -282,6 +374,16 @@ export default function CustomerList() {
             >
               🏪 매장별 방문자
             </Link>
+            <Link
+              href="/admin/customers?filter=missingBirthDate"
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
+                filter === 'missingBirthDate'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
+              }`}
+            >
+              🎈 생일 미입력
+            </Link>
           </div>
         )}
 
@@ -349,7 +451,7 @@ export default function CustomerList() {
             <div className="flex justify-end gap-2.5">
               <button
                 type="button"
-                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers)}
+                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter === 'vip')}
                 disabled={!customers || customers.length === 0}
                 className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
                            hover:bg-[#F5F5EC] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-sm"
@@ -413,6 +515,13 @@ export default function CustomerList() {
                       <th className="px-4 py-3 font-medium">가입일</th>
                       <th className="px-4 py-3 font-medium">최근 방문일</th>
                       <th className="px-4 py-3 font-medium">수신동의</th>
+                      {filter === 'vip' && (
+                        <>
+                          <th className="px-4 py-3 font-medium">VIP 달성일</th>
+                          <th className="px-4 py-3 font-medium">감사 할인권</th>
+                          <th className="px-4 py-3 font-medium">관리자 메모</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -456,6 +565,23 @@ export default function CustomerList() {
                               <span className="text-xs text-[#6B6B5E]">미동의</span>
                             )}
                           </td>
+                          {filter === 'vip' && (
+                            <>
+                              <td className="px-4 py-3 whitespace-nowrap text-[#333]">
+                                {c.vipAchievedAt ? formatDateKR(c.vipAchievedAt) : '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                {c.giftUsed ? (
+                                  <span className="text-xs text-[#6B6B5E] font-semibold">사용 완료</span>
+                                ) : (
+                                  <span className="text-xs text-[#8A5800] font-semibold">미사용</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 min-w-[220px]">
+                                <AdminNoteCell customerId={c.id} note={c.adminNote} onSaved={() => fetchCustomers(query)} />
+                              </td>
+                            </>
+                          )}
                         </tr>
                       );
                     })}

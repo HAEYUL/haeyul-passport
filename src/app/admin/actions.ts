@@ -1049,6 +1049,12 @@ export interface CustomerListItem {
   marketingConsent: boolean;
   /** 가입 매장명 */
   signupStoreName: string;
+  /** 관리자 메모 */
+  adminNote: string | null;
+  /** 해율푸드 VIP 등급 선물이 발급된 시점(VIP 달성일). filter='vip'가 아니면 undefined */
+  vipAchievedAt?: string | null;
+  /** VIP 등급 선물(감사 할인권) 사용 여부. filter='vip'가 아니면 undefined */
+  giftUsed?: boolean;
 }
 
 /**
@@ -1063,6 +1069,7 @@ export interface CustomerListItem {
  * - birthdayThisMonth: 이번 달이 생일인 고객
  * - visitedStore: storeId 매장을 한 번이라도 방문한 고객 (가입 매장과 무관 — 신메뉴 안내 등
  *   특정 매장 방문객 전체에게 안내할 때 사용. storeId가 없으면 빈 목록)
+ * - missingBirthDate: 생년월일을 등록하지 않은 고객 (생일쿠폰을 받을 수 없는 고객 — 등록 유도 안내용)
  */
 export type CustomerListFilter =
   | 'all'
@@ -1074,7 +1081,8 @@ export type CustomerListFilter =
   | 'longAbsent'
   | 'tier'
   | 'birthdayThisMonth'
-  | 'visitedStore';
+  | 'visitedStore'
+  | 'missingBirthDate';
 
 export async function getCustomerList(
   query: string,
@@ -1146,6 +1154,13 @@ export async function getCustomerList(
           .eq('is_cancelled', false);
         idFilter = [...new Set((visits || []).map((v) => v.customer_id))];
       }
+    } else if (filter === 'missingBirthDate') {
+      const { data: customersWithoutBirthDate } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('is_active', true)
+        .is('birth_date', null);
+      idFilter = (customersWithoutBirthDate || []).map((c) => c.id);
     }
 
     if (idFilter && idFilter.length === 0) {
@@ -1154,7 +1169,7 @@ export async function getCustomerList(
 
     let request = supabase
       .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id')
+      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id, admin_note')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(idFilter ? 1000 : 100);
@@ -1217,10 +1232,36 @@ export async function getCustomerList(
       recentVisitDate: latestVisitMap.get(c.id) ?? null,
       marketingConsent: c.marketing_consent,
       signupStoreName: storeMap.get(c.signup_store_id) || '-',
+      adminNote: c.admin_note,
     }));
 
     if (filter === 'longAbsent') {
       result.sort((a, b) => (a.recentVisitDate || '').localeCompare(b.recentVisitDate || ''));
+    }
+
+    if (filter === 'vip' && result.length > 0) {
+      // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
+      // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
+      const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
+      const { data: crs } = await supabase
+        .from('customer_rewards')
+        .select('customer_id, issued_at, status')
+        .eq('threshold_visits', vipMinVisits)
+        .not('reward_rule_id', 'is', null)
+        .in('customer_id', result.map((r) => r.id));
+
+      const rewardMap = new Map<string, { issuedAt: string; status: string }>();
+      for (const cr of crs || []) {
+        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
+      }
+
+      for (const item of result) {
+        const rewardInfo = rewardMap.get(item.id);
+        item.vipAchievedAt = rewardInfo?.issuedAt || null;
+        item.giftUsed = rewardInfo?.status === 'used';
+      }
+
+      result.sort((a, b) => b.visitCount - a.visitCount);
     }
 
     return { success: true, data: result };
@@ -1742,99 +1783,11 @@ export async function addManualVisit(
 }
 
 // ============================================================
-// VIP관리
+// 고객 관리자 메모
 // ============================================================
 
-export interface VipCustomerItem {
-  id: string;
-  name: string;
-  customerNumber: string;
-  phone: string;
-  /** 해율푸드 VIP 등급 선물이 발급된 시점 (VIP 달성일). 아직 발급되지 않았으면 null */
-  vipAchievedAt: string | null;
-  visitCount: number;
-  recentVisitDate: string | null;
-  giftUsed: boolean;
-  adminNote: string | null;
-  marketingConsent: boolean;
-}
-
 /**
- * 해율푸드 VIP(최고 등급) 고객 목록. VIP 달성일/감사 선물 사용 여부는
- * 최고 등급 선물(customer_rewards)의 발급일·상태를 그대로 사용합니다.
- */
-export async function getVipCustomers(storeId?: string | null): Promise<ApiResponse<VipCustomerItem[]>> {
-  try {
-    const admin = await getAdminSession();
-    if (!admin) {
-      return { success: false, error: '관리자 로그인이 필요합니다.' };
-    }
-
-    const supabase = createAdminClient();
-    const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
-
-    let customersQuery = supabase
-      .from('customers')
-      .select('id, name, customer_number, phone, visit_count, admin_note, marketing_consent')
-      .eq('is_active', true)
-      .gte('visit_count', vipMinVisits)
-      .order('visit_count', { ascending: false });
-    if (storeId) {
-      customersQuery = customersQuery.eq('signup_store_id', storeId);
-    }
-
-    const { data: customers, error: custError } = await customersQuery;
-
-    if (custError) {
-      return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
-    }
-    if (!customers || customers.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    const customerIds = customers.map((c) => c.id);
-    const rewardMap = new Map<string, { issuedAt: string; status: string }>();
-
-    // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
-    // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
-    const { data: crs } = await supabase
-      .from('customer_rewards')
-      .select('customer_id, issued_at, status')
-      .eq('threshold_visits', vipMinVisits)
-      .not('reward_rule_id', 'is', null)
-      .in('customer_id', customerIds);
-
-    for (const cr of crs || []) {
-      rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
-    }
-
-    const latestVisitMap = await getLatestVisitDateMap(supabase);
-
-    const result: VipCustomerItem[] = customers.map((c) => {
-      const rewardInfo = rewardMap.get(c.id);
-      return {
-        id: c.id,
-        name: c.name,
-        customerNumber: c.customer_number,
-        phone: c.phone,
-        vipAchievedAt: rewardInfo?.issuedAt || null,
-        visitCount: c.visit_count,
-        recentVisitDate: latestVisitMap.get(c.id) || null,
-        giftUsed: rewardInfo?.status === 'used',
-        adminNote: c.admin_note,
-        marketingConsent: c.marketing_consent,
-      };
-    });
-
-    return { success: true, data: result };
-  } catch (error) {
-    console.error('getVipCustomers 오류:', error);
-    return { success: false, error: '서버 오류가 발생했습니다.' };
-  }
-}
-
-/**
- * VIP관리 화면에서 고객별 관리자 메모를 저장합니다.
+ * 고객별 관리자 메모를 저장합니다.
  */
 export async function updateCustomerAdminNote(
   customerId: string,

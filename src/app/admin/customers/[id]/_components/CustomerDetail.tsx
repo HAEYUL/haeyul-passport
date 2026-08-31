@@ -7,6 +7,7 @@ import {
   getCustomerDetail,
   updateCustomer,
   deleteCustomer,
+  updateCustomerAdminNote,
   type CustomerDetail as CustomerDetailData,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
@@ -61,6 +62,11 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState('');
+
   const fetchDetail = useCallback(async () => {
     const result = await getCustomerDetail(customerId);
     if (result.success && result.data) {
@@ -114,6 +120,29 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
       fetchDetail();
     } else {
       setSaveError(result.error || '수정 중 오류가 발생했습니다.');
+    }
+  }
+
+  function startEditNote() {
+    if (!data) return;
+    setNoteValue(data.customer.admin_note || '');
+    setNoteError('');
+    setEditingNote(true);
+  }
+
+  async function handleSaveNote() {
+    setNoteSaving(true);
+    setNoteError('');
+
+    const result = await updateCustomerAdminNote(customerId, noteValue);
+
+    setNoteSaving(false);
+
+    if (result.success) {
+      setEditingNote(false);
+      fetchDetail();
+    } else {
+      setNoteError(result.error || '메모 저장 중 오류가 발생했습니다.');
     }
   }
 
@@ -298,6 +327,49 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       })}
                     </div>
                   )}
+
+                  <div className="pt-3 border-t border-[#F0EDE6]">
+                    <p className="text-sm text-[#6B6B5E] mb-1">관리자 메모</p>
+                    {editingNote ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={noteValue}
+                          onChange={(e) => setNoteValue(e.target.value)}
+                          rows={3}
+                          placeholder="알러지, 선호 메뉴, 응대 시 참고사항 등을 적어두세요."
+                          className="w-full px-3 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl resize-none
+                                     focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+                        />
+                        {noteError && <p className="text-sm text-[#D4442A]">{noteError}</p>}
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setEditingNote(false)}
+                            disabled={noteSaving}
+                            className="px-4 py-2 text-sm text-[#6B6B5E] underline disabled:cursor-not-allowed"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={handleSaveNote}
+                            disabled={noteSaving}
+                            className="px-4 py-2 text-sm font-semibold text-[#2D5A3D] underline disabled:opacity-50"
+                          >
+                            {noteSaving ? '저장 중...' : '저장'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[15px] text-[#333] whitespace-pre-line">{data.customer.admin_note || '메모 없음'}</p>
+                        <button
+                          onClick={startEditNote}
+                          className="flex-shrink-0 text-sm text-[#2D5A3D] underline"
+                        >
+                          수정
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex gap-2 pt-3 border-t border-[#F0EDE6]">
                     <button
