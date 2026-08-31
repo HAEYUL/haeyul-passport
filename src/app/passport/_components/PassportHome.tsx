@@ -201,8 +201,8 @@ export default function PassportHome() {
                          text-[13px] font-bold leading-tight text-center
                          hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
             >
-              <span>홈페이지</span>
-              <span>둘러보기</span>
+              <span>해율푸드</span>
+              <span>매장보기</span>
             </a>
           </div>
           <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
