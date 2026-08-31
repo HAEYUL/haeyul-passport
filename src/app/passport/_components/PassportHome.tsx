@@ -17,6 +17,13 @@ const STORE_ADDRESSES: Record<string, string> = {
   '정담명가 남원추어탕': '용인시 수지구 고기로 129번길 12',
 };
 
+// 매장별 위치정보 홈페이지 링크 (매장별 위치 및 방문 횟수 카드에서 사용)
+const STORE_URLS: Record<string, string> = {
+  '해율만두전골': 'https://haeyul-homepage.vercel.app/haeyul',
+  '곤드레밥집': 'https://haeyul-homepage.vercel.app/gondre',
+  '정담명가 남원추어탕': 'https://haeyul-homepage.vercel.app/chueotang',
+};
+
 // 매장별 강조색 (매장별 방문 카드의 좌측 강조선 + 배경 톤)
 const STORE_ACCENTS: Record<string, { border: string; bg: string; text: string }> = {
   '해율만두전골': { border: '#2D5A3D', bg: '#F1F8F3', text: '#1F4A2E' },
@@ -459,24 +466,52 @@ export default function PassportHome() {
           </button>
         </div>
 
-        {/* 매장별 방문 횟수 */}
+        {/* 매장별 위치 및 방문 횟수 */}
         {data.storeVisitBreakdown.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[15px] font-bold text-[#44443C] px-1">매장별 방문 횟수</p>
+            <p className="text-[15px] font-bold text-[#44443C] px-1">매장별 위치 및 방문 횟수</p>
             {data.storeVisitBreakdown.map((s) => {
               const accent = STORE_ACCENTS[s.storeName] ?? DEFAULT_STORE_ACCENT;
-              return (
-                <div
+              const url = STORE_URLS[s.storeName];
+              const content = (
+                <>
+                  <div className="min-w-0">
+                    <p className="text-base font-bold" style={{ color: accent.text }}>
+                      {s.storeName}
+                    </p>
+                    <p className="text-xs mt-0.5 truncate opacity-80" style={{ color: accent.text }}>
+                      {STORE_ADDRESSES[s.storeName] ?? ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <p className="text-xl font-extrabold" style={{ color: accent.text }}>
+                      {s.count}<span className="text-sm font-semibold">회</span>
+                    </p>
+                    {url && (
+                      <svg className="w-4 h-4" style={{ color: accent.text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
+                  </div>
+                </>
+              );
+              const className = 'flex items-center justify-between rounded-xl py-3 px-4 border-l-[6px] transition-all duration-200';
+              const style = { backgroundColor: accent.bg, borderLeftColor: accent.border };
+
+              return url ? (
+                <a
                   key={s.storeName}
-                  className="flex items-center justify-between rounded-xl py-3 px-4 border-l-[6px]"
-                  style={{ backgroundColor: accent.bg, borderLeftColor: accent.border }}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${className} active:scale-[0.98]`}
+                  style={style}
                 >
-                  <p className="text-base font-bold" style={{ color: accent.text }}>
-                    {s.storeName}
-                  </p>
-                  <p className="text-xl font-extrabold" style={{ color: accent.text }}>
-                    {s.count}<span className="text-sm font-semibold">회</span>
-                  </p>
+                  {content}
+                </a>
+              ) : (
+                <div key={s.storeName} className={className} style={style}>
+                  {content}
                 </div>
               );
             })}
@@ -491,16 +526,6 @@ export default function PassportHome() {
             해율을 찾아주시는 한 걸음 한 걸음이<br />
             자연의 흐름을 이어갑니다. 감사합니다.
           </p>
-          {data.storeVisitBreakdown.length > 0 && (
-            <div className="mx-auto w-fit space-y-1 text-sm font-medium text-[#6B6B5E]">
-              {data.storeVisitBreakdown.map((s) => (
-                <div key={s.storeName} className="flex gap-3">
-                  <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
-                  <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
