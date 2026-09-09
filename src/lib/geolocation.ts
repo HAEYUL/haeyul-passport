@@ -39,3 +39,14 @@ export function getCurrentPosition(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoA
     );
   });
 }
+
+/**
+ * 첫 시도가 실패하면 한 번 더 시도합니다.
+ * 사용자가 권한 팝업에 응답하기 전에 첫 시도가 타임아웃되는 경우가 흔한데,
+ * 그사이 권한이 허용되었다면 재시도에서 곧바로 좌표를 받아올 수 있습니다.
+ */
+export async function getCurrentPositionWithRetry(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoAttemptResult> {
+  const first = await getCurrentPosition(timeoutMs);
+  if (first.coords) return first;
+  return getCurrentPosition(timeoutMs);
+}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { registerCustomer } from '@/app/actions';
 import type { GeoCoords } from '@/lib/geolocation';
 import { REFERRAL_SOURCE_OPTIONS } from '@/lib/referralSource';
+import BirthDateKeypad from '@/components/BirthDateKeypad';
 
 interface RegisterFormProps {
   onBack: () => void;
@@ -23,12 +24,19 @@ interface RegisterFormProps {
 export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [birthDigits, setBirthDigits] = useState('');
 
-  // 개인정보 동의 체크 (기본 동의 상태로 시작하며, 원하지 않으면 직접 체크를 해제합니다)
-  const [privacyConsent, setPrivacyConsent] = useState(true);
-  const [marketingConsent, setMarketingConsent] = useState(true);
+  // 필수·선택 동의 모두 기본 미체크(옵트인)로 시작하며, "모두 동의합니다"로 한 번에 묶어 체크할 수 있습니다.
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
   const [referralSource, setReferralSource] = useState('');
+  const allConsent = privacyConsent && marketingConsent;
+
+  function handleAllConsentChange(checked: boolean) {
+    setPrivacyConsent(checked);
+    setMarketingConsent(checked);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,6 +47,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
     const formData = new FormData(form);
     formData.set('privacy_consent', privacyConsent.toString());
     formData.set('marketing_consent', marketingConsent.toString());
+    formData.set('birth_date_digits', birthDigits);
 
     const result = await registerCustomer(formData);
 
@@ -128,21 +137,8 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
             />
           </div>
 
-          {/* 생년월일 (선택) */}
-          <div>
-            <label htmlFor="input-birth" className="block text-base font-medium text-[#333] mb-2">
-              생년월일 <span className="text-sm text-[#AAA]">(선택)</span>
-            </label>
-            <input
-              id="input-birth"
-              name="birth_date"
-              type="date"
-              className="w-full px-4 py-3.5 text-[17px] border-2 border-[#D4D0C8] rounded-xl
-                         bg-white text-[#555]
-                         focus:border-[#2D5A3D] focus:outline-none
-                         transition-colors duration-200"
-            />
-          </div>
+          {/* 생년월일 (필수, 6자리 숫자) */}
+          <BirthDateKeypad value={birthDigits} onChange={setBirthDigits} required />
 
           {/* 해율을 알게 된 경로 (선택) */}
           <div>
@@ -186,8 +182,22 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
           {/* 구분선 */}
           <hr className="border-[#E8E4DA]" />
 
-          {/* 개인정보 동의 (필수) */}
+          {/* 전체 동의 */}
           <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-[#F5F5EC] rounded-xl px-4 py-3">
+              <input
+                id="check-all"
+                type="checkbox"
+                checked={allConsent}
+                onChange={(e) => handleAllConsentChange(e.target.checked)}
+                className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+              />
+              <label htmlFor="check-all" className="text-[16px] font-semibold text-[#333] cursor-pointer">
+                모두 동의합니다
+              </label>
+            </div>
+
+            {/* 개인정보 동의 (필수) */}
             <div className="flex items-start gap-3">
               <input
                 id="check-privacy"
@@ -279,21 +289,27 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 onChange={(e) => setMarketingConsent(e.target.checked)}
                 className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
-              <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">
-                <span className="text-[#AAA]">[선택]</span>{' '}
-                혜택 및 소식 수신에 동의합니다.
-              </label>
+              <div className="flex-1">
+                <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">
+                  <span className="text-[#AAA]">[선택]</span>{' '}
+                  혜택 및 소식 수신에 동의합니다.
+                </label>
+                <p className="mt-1 text-sm text-[#999] leading-relaxed">
+                  해율푸드(해율만두전골·곤드레밥집·정담명가 남원추어탕) 통합으로 발송되며,
+                  동의는 언제든 &apos;내 정보&apos; 화면에서 철회할 수 있습니다.
+                </p>
+              </div>
             </div>
           </div>
 
           {/* 가입 버튼 */}
           <button
             type="submit"
-            disabled={isLoading || !privacyConsent}
+            disabled={isLoading || !privacyConsent || birthDigits.length !== 6}
             className={`w-full py-4 px-6 text-lg font-semibold rounded-2xl shadow-md
                        transition-all duration-200
                        ${
-                         privacyConsent
+                         privacyConsent && birthDigits.length === 6
                            ? 'bg-[#2D5A3D] text-white hover:bg-[#245032] active:scale-[0.98]'
                            : 'bg-[#CCC] text-white cursor-not-allowed'
                        }`}

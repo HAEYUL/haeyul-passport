@@ -136,6 +136,9 @@ function CancelVisitControl({
     const result = await cancelVisit(visitId, reason);
     setLoading(false);
     if (result.success) {
+      if (result.message) {
+        window.alert(result.message);
+      }
       onCancelled();
     } else {
       setError(result.error || '취소 처리 중 오류가 발생했습니다.');
@@ -540,7 +543,8 @@ function DuplicateVisitsSection() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[#6B6B5E]">
-        같은 고객이 같은 날짜에 취소되지 않은 방문 기록을 2건 이상 가진 경우입니다.
+        같은 고객이 같은 날짜에 같은 매장에서 취소되지 않은 방문 기록을 2건 이상 가진 경우입니다.
+        (다른 매장을 같은 날 방문한 경우는 정상이라 여기 포함되지 않습니다.)
       </p>
       {error && (
         <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
@@ -557,7 +561,7 @@ function DuplicateVisitsSection() {
         <ul className="space-y-3">
           {groups.map((g) => (
             <li
-              key={`${g.customerId}_${g.visitDate}`}
+              key={`${g.customerId}_${g.visitDate}_${g.storeName}`}
               className="bg-white rounded-2xl p-5 shadow-sm border border-[#F0D4B8] space-y-3"
             >
               <div className="flex items-center justify-between">
@@ -567,7 +571,10 @@ function DuplicateVisitsSection() {
                     {g.customerNumber} · {g.phone}
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-[#D4442A]">{formatDateKR(g.visitDate)}</p>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-[#D4442A]">{formatDateKR(g.visitDate)}</p>
+                  <p className="text-xs text-[#6B6B5E]">{g.storeName}</p>
+                </div>
               </div>
               <ul className="space-y-1">
                 {g.visits.map((v) => (

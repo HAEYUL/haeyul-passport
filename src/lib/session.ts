@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 
 const SESSION_COOKIE = 'haeyul_customer';
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30일
+const SESSION_MAX_AGE = 60 * 60 * 24 * 60; // 60일 (활동이 있을 때마다 다시 60일로 연장되는 슬라이딩 세션)
 
 interface SessionData {
   customerId: string;

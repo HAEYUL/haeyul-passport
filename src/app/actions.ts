@@ -1,12 +1,21 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { normalizePhone, isValidPhone, getTodayKST, isWithinStoreHours } from '@/lib/utils';
+import {
+  normalizePhone,
+  isValidPhone,
+  getTodayKST,
+  isWithinStoreHours,
+  birthDigitsToISODate,
+  toKSTDateString,
+  addMonthsToDateString,
+  daysBetweenDateStrings,
+} from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
-import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR } from '@/lib/constants';
+import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR, AUDIT_ACTION } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
@@ -36,11 +45,25 @@ async function checkStoreLocation(
 
 /**
  * 선물 발급일(issuedAt) 기준 유효기간(6개월)이 지났는지 확인합니다.
+ * 서버가 실행되는 위치의 로컬 타임존이 아니라 항상 한국시간(KST) 날짜
+ * 기준으로 계산합니다 (자정 근처 발급 건에서 하루 어긋나는 것을 방지).
  */
 function isRewardExpired(issuedAt: string): boolean {
-  const expiry = new Date(issuedAt);
-  expiry.setMonth(expiry.getMonth() + REWARD_EXPIRY_MONTHS);
-  return Date.now() >= expiry.getTime();
+  const issuedDateKST = toKSTDateString(issuedAt);
+  const expiryDateKST = addMonthsToDateString(issuedDateKST, REWARD_EXPIRY_MONTHS);
+  return getTodayKST() >= expiryDateKST;
+}
+
+/**
+ * 할인권 만료 여부를 판정합니다. expires_at이 명시적으로 지정된 할인권
+ * (예: 생일축하 쿠폰의 30일 유효기간)은 그 값을 그대로 쓰고, 지정되지
+ * 않은 기존 방식(방문 기준 할인권)은 issued_at + 6개월로 계산합니다.
+ */
+function isRewardExpiredAt(issuedAt: string, expiresAt: string | null): boolean {
+  if (expiresAt) {
+    return Date.now() >= new Date(expiresAt).getTime();
+  }
+  return isRewardExpired(issuedAt);
 }
 
 interface RegisterResult {
@@ -65,7 +88,7 @@ export async function registerCustomer(
 
     const name = (formData.get('name') as string)?.trim();
     const rawPhone = (formData.get('phone') as string)?.trim();
-    const birthDate = (formData.get('birth_date') as string)?.trim() || null;
+    const birthDigits = (formData.get('birth_date_digits') as string)?.trim() || '';
     const marketingConsent = formData.get('marketing_consent') === 'true';
     const privacyConsent = formData.get('privacy_consent') === 'true';
     const rawReferralSource = (formData.get('referral_source') as string)?.trim() || null;
@@ -84,6 +107,11 @@ export async function registerCustomer(
 
     if (!isValidPhone(rawPhone)) {
       return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
     }
 
     if (!privacyConsent) {
@@ -152,7 +180,7 @@ export async function registerCustomer(
           error: '이미 가입된 번호입니다.',
         };
       }
-      return { success: false, error: '회원 등록 중 오류가 발생했습니다.' };
+      return { success: false, error: '회원 등록 중 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.' };
     }
 
     // ─── 개인정보 동의 기록 ─────────────────────────
@@ -217,7 +245,7 @@ export async function registerCustomer(
     };
   } catch (error) {
     console.error('registerCustomer 오류:', error);
-    return { success: false, error: '서버 오류가 발생했습니다.' };
+    return { success: false, error: '서버 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.' };
   }
 }
 
@@ -230,6 +258,7 @@ export async function loginCustomer(
   try {
     const name = (formData.get('name') as string)?.trim();
     const rawPhone = (formData.get('phone') as string)?.trim();
+    const birthDigits = (formData.get('birth_date_digits') as string)?.trim() || '';
 
     if (!name || !rawPhone) {
       return { success: false, error: '성함과 휴대전화 번호를 입력해 주세요.' };
@@ -237,6 +266,11 @@ export async function loginCustomer(
 
     if (!isValidPhone(rawPhone)) {
       return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
     }
 
     const phone = normalizePhone(rawPhone);
@@ -255,6 +289,25 @@ export async function loginCustomer(
         success: false,
         error: '일치하는 회원 정보가 없습니다. 성함과 전화번호를 다시 확인해 주세요.',
       };
+    }
+
+    if (customer.birth_date) {
+      // 이미 등록된 생년월일이 있으면 본인확인으로 대조합니다.
+      if (customer.birth_date !== birthDate) {
+        return { success: false, error: '생년월일이 일치하지 않습니다. 다시 확인해 주세요.' };
+      }
+    } else {
+      // 처음 로그인 시 생년월일이 없던 기존 고객은 이번 입력값을 그대로 등록합니다.
+      const { error: updateError } = await supabase
+        .from('customers')
+        .update({ birth_date: birthDate })
+        .eq('id', customer.id);
+
+      if (updateError) {
+        console.error('생년월일 등록 실패:', updateError);
+      } else {
+        customer.birth_date = birthDate;
+      }
     }
 
     // 세션 설정
@@ -279,10 +332,16 @@ export async function loginCustomer(
 // ============================================================
 
 /**
- * 현재 로그인된 고객 세션 확인
+ * 로그인 세션을 조회하고, 유효하면 만료시각을 60일로 다시 연장합니다(슬라이딩 세션).
+ * 활동이 있을 때마다 갱신되므로, 60일 안에 한 번이라도 다시 방문하는 고객은
+ * 로그인이 끊기지 않고 계속 유지됩니다.
  */
-export async function getCurrentSession() {
-  return getSession();
+async function requireSession() {
+  const session = await getSession();
+  if (session) {
+    await setSession(session);
+  }
+  return session;
 }
 
 /**
@@ -313,6 +372,19 @@ export interface PassportData {
   rewardProgressMessage: string;
   /** 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함) */
   storeVisitBreakdown: StoreVisitCount[];
+  /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
+  soonExpiringReward: { amount: number; daysLeft: number } | null;
+}
+
+/** 할인권 만료 알림 기준(일). 이 기간 이내로 남으면 홈 화면에 임박 알림을 띄웁니다. */
+const REWARD_EXPIRY_WARNING_DAYS = 7;
+
+/** customer_rewards 행의 실제 만료일('YYYY-MM-DD')을 계산합니다. expires_at이 없으면 발급일+6개월. */
+function computeExpiryDateKST(issuedAt: string, expiresAt: string | null): string {
+  if (expiresAt) {
+    return toKSTDateString(expiresAt);
+  }
+  return addMonthsToDateString(toKSTDateString(issuedAt), REWARD_EXPIRY_MONTHS);
 }
 
 /**
@@ -331,7 +403,9 @@ async function getRewardProgressMessage(
   const { data: rules } = await supabase
     .from('reward_rules')
     .select('id, threshold_visits, amount, is_repeating, repeat_interval')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('is_birthday', false)
+    .eq('is_comeback', false);
 
   const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
     id: r.id,
@@ -349,7 +423,7 @@ async function getRewardProgressMessage(
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -404,12 +478,25 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     // 사용 가능한 할인권 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 할인권만 — 옛 실물 선물 기록은 제외)
     const { data: rewards } = await supabase
       .from('customer_rewards')
-      .select('id, status, issued_at')
+      .select('id, status, amount, issued_at, expires_at')
       .eq('customer_id', customer.id)
       .not('reward_rule_id', 'is', null)
       .neq('status', 'used');
 
-    const availableRewards = (rewards || []).filter((r) => !isRewardExpired(r.issued_at)).length;
+    const unexpiredRewards = (rewards || []).filter((r) => !isRewardExpiredAt(r.issued_at, r.expires_at));
+    const availableRewards = unexpiredRewards.length;
+
+    // 만료까지 REWARD_EXPIRY_WARNING_DAYS일 이내로 남은 할인권 중 가장 임박한 것
+    const todayForExpiry = getTodayKST();
+    let soonExpiringReward: { amount: number; daysLeft: number } | null = null;
+    for (const r of unexpiredRewards) {
+      const expiryDateKST = computeExpiryDateKST(r.issued_at, r.expires_at);
+      const daysLeft = daysBetweenDateStrings(todayForExpiry, expiryDateKST);
+      if (daysLeft <= REWARD_EXPIRY_WARNING_DAYS && (!soonExpiringReward || daysLeft < soonExpiringReward.daysLeft)) {
+        soonExpiringReward = { amount: r.amount ?? 0, daysLeft };
+      }
+    }
+
     const tier = getVisitTierInfo(customer.visit_count);
 
     // 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함)
@@ -448,6 +535,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         storeName,
         rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
         storeVisitBreakdown,
+        soonExpiringReward,
       },
     };
   } catch (error) {
@@ -477,7 +565,7 @@ export async function registerVisit(
   longitude?: number | null
 ): Promise<ApiResponse<VisitResult>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -591,7 +679,7 @@ export interface VisitHistoryData {
 
 export async function getVisitHistory(): Promise<ApiResponse<VisitHistoryData>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -643,27 +731,31 @@ export interface RewardItem {
   id: string;
   /** 할인 금액(원) */
   amount: number;
-  /** 이 할인권이 해당하는 방문 횟수 기준 */
+  /** 이 할인권이 해당하는 방문 횟수 기준. 생일·컴백 쿠폰이면 의미 없음(0) */
   thresholdVisits: number;
+  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) | 'comeback'(컴백 쿠폰) */
+  source: 'visit' | 'birthday' | 'comeback';
   status: RewardStatus;
   issuedAt: string;
   usedAt: string | null;
-  /** 발급된 매장 이름 */
-  issuedStoreName: string;
+  /** 발급된 매장 이름. 생일축하 쿠폰처럼 특정 매장 없이 발급된 경우 null */
+  issuedStoreName: string | null;
   /** 사용된 매장 이름. 아직 미사용이면 null */
   usedStoreName: string | null;
-  /** 미사용 상태로 발급일로부터 6개월이 지나 더 이상 사용할 수 없는 할인권인지 여부 */
+  /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 30일) */
   isExpired: boolean;
+  /** 유효기간 만료일('YYYY-MM-DD', KST) */
+  expiresAt: string;
 }
 
 /**
  * 로그인된 고객의 선물함(할인권) 목록 조회.
  * 실물 선물 시절의 옛 기록(reward_id 기반)은 과거 데이터로 보존하되 화면에는 표시하지 않고,
- * 할인권(reward_rule_id 기반)만 보여줍니다.
+ * 할인권(reward_rule_id 기반 — 방문 할인권과 생일축하 쿠폰 모두 포함)만 보여줍니다.
  */
 export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -672,10 +764,10 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
 
     const { data: customerRewards, error } = await supabase
       .from('customer_rewards')
-      .select('id, threshold_visits, amount, status, issued_at, used_at, issued_store_id, used_store_id')
+      .select('id, threshold_visits, amount, status, source, issued_at, expires_at, used_at, issued_store_id, used_store_id')
       .eq('customer_id', session.customerId)
       .not('reward_rule_id', 'is', null)
-      .order('threshold_visits', { ascending: true });
+      .order('issued_at', { ascending: true });
 
     if (error) {
       return { success: false, error: '할인권함 조회 중 오류가 발생했습니다.' };
@@ -699,12 +791,14 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       id: cr.id,
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
+      source: (cr.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
       status: cr.status,
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,
-      issuedStoreName: storeNameMap[cr.issued_store_id] || '-',
+      issuedStoreName: cr.issued_store_id ? storeNameMap[cr.issued_store_id] || '-' : null,
       usedStoreName: cr.used_store_id ? storeNameMap[cr.used_store_id] || '-' : null,
-      isExpired: cr.status !== 'used' && isRewardExpired(cr.issued_at),
+      isExpired: cr.status !== 'used' && isRewardExpiredAt(cr.issued_at, cr.expires_at),
+      expiresAt: computeExpiryDateKST(cr.issued_at, cr.expires_at),
     }));
 
     return { success: true, data: result };
@@ -723,7 +817,7 @@ export async function confirmRewardUse(
   customerRewardId: string
 ): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -740,7 +834,7 @@ export async function confirmRewardUse(
 
     const { data: cr } = await supabase
       .from('customer_rewards')
-      .select('id, status, customer_id, issued_at')
+      .select('id, status, customer_id, issued_at, expires_at')
       .eq('id', customerRewardId)
       .single();
 
@@ -752,11 +846,11 @@ export async function confirmRewardUse(
       return { success: false, error: '이미 사용된 할인권입니다.' };
     }
 
-    if (isRewardExpired(cr.issued_at)) {
+    if (isRewardExpiredAt(cr.issued_at, cr.expires_at)) {
       return { success: false, error: '유효기간이 지난 할인권입니다.\n사용하실 수 없습니다.' };
     }
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from('customer_rewards')
       .update({
         status: 'used',
@@ -764,10 +858,16 @@ export async function confirmRewardUse(
         used_store_id: storeId,
       })
       .eq('id', customerRewardId)
-      .neq('status', 'used');
+      .neq('status', 'used')
+      .select('id');
 
     if (error) {
       return { success: false, error: '처리 중 오류가 발생했습니다.' };
+    }
+
+    if (!updated || updated.length === 0) {
+      // 이 요청이 처리되기 전에 다른 곳(다른 매장 등)에서 이미 사용 처리됨
+      return { success: false, error: '이미 사용된 할인권입니다.' };
     }
 
     return { success: true };
@@ -786,7 +886,7 @@ export async function confirmRewardUse(
  */
 export async function updateMarketingConsent(consent: boolean): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
@@ -818,19 +918,28 @@ export async function updateMarketingConsent(consent: boolean): Promise<ApiRespo
 /**
  * 로그인된 고객이 본인의 생년월일을 직접 수정합니다.
  * 성함·회원번호·전화번호는 본인 확인 절차가 없어 셀프 수정 대상에서 제외합니다.
+ * 생년월일은 로그인 시 본인확인 수단으로도 쓰이기 때문에, 비워서(null로)
+ * 저장하는 것은 허용하지 않습니다 — 값을 지울 수 있게 하면, 다음 로그인 때
+ * "미등록 상태에서 처음 입력한 값을 그대로 등록"하는 로직이 악용되어 이름+
+ * 전화번호만 아는 제3자가 생년월일을 새로 설정하고 로그인할 수 있게 됩니다.
  */
-export async function updateBirthDate(birthDate: string | null): Promise<ApiResponse<null>> {
+export async function updateBirthDate(birthDigits: string): Promise<ApiResponse<null>> {
   try {
-    const session = await getSession();
+    const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const birthDate = birthDigitsToISODate(birthDigits);
+    if (!birthDate) {
+      return { success: false, error: '생년월일 6자리를 정확히 입력해 주세요.' };
     }
 
     const supabase = createAdminClient();
 
     const { error } = await supabase
       .from('customers')
-      .update({ birth_date: birthDate || null })
+      .update({ birth_date: birthDate })
       .eq('id', session.customerId);
 
     if (error) {
@@ -840,6 +949,51 @@ export async function updateBirthDate(birthDate: string | null): Promise<ApiResp
     return { success: true };
   } catch (error) {
     console.error('updateBirthDate 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 회원 탈퇴 — 고객이 직접 요청하는 완전 삭제입니다.
+ * 관리자의 deleteCustomer와 동일하게 방문기록·할인권·동의기록까지 CASCADE로
+ * 함께 삭제되며(가입 시 안내한 "탈퇴 시까지 보관" 정책에 따른 것), 되돌릴 수
+ * 없습니다. 탈퇴 사실 자체는 audit_logs에 admin_id 없이 남겨 추적할 수 있게 합니다.
+ */
+export async function withdrawCustomer(): Promise<ApiResponse<null>> {
+  try {
+    const session = await requireSession();
+    if (!session) {
+      return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase
+      .from('customers')
+      .select()
+      .eq('id', session.customerId)
+      .single();
+
+    const { error } = await supabase.from('customers').delete().eq('id', session.customerId);
+
+    if (error) {
+      return { success: false, error: '탈퇴 처리 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: null,
+      action: AUDIT_ACTION.CUSTOMER_WITHDRAW,
+      target_type: 'customer',
+      target_id: session.customerId,
+      before_data: before ?? null,
+      after_data: null,
+    });
+
+    await clearSession();
+
+    return { success: true };
+  } catch (error) {
+    console.error('withdrawCustomer 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -866,6 +1020,8 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
       .from('reward_rules')
       .select('threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
+      .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {

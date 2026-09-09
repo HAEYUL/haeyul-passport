@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { getDashboardStats, getTodayVipVisitors, type DashboardStats, type TodayVipVisitor } from '@/app/admin/actions';
+import {
+  getDashboardStats,
+  getTodayVipVisitors,
+  getSignupTrend,
+  type DashboardStats,
+  type TodayVipVisitor,
+} from '@/app/admin/actions';
+import { getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from './AdminNav';
 import StoreFilterBar from './StoreFilterBar';
 
@@ -72,6 +79,44 @@ function HeroStatCard({
   );
 }
 
+/** 선택한 연월의 신규가입 인원만 조회하는 카드 (다른 StatCard와 같은 크기) */
+function MonthlySignupCard({ storeId }: { storeId: string | null }) {
+  const [month, setMonth] = useState(getTodayKST().slice(0, 7));
+  const [count, setCount] = useState<number | null>(null);
+  const [error, setError] = useState('');
+
+  const fetchCount = useCallback(async () => {
+    setCount(null);
+    const { start, end } = getMonthRange(month);
+    const result = await getSignupTrend('month', start, end, storeId);
+    if (result.success && result.data) {
+      setCount(result.data.total);
+      setError('');
+    } else if (!result.success) {
+      setError(result.error || '조회할 수 없습니다.');
+    }
+  }, [month, storeId]);
+
+  useEffect(() => {
+    fetchCount();
+  }, [fetchCount]);
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
+      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase whitespace-nowrap">
+        월별 신규가입({count === null ? '···' : count.toLocaleString()}명)
+      </p>
+      <input
+        type="month"
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        className="mt-3 w-full rounded-lg border border-[#D4D0C8] px-2 py-1 text-xs text-[#333]"
+      />
+      {error && <p className="mt-1 text-xs text-[#D4442A]">{error}</p>}
+    </div>
+  );
+}
+
 export default function AdminDashboard({ username }: AdminDashboardProps) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -124,7 +169,7 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
             <p className="text-[15px] font-semibold text-[#8A5800] mb-2">
               ⭐ 오늘 방문한 VIP 고객: <span className="font-bold">{vipVisitors.map((v) => v.name).join(', ')}님</span>
             </p>
-            <Link href="/admin/vip" className="inline-flex text-sm font-semibold text-[#8A5800] hover:text-[#6B4200] underline underline-offset-2">
+            <Link href="/admin/customers?filter=vip" className="inline-flex text-sm font-semibold text-[#8A5800] hover:text-[#6B4200] underline underline-offset-2">
               VIP 관리에서 상세 보기 →
             </Link>
           </div>
@@ -191,6 +236,7 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
                 unit="명"
                 href="/admin/customers?filter=newThisMonth"
               />
+              <MonthlySignupCard storeId={storeId} />
               <StatCard
                 label="미사용 할인권"
                 value={stats.unclaimedRewards}

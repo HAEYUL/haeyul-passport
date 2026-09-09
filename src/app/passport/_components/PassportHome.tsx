@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
-import { VIP_MESSAGE } from '@/lib/tiers';
-import { getCurrentPosition } from '@/lib/geolocation';
+import { VIP_MESSAGE, VIP_ONGOING_MESSAGE } from '@/lib/tiers';
+import { getCurrentPositionWithRetry } from '@/lib/geolocation';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import BrandLogo from '@/components/BrandLogo';
@@ -15,6 +15,13 @@ const STORE_ADDRESSES: Record<string, string> = {
   '해율만두전골': '용인시 수지구 고기로 173번길 5',
   '곤드레밥집': '용인시 수지구 고기로 114',
   '정담명가 남원추어탕': '용인시 수지구 고기로 129번길 12',
+};
+
+// 매장별 위치정보 홈페이지 링크 (매장별 위치 및 방문 횟수 카드에서 사용)
+const STORE_URLS: Record<string, string> = {
+  '해율만두전골': 'https://haeyul-homepage.vercel.app/haeyul',
+  '곤드레밥집': 'https://haeyul-homepage.vercel.app/gondre',
+  '정담명가 남원추어탕': 'https://haeyul-homepage.vercel.app/chueotang',
 };
 
 // 매장별 강조색 (매장별 방문 카드의 좌측 강조선 + 배경 톤)
@@ -42,6 +49,28 @@ export default function PassportHome() {
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installMessage, setInstallMessage] = useState('');
+  const [showScrollHint, setShowScrollHint] = useState(false);
+
+  // 화면이 한 번에 안 보이고 스크롤이 필요할 때만, 하단에 "더 있음" 표시를 보여줍니다.
+  // 스크롤을 시작하면(내용을 이미 인지했다고 보고) 자동으로 사라집니다.
+  useEffect(() => {
+    function checkScrollable() {
+      setShowScrollHint(document.documentElement.scrollHeight > window.innerHeight + 40);
+    }
+    const timer = setTimeout(checkScrollable, 100);
+    function handleScroll() {
+      if (window.scrollY > 24) {
+        setShowScrollHint(false);
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', checkScrollable);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', checkScrollable);
+    };
+  }, [data]);
 
   useEffect(() => {
     function handleBeforeInstallPrompt(event: Event) {
@@ -107,7 +136,7 @@ export default function PassportHome() {
     setVisitMessage('');
     setVisitError('');
 
-    const { coords } = await getCurrentPosition();
+    const { coords } = await getCurrentPositionWithRetry();
     const result = await registerVisit(coords?.latitude ?? null, coords?.longitude ?? null);
 
     setVisitLoading(false);
@@ -115,7 +144,7 @@ export default function PassportHome() {
     if (result.success && result.data) {
       const { visitCount, newCouponAmounts, tier, tierUpgraded } = result.data;
       const tierLine = tier.isMaxTier
-        ? VIP_MESSAGE
+        ? (visitCount === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE)
         : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
       setVisitMessage(
         `오늘도 자연의 흐름이 여권에 기록되었습니다.\n현재까지 총 ${visitCount}회 방문하셨습니다.\n${tierLine}`
@@ -186,7 +215,7 @@ export default function PassportHome() {
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-8">
-      <div className="w-full max-w-sm mx-auto space-y-6">
+      <div className="w-full max-w-sm mx-auto space-y-3">
         {/* 헤더 */}
         <header className="space-y-3">
           <div className="grid grid-cols-[3fr_auto_4fr] items-center gap-2">
@@ -201,8 +230,8 @@ export default function PassportHome() {
                          text-[13px] font-bold leading-tight text-center
                          hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
             >
-              <span>홈페이지</span>
-              <span>둘러보기</span>
+              <span>해율푸드</span>
+              <span>매장보기</span>
             </a>
           </div>
           <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
@@ -214,7 +243,7 @@ export default function PassportHome() {
         </header>
 
         {/* 고객 정보 카드 */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E8E4DA] space-y-2">
+        <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-[#2D5A3D]">
@@ -242,7 +271,7 @@ export default function PassportHome() {
         </div>
 
         {/* 등급 카드 (초록 계열) */}
-        <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] rounded-2xl p-5 flex items-center gap-3">
+        <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] rounded-2xl p-3 flex items-center gap-3">
           <Image
             src={data.tier.iconSrc}
             alt={data.tier.label}
@@ -277,13 +306,13 @@ export default function PassportHome() {
 
         {/* 오늘의 방문 / 메시지 영역 */}
         {visitMessage && (
-          <div className="bg-[#F0F7F2] border-2 border-[#C4DCC9] text-[#1F4A2E] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
+          <div className="bg-[#F0F7F2] border-2 border-[#8FC49F] text-[#1F4A2E] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
             {visitMessage}
           </div>
         )}
 
         {visitError && (
-          <div className="bg-[#FFF3E4] border-2 border-[#EAC28E] text-[#7A4A16] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line space-y-2">
+          <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line space-y-2">
             <p>{visitError}</p>
             {!data.todayVisited && (
               <button
@@ -298,7 +327,7 @@ export default function PassportHome() {
         )}
 
         {tierUpMessage && (
-          <div className="bg-[#E9F3EC] border-2 border-[#BFE0C8] px-5 py-5 rounded-2xl text-center space-y-2">
+          <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] px-4 py-3 rounded-2xl text-center space-y-2">
             <Image
               src={data.tier.iconSrc}
               alt={data.tier.label}
@@ -313,7 +342,7 @@ export default function PassportHome() {
         )}
 
         {newCouponAmounts.length > 0 && (
-          <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] px-5 py-5 rounded-2xl text-center space-y-2">
+          <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] px-4 py-3 rounded-2xl text-center space-y-2">
             <p className="text-xl font-extrabold text-[#8A5800]">🎉 축하드립니다!</p>
             <p className="text-[17px] font-semibold text-[#5A3E00] leading-relaxed">
               새로운 할인권이 도착했습니다.<br />
@@ -326,7 +355,7 @@ export default function PassportHome() {
         {/* 방문 확인 및 기록 */}
         {!data.todayVisited && !visitMessage && (
           data.qrVerified ? (
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center space-y-4">
+            <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] text-center space-y-2">
               <p className="text-[17px] font-semibold text-[#1F4A2E] leading-relaxed">
                 {data.storeName ?? '매장'} 방문이 확인되었습니다.<br />
                 오늘의 방문을 기록하시겠습니까?
@@ -353,17 +382,20 @@ export default function PassportHome() {
               </button>
             </div>
           ) : (
-            <div className="text-center py-5 px-4 bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl">
+            <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
               <p className="text-[17px] font-semibold text-[#44443C] leading-relaxed">
                 매장 방문 확인이 필요합니다.<br />
                 매장의 QR코드를 다시 스캔해 주세요.
+              </p>
+              <p className="mt-1 text-sm font-medium text-[#6B6B5E]">
+                QR 인증은 방문 당일 매장 영업시간까지만 유효해요.
               </p>
             </div>
           )
         )}
 
         {data.todayVisited && !visitMessage && (
-          <div className="text-center py-4 px-4 bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl">
+          <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
             <p className="text-[17px] font-semibold text-[#1F4A2E]">
               ✅ 오늘의 자연이 이미 기록되었습니다.
             </p>
@@ -374,10 +406,10 @@ export default function PassportHome() {
         )}
 
         {/* 다음 혜택까지 카드 (주황/노랑 계열) */}
-        <div className="bg-[#FFF3D6] border-2 border-[#F0D98C] rounded-2xl p-6 space-y-4">
+        <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] rounded-2xl p-3 space-y-2">
           {data.tier.isMaxTier ? (
             <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
-              {VIP_MESSAGE}
+              {data.customer.visit_count === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE}
             </p>
           ) : (
             <div className="space-y-2">
@@ -385,7 +417,7 @@ export default function PassportHome() {
                 <span>{data.tier.label}</span>
                 <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회</span>
               </div>
-              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#F0D98C]">
+              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#DFBE5C]">
                 <div
                   className="h-full bg-[#D99A2B] rounded-full transition-all duration-500"
                   style={{ width: `${data.tier.progressPercent}%` }}
@@ -403,6 +435,13 @@ export default function PassportHome() {
           {data.availableRewards > 0 && (
             <p className="text-[15px] font-semibold text-[#8A5800] text-center">
               지금 사용 가능한 할인권 {data.availableRewards}개가 있어요
+            </p>
+          )}
+
+          {data.soonExpiringReward && (
+            <p className="text-[15px] font-bold text-[#D4442A] text-center">
+              ⏰ {data.soonExpiringReward.amount.toLocaleString()}원 할인권이{' '}
+              {data.soonExpiringReward.daysLeft <= 0 ? '오늘' : `${data.soonExpiringReward.daysLeft}일 후`} 만료돼요
             </p>
           )}
         </div>
@@ -437,24 +476,58 @@ export default function PassportHome() {
           </button>
         </div>
 
-        {/* 매장별 방문 횟수 */}
+        {/* 매장별 위치 및 방문 횟수 */}
         {data.storeVisitBreakdown.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[15px] font-bold text-[#44443C] px-1">매장별 방문 횟수</p>
+            <p className="text-[15px] font-bold text-[#44443C] px-1">매장별 위치 및 방문 횟수</p>
             {data.storeVisitBreakdown.map((s) => {
               const accent = STORE_ACCENTS[s.storeName] ?? DEFAULT_STORE_ACCENT;
-              return (
-                <div
+              const url = STORE_URLS[s.storeName];
+              const content = (
+                <>
+                  <div className="min-w-0">
+                    <p className="text-base font-bold" style={{ color: accent.text }}>
+                      {s.storeName}
+                    </p>
+                    <p className="text-xs mt-0.5 truncate opacity-80" style={{ color: accent.text }}>
+                      {STORE_ADDRESSES[s.storeName] ?? ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <p className="text-xl font-extrabold" style={{ color: accent.text }}>
+                      {s.count}<span className="text-sm font-semibold">회</span>
+                    </p>
+                    {url && (
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-full bg-white border-2 px-2.5 py-1.5 text-xs font-bold whitespace-nowrap"
+                        style={{ borderColor: accent.border, color: accent.text }}
+                      >
+                        위치보기
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+                </>
+              );
+              const className = 'flex items-center justify-between rounded-xl py-3 px-4 border-l-[6px] transition-all duration-200';
+              const style = { backgroundColor: accent.bg, borderLeftColor: accent.border };
+
+              return url ? (
+                <a
                   key={s.storeName}
-                  className="flex items-center justify-between rounded-xl py-3 px-4 border-l-[6px]"
-                  style={{ backgroundColor: accent.bg, borderLeftColor: accent.border }}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${className} active:scale-[0.98]`}
+                  style={style}
                 >
-                  <p className="text-base font-bold" style={{ color: accent.text }}>
-                    {s.storeName}
-                  </p>
-                  <p className="text-xl font-extrabold" style={{ color: accent.text }}>
-                    {s.count}<span className="text-sm font-semibold">회</span>
-                  </p>
+                  {content}
+                </a>
+              ) : (
+                <div key={s.storeName} className={className} style={style}>
+                  {content}
                 </div>
               );
             })}
@@ -462,45 +535,48 @@ export default function PassportHome() {
         )}
 
         {/* 하단 문구 */}
-        <footer className="pt-4 border-t border-[#E8E4DA] space-y-4">
+        <footer className="pt-3 border-t border-[#E8E4DA] space-y-3">
           <p className="text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
             봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
             가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
             해율을 찾아주시는 한 걸음 한 걸음이<br />
             자연의 흐름을 이어갑니다. 감사합니다.
           </p>
-          {data.storeVisitBreakdown.length > 0 && (
-            <div className="mx-auto w-fit space-y-1 text-sm font-medium text-[#6B6B5E]">
-              {data.storeVisitBreakdown.map((s) => (
-                <div key={s.storeName} className="space-y-2">
-                  <div className="flex gap-3">
-                    <span className="w-28 flex-shrink-0 text-right whitespace-nowrap">{s.storeName}</span>
-                    <span className="text-left">{STORE_ADDRESSES[s.storeName] ?? ''}</span>
-                  </div>
-                  {s.storeName === '곤드레밥집' && (
-                    <div className="flex flex-col items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAddToHome}
-                        className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
-                                   px-5 py-2.5 text-base font-bold text-white shadow-sm
-                                   hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
-                      >
-                        홈 바로가기 추가
-                      </button>
-                      {installMessage && (
-                        <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
-                          {installMessage}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddToHome}
+              className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
+                         px-5 py-2.5 text-base font-bold text-white shadow-sm
+                         hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
+            >
+              홈 바로가기 추가
+            </button>
+            {installMessage && (
+              <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
+                {installMessage}
+              </p>
+            )}
+            <p className="text-center text-xs text-[#8C8C80]">
+              © 2026 해율푸드. All rights reserved.
+            </p>
+          </div>
         </footer>
       </div>
+
+      {showScrollHint && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-x-0 bottom-0 z-30 flex justify-center pb-3 pt-10 pointer-events-none"
+          style={{ background: 'linear-gradient(to bottom, rgba(250,250,245,0) 0%, rgba(250,250,245,0.95) 55%)' }}
+        >
+          <div className="w-10 h-10 rounded-full bg-white shadow-md border border-[#E8E4DA] flex items-center justify-center animate-bounce">
+            <svg className="w-5 h-5 text-[#2D5A3D]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

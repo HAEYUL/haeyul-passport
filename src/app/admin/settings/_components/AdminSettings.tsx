@@ -5,13 +5,17 @@ import AdminNav from '../../_components/AdminNav';
 import QrManagement from './QrManagement';
 import StatsOverview from './StatsOverview';
 import StoreLocationSettings from './StoreLocationSettings';
+import AdminAccountSettings from './AdminAccountSettings';
+import AuditLogView from './AuditLogView';
 
-type Section = 'qr' | 'location' | 'stats';
+type Section = 'qr' | 'location' | 'stats' | 'account' | 'audit';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'qr', label: 'QR 관리' },
   { key: 'location', label: '매장 위치' },
   { key: 'stats', label: '통계' },
+  { key: 'account', label: '계정' },
+  { key: 'audit', label: '활동이력' },
 ];
 
 function TabButton({
@@ -68,6 +72,8 @@ export default function AdminSettings() {
           </div>
         )}
         {section === 'stats' && <StatsOverview />}
+        {section === 'account' && <AdminAccountSettings />}
+        {section === 'audit' && <AuditLogView />}
       </div>
     </main>
   );

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   getRewardStats,
+  getRewardAmountByStore,
   getAvailableRewards,
   getUsedRewards,
   getRewardCustomerList,
@@ -12,19 +13,21 @@ import {
   updateRewardRule,
   deleteRewardRule,
   type RewardStatItem,
+  type RewardAmountByStoreItem,
   type RewardUsageItem,
   type RewardCustomerItem,
   type RewardRuleAdminItem,
   type RewardRuleInput,
 } from '@/app/admin/actions';
-import { formatDateKR } from '@/lib/utils';
+import { formatDateKR, getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
-type Section = 'stats' | 'available' | 'used' | 'catalog';
+type Section = 'stats' | 'amountByStore' | 'available' | 'used' | 'catalog';
 
 const SECTIONS: { key: Section; label: string; icon: string; desc: string }[] = [
   { key: 'stats', label: '등급별 통계', icon: '📈', desc: '할인권의 발급·사용 현황' },
+  { key: 'amountByStore', label: '매장별 금액', icon: '💰', desc: '매장별 할인권 발급·사용 금액' },
   { key: 'available', label: '사용 가능한 할인권', icon: '✅', desc: '사용 가능한 할인권 목록' },
   { key: 'used', label: '사용 완료 할인권', icon: '✔️', desc: '사용이 완료된 할인권' },
   { key: 'catalog', label: '할인권 규칙 관리', icon: '⚙️', desc: '할인권 규칙 설정' },
@@ -675,6 +678,164 @@ function CatalogSection() {
   );
 }
 
+function AmountByStoreSection() {
+  const thisMonth = getTodayKST().slice(0, 7);
+  const [period, setPeriod] = useState<'thisMonth' | 'custom'>('thisMonth');
+  const [startMonth, setStartMonth] = useState(thisMonth);
+  const [endMonth, setEndMonth] = useState(thisMonth);
+  const [items, setItems] = useState<RewardAmountByStoreItem[] | null>(null);
+  const [error, setError] = useState('');
+  const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
+
+  const { dateFrom, dateTo } =
+    period === 'thisMonth'
+      ? { dateFrom: getMonthRange(thisMonth).start, dateTo: getMonthRange(thisMonth).end }
+      : { dateFrom: getMonthRange(startMonth).start, dateTo: getMonthRange(endMonth).end };
+
+  const fetchData = useCallback(async () => {
+    setItems(null);
+    const result = await getRewardAmountByStore(dateFrom, dateTo);
+    if (result.success && result.data) {
+      setItems(result.data);
+      setError('');
+    } else if (!result.success) {
+      setError(result.error || '집계를 불러올 수 없습니다.');
+    }
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const totals = (items || []).reduce(
+    (acc, it) => ({
+      issuedAmount: acc.issuedAmount + it.issuedAmount,
+      usedAmount: acc.usedAmount + it.usedAmount,
+    }),
+    { issuedAmount: 0, usedAmount: 0 }
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <TabButton label="이번달" active={period === 'thisMonth'} onClick={() => setPeriod('thisMonth')} />
+        <TabButton label="기간 선택" active={period === 'custom'} onClick={() => setPeriod('custom')} />
+        {period === 'custom' && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <input
+              type="month"
+              value={startMonth}
+              max={endMonth}
+              onChange={(e) => setStartMonth(e.target.value)}
+              className="rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-[#333]"
+            />
+            <span className="text-[#8C8C80]">~</span>
+            <input
+              type="month"
+              value={endMonth}
+              min={startMonth}
+              onChange={(e) => setEndMonth(e.target.value)}
+              className="rounded-lg border border-[#D4D0C8] px-2 py-1.5 text-[#333]"
+            />
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
+          {error}
+        </div>
+      )}
+
+      {!items ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[#F8F7F2] p-4">
+              <p className="text-xs text-[#6B6B5E]">발급 총액</p>
+              <p className="mt-1 text-xl font-bold text-[#2D5A3D]">{totals.issuedAmount.toLocaleString()}원</p>
+            </div>
+            <div className="rounded-xl bg-[#FFF3D6] p-4">
+              <p className="text-xs text-[#8A5800]">사용 총액</p>
+              <p className="mt-1 text-xl font-bold text-[#8A5800]">{totals.usedAmount.toLocaleString()}원</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto bg-white rounded-2xl border border-[#E8E4DA]">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
+                  <th className="px-4 py-3 font-medium">매장</th>
+                  <th className="px-4 py-3 font-medium text-right">발급 금액</th>
+                  <th className="px-4 py-3 font-medium text-right">발급 건수</th>
+                  <th className="px-4 py-3 font-medium text-right">사용 금액</th>
+                  <th className="px-4 py-3 font-medium text-right">사용 건수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => {
+                  const isExpanded = expandedStoreId === it.storeId;
+                  return (
+                    <Fragment key={it.storeId}>
+                      <tr className="border-b border-[#F0EDE6] last:border-0">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedStoreId(isExpanded ? null : it.storeId)}
+                            className="flex items-center gap-1 font-semibold text-[#2D5A3D] hover:underline"
+                          >
+                            <span className={`text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                            {it.storeName}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#333]">{it.issuedAmount.toLocaleString()}원</td>
+                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.issuedCount}건</td>
+                        <td className="px-4 py-3 text-right text-[#8A5800] font-semibold">{it.usedAmount.toLocaleString()}원</td>
+                        <td className="px-4 py-3 text-right text-[#6B6B5E]">{it.usedCount}건</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-[#F0EDE6] last:border-0 bg-[#F8F7F2]">
+                          <td colSpan={5} className="px-4 py-3">
+                            <p className="mb-2 text-xs font-semibold text-[#6B6B5E]">{it.storeName} — 쿠폰 금액별 사용 수량</p>
+                            {it.usedBreakdown.length === 0 ? (
+                              <p className="text-sm text-[#8C8C80]">사용된 할인권이 없습니다.</p>
+                            ) : (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {it.usedBreakdown.map((b) => (
+                                    <tr key={`${b.amount}_${b.source}`} className="border-b border-[#EDE9DE] last:border-0">
+                                      <td className="py-1.5 text-[#333]">
+                                        {b.amount.toLocaleString()}원
+                                        <span className="ml-1 text-xs text-[#8C8C80]">
+                                          {b.source === 'birthday' ? '(생일)' : b.source === 'comeback' ? '(컴백)' : '(방문)'}
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 text-right text-[#6B6B5E]">{b.count}건</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RewardStats() {
   const [section, setSection] = useState<Section>('stats');
   const [storeId, setStoreId] = useState<string | null>(null);
@@ -696,7 +857,7 @@ export default function RewardStats() {
           ))}
         </div>
 
-        {section !== 'catalog' && <StoreFilterBar value={storeId} onChange={setStoreId} />}
+        {section !== 'catalog' && section !== 'amountByStore' && <StoreFilterBar value={storeId} onChange={setStoreId} />}
 
         <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
           <div className="mb-5 pb-4 border-b border-[#F0EDE6]">
@@ -705,6 +866,7 @@ export default function RewardStats() {
           </div>
 
           {section === 'stats' && <StatsSection storeId={storeId} />}
+          {section === 'amountByStore' && <AmountByStoreSection />}
           {section === 'available' && <RewardUsageSection statusFilter="available" storeId={storeId} />}
           {section === 'used' && <RewardUsageSection statusFilter="used" storeId={storeId} />}
           {section === 'catalog' && <CatalogSection />}

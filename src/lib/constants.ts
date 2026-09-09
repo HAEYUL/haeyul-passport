@@ -2,10 +2,6 @@
  * 해율 자연의 흐름 전자여권 — 상수 정의
  */
 
-// 직원 PIN 관련
-export const PIN_MAX_ATTEMPTS = 5;         // 최대 시도 횟수
-export const PIN_LOCKOUT_MINUTES = 5;      // 잠금 시간 (분)
-
 // 시간대
 export const TIMEZONE = 'Asia/Seoul';
 
@@ -13,24 +9,17 @@ export const TIMEZONE = 'Asia/Seoul';
 export const STORE_OPEN_HOUR = 10;   // 오전 10시부터
 export const STORE_CLOSE_HOUR = 21;  // 오후 9시까지
 
-// 회원번호 접두사
-export const CUSTOMER_NUMBER_PREFIX = 'HY-';
-
-// 선물 상태
-export const REWARD_STATUS = {
-  AVAILABLE: 'available',
-  REQUESTED: 'requested',
-  USED: 'used',
-} as const;
-
 // 선물 유효기간 (발급일로부터, 개월)
 export const REWARD_EXPIRY_MONTHS = 6;
 
-// 동의 유형
-export const CONSENT_TYPE = {
-  PRIVACY: 'privacy',
-  MARKETING: 'marketing',
-} as const;
+// 생일축하 쿠폰
+export const BIRTHDAY_COUPON_AMOUNT = 5000;      // 할인 금액(원)
+export const BIRTHDAY_COUPON_VALID_DAYS = 30;    // 유효기간(발급일로부터, 일)
+
+// 컴백(장기 미방문 복귀 유도) 쿠폰
+export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기간(일)이 지나면 발급 대상
+export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
+export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
 
 // 감사 로그 액션
 export const AUDIT_ACTION = {
@@ -47,14 +36,33 @@ export const AUDIT_ACTION = {
   TABLE_UPDATE: 'table_update',
   CUSTOMER_UPDATE: 'customer_update',
   CUSTOMER_DELETE: 'customer_delete',
+  CUSTOMER_WITHDRAW: 'customer_withdraw',
   QR_REISSUE: 'qr_reissue',
   STORE_LOCATION_UPDATE: 'store_location_update',
   SMS_SEND: 'sms_send',
+  BIRTHDAY_COUPON_ISSUE: 'birthday_coupon_issue',
+  COMEBACK_COUPON_ISSUE: 'comeback_coupon_issue',
 } as const;
 
-// 매장 정보
-export const STORE_INFO = {
-  name: '해율만두전골',
-  slogan: '자연의 흐름을 맛으로 전합니다.',
-  passportName: '해율 자연의 흐름 전자여권',
-} as const;
+// 감사 로그 액션 한글 라벨 (관리자 화면 여러 곳에서 공용으로 사용)
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  [AUDIT_ACTION.VISIT_CANCEL]: '방문 취소',
+  [AUDIT_ACTION.VISIT_ADD]: '방문 추가',
+  [AUDIT_ACTION.REWARD_RESTORE]: '할인권 복구',
+  [AUDIT_ACTION.REWARD_CATALOG_UPDATE]: '할인권 카탈로그 수정',
+  [AUDIT_ACTION.REWARD_RULE_CREATE]: '할인권 규칙 생성',
+  [AUDIT_ACTION.REWARD_RULE_UPDATE]: '할인권 규칙 수정',
+  [AUDIT_ACTION.REWARD_RULE_DELETE]: '할인권 규칙 삭제',
+  [AUDIT_ACTION.EMPLOYEE_CREATE]: '직원 등록',
+  [AUDIT_ACTION.EMPLOYEE_UPDATE]: '직원 정보 수정',
+  [AUDIT_ACTION.TABLE_CREATE]: '테이블 등록',
+  [AUDIT_ACTION.TABLE_UPDATE]: '테이블 정보 수정',
+  [AUDIT_ACTION.CUSTOMER_UPDATE]: '고객 정보 수정',
+  [AUDIT_ACTION.CUSTOMER_DELETE]: '고객 삭제(관리자)',
+  [AUDIT_ACTION.CUSTOMER_WITHDRAW]: '회원 탈퇴(고객 본인)',
+  [AUDIT_ACTION.QR_REISSUE]: 'QR 재발행',
+  [AUDIT_ACTION.STORE_LOCATION_UPDATE]: '매장 위치 설정 변경',
+  [AUDIT_ACTION.SMS_SEND]: '문자 발송',
+  [AUDIT_ACTION.BIRTHDAY_COUPON_ISSUE]: '생일축하 쿠폰 자동발급',
+  [AUDIT_ACTION.COMEBACK_COUPON_ISSUE]: '컴백 쿠폰 자동발급',
+};

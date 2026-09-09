@@ -13,35 +13,6 @@ export interface RewardRuleInput {
   repeatInterval: number | null;
 }
 
-export interface CouponInstance {
-  ruleId: string;
-  /** 이 할인권이 해당하는 방문 횟수 기준 (예: 반복 규칙의 25) */
-  thresholdVisits: number;
-  amount: number;
-}
-
-/**
- * 누적 방문 횟수를 기준으로, 지금까지 지급되었어야 할 할인권 목록을 전부 계산합니다.
- * 방문 횟수 기준 오름차순으로 반환합니다.
- */
-export function computeEarnedCoupons(visitCount: number, rules: RewardRuleInput[]): CouponInstance[] {
-  const result: CouponInstance[] = [];
-
-  for (const rule of rules) {
-    if (rule.isRepeating) {
-      const interval = rule.repeatInterval ?? 0;
-      if (interval <= 0) continue;
-      for (let n = rule.thresholdVisits; n <= visitCount; n += interval) {
-        result.push({ ruleId: rule.id, thresholdVisits: n, amount: rule.amount });
-      }
-    } else if (rule.thresholdVisits <= visitCount) {
-      result.push({ ruleId: rule.id, thresholdVisits: rule.thresholdVisits, amount: rule.amount });
-    }
-  }
-
-  return result.sort((a, b) => a.thresholdVisits - b.thresholdVisits);
-}
-
 export interface NextCouponInfo {
   /** 다음 할인권까지 남은 방문 횟수 */
   visitsRemaining: number;

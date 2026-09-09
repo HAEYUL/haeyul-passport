@@ -100,13 +100,50 @@ export async function adminLogout() {
   await clearAdminSession();
 }
 
-export interface AdminSessionInfo {
-  adminId: string;
-  username: string;
-}
+/**
+ * 관리자 비밀번호 변경 — 현재 비밀번호 확인 후에만 교체합니다.
+ * 해시 생성은 DB(set_admin_password, pgcrypto)에서만 이뤄집니다.
+ */
+export async function changeAdminPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
 
-export async function getAdminSessionInfo(): Promise<AdminSessionInfo | null> {
-  return getAdminSession();
+    if (!currentPassword || !newPassword) {
+      return { success: false, error: '현재 비밀번호와 새 비밀번호를 모두 입력해 주세요.' };
+    }
+
+    if (newPassword.length < 8) {
+      return { success: false, error: '새 비밀번호는 8자 이상이어야 합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: changed, error } = await supabase.rpc('set_admin_password', {
+      p_admin_id: admin.adminId,
+      p_current_password: currentPassword,
+      p_new_password: newPassword,
+    });
+
+    if (error) {
+      console.error('changeAdminPassword 오류:', error);
+      return { success: false, error: '서버 오류가 발생했습니다.' };
+    }
+
+    if (!changed) {
+      return { success: false, error: '현재 비밀번호가 일치하지 않습니다.' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('changeAdminPassword 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
 }
 
 // ============================================================
@@ -285,6 +322,8 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       .from('reward_rules')
       .select('id, threshold_visits, amount, is_repeating, repeat_interval')
       .eq('is_active', true)
+      .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (rulesError) {
@@ -294,6 +333,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
     let crQuery = supabase
       .from('customer_rewards')
       .select('threshold_visits, status')
+      .eq('source', 'visit')
       .not('reward_rule_id', 'is', null);
     if (storeId) {
       crQuery = crQuery.eq('issued_store_id', storeId);
@@ -351,6 +391,146 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
     return { success: true, data: Array.from(statsMap.values()) };
   } catch (error) {
     console.error('getRewardStats 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface RewardAmountBreakdownItem {
+  amount: number;
+  source: 'visit' | 'birthday' | 'comeback';
+  count: number;
+}
+
+export interface RewardAmountByStoreItem {
+  storeId: string;
+  storeName: string;
+  issuedAmount: number;
+  issuedCount: number;
+  usedAmount: number;
+  usedCount: number;
+  /** 사용된 할인권을 금액×종류별로 쪼갠 상세 (금액 오름차순) */
+  usedBreakdown: RewardAmountBreakdownItem[];
+}
+
+/**
+ * 매장별 할인권 발급/사용 금액 집계. 건수가 아니라 실제 나간/받은 금액이
+ * 얼마인지가 매장 입장에서 더 중요한 지표라 별도로 제공합니다.
+ * 생일축하 쿠폰은 특정 매장 없이 발급되므로 "생일쿠폰(매장무관)" 행으로
+ * 따로 보여주고, 사용될 때는 실제로 사용된 매장의 사용 금액에 포함됩니다.
+ */
+export async function getRewardAmountByStore(
+  dateFrom: string,
+  dateTo: string
+): Promise<ApiResponse<RewardAmountByStoreItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: stores, error: storesError } = await supabase
+      .from('stores')
+      .select('id, name')
+      .eq('is_active', true);
+
+    if (storesError) {
+      return { success: false, error: '매장 목록 조회 중 오류가 발생했습니다.' };
+    }
+
+    const fromISO = `${dateFrom}T00:00:00+09:00`;
+    const toISO = `${dateTo}T23:59:59+09:00`;
+
+    const issuedQuery = supabase
+      .from('customer_rewards')
+      .select('amount, source, issued_store_id')
+      .not('reward_rule_id', 'is', null)
+      .gte('issued_at', fromISO)
+      .lte('issued_at', toISO);
+    const usedQuery = supabase
+      .from('customer_rewards')
+      .select('amount, source, used_store_id')
+      .eq('status', 'used')
+      .not('reward_rule_id', 'is', null)
+      .gte('used_at', fromISO)
+      .lte('used_at', toISO);
+
+    const [{ data: issuedRows, error: issuedError }, { data: usedRows, error: usedError }] = await Promise.all([
+      issuedQuery,
+      usedQuery,
+    ]);
+
+    if (issuedError || usedError) {
+      return { success: false, error: '집계 중 오류가 발생했습니다.' };
+    }
+
+    const issuedMap = new Map<string, { amount: number; count: number }>();
+    // 생일·컴백 쿠폰은 특정 매장 없이 발급되므로 source별로 따로 집계합니다.
+    const noStoreIssuedMap = new Map<string, { amount: number; count: number }>();
+    for (const r of issuedRows || []) {
+      if (!r.issued_store_id) {
+        const key = r.source ?? 'birthday';
+        const cur = noStoreIssuedMap.get(key) || { amount: 0, count: 0 };
+        cur.amount += r.amount ?? 0;
+        cur.count += 1;
+        noStoreIssuedMap.set(key, cur);
+        continue;
+      }
+      const cur = issuedMap.get(r.issued_store_id) || { amount: 0, count: 0 };
+      cur.amount += r.amount ?? 0;
+      cur.count += 1;
+      issuedMap.set(r.issued_store_id, cur);
+    }
+
+    const usedMap = new Map<string, { amount: number; count: number }>();
+    const usedBreakdownMap = new Map<string, Map<string, RewardAmountBreakdownItem>>();
+    for (const r of usedRows || []) {
+      if (!r.used_store_id) continue;
+      const cur = usedMap.get(r.used_store_id) || { amount: 0, count: 0 };
+      cur.amount += r.amount ?? 0;
+      cur.count += 1;
+      usedMap.set(r.used_store_id, cur);
+
+      const amount = r.amount ?? 0;
+      const source = (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit';
+      const breakdownKey = `${amount}_${source}`;
+      const storeBreakdown = usedBreakdownMap.get(r.used_store_id) || new Map();
+      const item = storeBreakdown.get(breakdownKey) || { amount, source, count: 0 };
+      item.count += 1;
+      storeBreakdown.set(breakdownKey, item);
+      usedBreakdownMap.set(r.used_store_id, storeBreakdown);
+    }
+
+    const result: RewardAmountByStoreItem[] = (stores || []).map((s) => ({
+      storeId: s.id,
+      storeName: s.name,
+      issuedAmount: issuedMap.get(s.id)?.amount ?? 0,
+      issuedCount: issuedMap.get(s.id)?.count ?? 0,
+      usedAmount: usedMap.get(s.id)?.amount ?? 0,
+      usedCount: usedMap.get(s.id)?.count ?? 0,
+      usedBreakdown: [...(usedBreakdownMap.get(s.id)?.values() ?? [])].sort((a, b) => a.amount - b.amount),
+    }));
+
+    const noStoreLabels: Record<string, string> = {
+      birthday: '생일쿠폰(매장무관 발급)',
+      comeback: '컴백쿠폰(매장무관 발급)',
+    };
+    for (const [source, agg] of noStoreIssuedMap) {
+      result.push({
+        storeId: source,
+        storeName: noStoreLabels[source] ?? `${source}(매장무관 발급)`,
+        issuedAmount: agg.amount,
+        issuedCount: agg.count,
+        usedAmount: 0,
+        usedCount: 0,
+        usedBreakdown: [],
+      });
+    }
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getRewardAmountByStore 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -660,6 +840,8 @@ export async function getRewardRules(): Promise<ApiResponse<RewardRuleAdminItem[
     const { data, error } = await supabase
       .from('reward_rules')
       .select('id, threshold_visits, amount, is_repeating, repeat_interval, is_active')
+      .eq('is_birthday', false)
+      .eq('is_comeback', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
@@ -870,6 +1052,12 @@ export interface CustomerListItem {
   marketingConsent: boolean;
   /** 가입 매장명 */
   signupStoreName: string;
+  /** 관리자 메모 */
+  adminNote: string | null;
+  /** 해율푸드 VIP 등급 선물이 발급된 시점(VIP 달성일). filter='vip'가 아니면 undefined */
+  vipAchievedAt?: string | null;
+  /** VIP 등급 선물(감사 할인권) 사용 여부. filter='vip'가 아니면 undefined */
+  giftUsed?: boolean;
 }
 
 /**
@@ -882,6 +1070,10 @@ export interface CustomerListItem {
  * - longAbsent: 최근 방문일로부터 일정 기간 이상 방문이 없는 고객
  * - tier: 특정 방문 등급(tierKey)에 해당하는 고객
  * - birthdayThisMonth: 이번 달이 생일인 고객
+ * - visitedStore: storeId 매장을 한 번이라도 방문한 고객 (가입 매장과 무관 — 신메뉴 안내 등
+ *   특정 매장 방문객 전체에게 안내할 때 사용. storeId가 없으면 빈 목록)
+ * - missingBirthDate: 생년월일을 등록하지 않은 고객 (생일쿠폰을 받을 수 없는 고객 — 등록 유도 안내용)
+ * - tierUpThisMonth: 이번 달에 등급이 승급(5·10·20·30회 등급 축하 할인권 발급)된 고객
  */
 export type CustomerListFilter =
   | 'all'
@@ -892,7 +1084,10 @@ export type CustomerListFilter =
   | 'vip'
   | 'longAbsent'
   | 'tier'
-  | 'birthdayThisMonth';
+  | 'birthdayThisMonth'
+  | 'visitedStore'
+  | 'missingBirthDate'
+  | 'tierUpThisMonth';
 
 export async function getCustomerList(
   query: string,
@@ -953,6 +1148,36 @@ export async function getCustomerList(
       idFilter = (customers || [])
         .filter((c) => c.birth_date && c.birth_date.slice(5, 7) === currentMonth)
         .map((c) => c.id);
+    } else if (filter === 'visitedStore') {
+      if (!storeId) {
+        idFilter = [];
+      } else {
+        const { data: visits } = await supabase
+          .from('visits')
+          .select('customer_id')
+          .eq('store_id', storeId)
+          .eq('is_cancelled', false);
+        idFilter = [...new Set((visits || []).map((v) => v.customer_id))];
+      }
+    } else if (filter === 'missingBirthDate') {
+      const { data: customersWithoutBirthDate } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('is_active', true)
+        .is('birth_date', null);
+      idFilter = (customersWithoutBirthDate || []).map((c) => c.id);
+    } else if (filter === 'tierUpThisMonth') {
+      const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
+      const tierUpThresholds = getAllTiers()
+        .filter((t) => t.minVisits > 1)
+        .map((t) => t.minVisits);
+      const { data: tierUpRewards } = await supabase
+        .from('customer_rewards')
+        .select('customer_id')
+        .in('threshold_visits', tierUpThresholds)
+        .not('reward_rule_id', 'is', null)
+        .gte('issued_at', monthStart);
+      idFilter = [...new Set((tierUpRewards || []).map((r) => r.customer_id))];
     }
 
     if (idFilter && idFilter.length === 0) {
@@ -961,7 +1186,7 @@ export async function getCustomerList(
 
     let request = supabase
       .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id')
+      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id, admin_note')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(idFilter ? 1000 : 100);
@@ -970,7 +1195,7 @@ export async function getCustomerList(
       request = request.in('id', idFilter);
     }
 
-    if (storeId) {
+    if (storeId && filter !== 'visitedStore') {
       request = request.eq('signup_store_id', storeId);
     }
 
@@ -1024,10 +1249,36 @@ export async function getCustomerList(
       recentVisitDate: latestVisitMap.get(c.id) ?? null,
       marketingConsent: c.marketing_consent,
       signupStoreName: storeMap.get(c.signup_store_id) || '-',
+      adminNote: c.admin_note,
     }));
 
     if (filter === 'longAbsent') {
       result.sort((a, b) => (a.recentVisitDate || '').localeCompare(b.recentVisitDate || ''));
+    }
+
+    if (filter === 'vip' && result.length > 0) {
+      // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
+      // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
+      const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
+      const { data: crs } = await supabase
+        .from('customer_rewards')
+        .select('customer_id, issued_at, status')
+        .eq('threshold_visits', vipMinVisits)
+        .not('reward_rule_id', 'is', null)
+        .in('customer_id', result.map((r) => r.id));
+
+      const rewardMap = new Map<string, { issuedAt: string; status: string }>();
+      for (const cr of crs || []) {
+        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
+      }
+
+      for (const item of result) {
+        const rewardInfo = rewardMap.get(item.id);
+        item.vipAchievedAt = rewardInfo?.issuedAt || null;
+        item.giftUsed = rewardInfo?.status === 'used';
+      }
+
+      result.sort((a, b) => b.visitCount - a.visitCount);
     }
 
     return { success: true, data: result };
@@ -1291,12 +1542,18 @@ export interface DuplicateVisitGroup {
   customerNumber: string;
   phone: string;
   visitDate: string;
+  storeName: string;
   visits: { id: string; visitTime: string }[];
 }
 
 /**
- * 같은 고객이 같은 날짜에 취소되지 않은 방문 기록을 2건 이상 가진 경우를 찾습니다.
- * (DB 제약으로 원칙적으로 발생하지 않아야 하지만, 이상 여부를 점검하기 위한 화면)
+ * 같은 고객이 같은 날짜에 같은 매장에서 취소되지 않은 방문 기록을 2건 이상 가진
+ * 경우를 찾습니다. (DB 제약으로 원칙적으로 발생하지 않아야 하지만, 이상 여부를
+ * 점검하기 위한 화면)
+ *
+ * 매장 구분 없이 "같은 날짜"만 봤다면, 3매장을 오가는 정상적인 통합 이용
+ * (예: 점심 A매장, 저녁 B매장)까지 전부 중복으로 잘못 잡히기 때문에 반드시
+ * store_id까지 함께 묶어야 합니다.
  */
 export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGroup[]>> {
   try {
@@ -1306,23 +1563,25 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
     }
     const supabase = createAdminClient();
 
-    const { data: visits, error } = await supabase
-      .from('visits')
-      .select('id, customer_id, visit_date, visit_time')
-      .eq('is_cancelled', false);
+    const [{ data: visits, error }, { data: stores }] = await Promise.all([
+      supabase.from('visits').select('id, customer_id, store_id, visit_date, visit_time').eq('is_cancelled', false),
+      supabase.from('stores').select('id, name'),
+    ]);
 
     if (error) {
       return { success: false, error: '방문 기록 조회 중 오류가 발생했습니다.' };
     }
 
+    const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
+
     const groups = new Map<
       string,
-      { customerId: string; visitDate: string; visits: { id: string; visitTime: string }[] }
+      { customerId: string; visitDate: string; storeId: string; visits: { id: string; visitTime: string }[] }
     >();
     for (const v of visits || []) {
-      const key = `${v.customer_id}_${v.visit_date}`;
+      const key = `${v.customer_id}_${v.visit_date}_${v.store_id}`;
       if (!groups.has(key)) {
-        groups.set(key, { customerId: v.customer_id, visitDate: v.visit_date, visits: [] });
+        groups.set(key, { customerId: v.customer_id, visitDate: v.visit_date, storeId: v.store_id, visits: [] });
       }
       groups.get(key)!.visits.push({ id: v.id, visitTime: v.visit_time });
     }
@@ -1348,6 +1607,7 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
           customerNumber: c?.customer_number || '-',
           phone: c?.phone || '-',
           visitDate: d.visitDate,
+          storeName: storeMap.get(d.storeId) || '알 수 없음',
           visits: d.visits.sort((a, b) => a.visitTime.localeCompare(b.visitTime)),
         };
       })
@@ -1459,14 +1719,59 @@ export async function cancelVisit(visitId: string, reason: string): Promise<ApiR
       return { success: false, error: '방문 취소 처리 중 오류가 발생했습니다.' };
     }
 
+    // ─── 이 취소로 더 이상 자격이 안 되는 할인권 정리 ─────────────────
+    // visit_count는 update_visit_count 트리거에서 이미 감소했으므로,
+    // 다시 조회하면 감소분이 반영된 최신 값을 얻습니다. 아직 안 쓴
+    // 할인권은 애초에 못 받았어야 하니 그대로 회수(삭제)하고, 이미 쓴
+    // 할인권은 되돌릴 수 없으니 삭제하지 않고 관리자에게 알리기만 합니다.
+    const { data: customerAfter } = await supabase
+      .from('customers')
+      .select('visit_count')
+      .eq('id', before.customer_id)
+      .single();
+
+    const newVisitCount = customerAfter?.visit_count ?? 0;
+
+    const { data: overissuedRewards } = await supabase
+      .from('customer_rewards')
+      .select('id, status, threshold_visits, amount')
+      .eq('customer_id', before.customer_id)
+      .not('reward_rule_id', 'is', null)
+      .gt('threshold_visits', newVisitCount);
+
+    const revokedRewardIds = (overissuedRewards || [])
+      .filter((r) => r.status === 'available')
+      .map((r) => r.id);
+    const usedRewardsNowInvalid = (overissuedRewards || []).filter((r) => r.status === 'used');
+
+    if (revokedRewardIds.length > 0) {
+      await supabase.from('customer_rewards').delete().in('id', revokedRewardIds);
+    }
+
     await supabase.from('audit_logs').insert({
       admin_id: admin.adminId,
       action: AUDIT_ACTION.VISIT_CANCEL,
       target_type: 'visit',
       target_id: visitId,
       before_data: before,
-      after_data: after,
+      after_data: {
+        ...after,
+        revokedRewardIds,
+        usedRewardsNowInvalid: usedRewardsNowInvalid.map((r) => ({
+          id: r.id,
+          amount: r.amount,
+          thresholdVisits: r.threshold_visits,
+        })),
+      },
     });
+
+    if (usedRewardsNowInvalid.length > 0) {
+      const totalAmount = usedRewardsNowInvalid.reduce((sum, r) => sum + r.amount, 0);
+      return {
+        success: true,
+        message: `주의: 이 취소로 이미 사용된 할인권 ${usedRewardsNowInvalid.length}건(총 ${totalAmount.toLocaleString()}원)이 자격 기준에 맞지 않게 되었습니다. 자동으로 회수되지 않으니 별도 확인이 필요합니다.`,
+      };
+    }
 
     return { success: true };
   } catch (error) {
@@ -1556,97 +1861,11 @@ export async function addManualVisit(
 }
 
 // ============================================================
-// VIP관리
+// 고객 관리자 메모
 // ============================================================
 
-export interface VipCustomerItem {
-  id: string;
-  name: string;
-  customerNumber: string;
-  phone: string;
-  /** 해율푸드 VIP 등급 선물이 발급된 시점 (VIP 달성일). 아직 발급되지 않았으면 null */
-  vipAchievedAt: string | null;
-  visitCount: number;
-  recentVisitDate: string | null;
-  giftUsed: boolean;
-  adminNote: string | null;
-}
-
 /**
- * 해율푸드 VIP(최고 등급) 고객 목록. VIP 달성일/감사 선물 사용 여부는
- * 최고 등급 선물(customer_rewards)의 발급일·상태를 그대로 사용합니다.
- */
-export async function getVipCustomers(storeId?: string | null): Promise<ApiResponse<VipCustomerItem[]>> {
-  try {
-    const admin = await getAdminSession();
-    if (!admin) {
-      return { success: false, error: '관리자 로그인이 필요합니다.' };
-    }
-
-    const supabase = createAdminClient();
-    const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
-
-    let customersQuery = supabase
-      .from('customers')
-      .select('id, name, customer_number, phone, visit_count, admin_note')
-      .eq('is_active', true)
-      .gte('visit_count', vipMinVisits)
-      .order('visit_count', { ascending: false });
-    if (storeId) {
-      customersQuery = customersQuery.eq('signup_store_id', storeId);
-    }
-
-    const { data: customers, error: custError } = await customersQuery;
-
-    if (custError) {
-      return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
-    }
-    if (!customers || customers.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    const customerIds = customers.map((c) => c.id);
-    const rewardMap = new Map<string, { issuedAt: string; status: string }>();
-
-    // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
-    // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
-    const { data: crs } = await supabase
-      .from('customer_rewards')
-      .select('customer_id, issued_at, status')
-      .eq('threshold_visits', vipMinVisits)
-      .not('reward_rule_id', 'is', null)
-      .in('customer_id', customerIds);
-
-    for (const cr of crs || []) {
-      rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
-    }
-
-    const latestVisitMap = await getLatestVisitDateMap(supabase);
-
-    const result: VipCustomerItem[] = customers.map((c) => {
-      const rewardInfo = rewardMap.get(c.id);
-      return {
-        id: c.id,
-        name: c.name,
-        customerNumber: c.customer_number,
-        phone: c.phone,
-        vipAchievedAt: rewardInfo?.issuedAt || null,
-        visitCount: c.visit_count,
-        recentVisitDate: latestVisitMap.get(c.id) || null,
-        giftUsed: rewardInfo?.status === 'used',
-        adminNote: c.admin_note,
-      };
-    });
-
-    return { success: true, data: result };
-  } catch (error) {
-    console.error('getVipCustomers 오류:', error);
-    return { success: false, error: '서버 오류가 발생했습니다.' };
-  }
-}
-
-/**
- * VIP관리 화면에서 고객별 관리자 메모를 저장합니다.
+ * 고객별 관리자 메모를 저장합니다.
  */
 export async function updateCustomerAdminNote(
   customerId: string,
@@ -1917,11 +2136,12 @@ export interface CustomerRewardItem {
   id: string;
   amount: number;
   thresholdVisits: number;
+  source: 'visit' | 'birthday' | 'comeback';
   status: RewardStatus;
   issuedAt: string;
   requestedAt: string | null;
   usedAt: string | null;
-  issuedStoreName: string;
+  issuedStoreName: string | null;
   usedStoreName: string | null;
 }
 
@@ -1968,7 +2188,7 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
       supabase
         .from('customer_rewards')
         .select(
-          'id, threshold_visits, amount, status, issued_at, requested_at, used_at, issued_store_id, used_store_id'
+          'id, threshold_visits, amount, status, source, issued_at, requested_at, used_at, issued_store_id, used_store_id'
         )
         .eq('customer_id', customerId)
         .not('reward_rule_id', 'is', null)
@@ -1998,17 +2218,116 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
           id: r.id,
           amount: r.amount ?? 0,
           thresholdVisits: r.threshold_visits ?? 0,
+          source: (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
           status: r.status,
           issuedAt: r.issued_at,
           requestedAt: r.requested_at,
           usedAt: r.used_at,
-          issuedStoreName: storeMap.get(r.issued_store_id) || '-',
+          issuedStoreName: r.issued_store_id ? storeMap.get(r.issued_store_id) || '-' : null,
           usedStoreName: r.used_store_id ? storeMap.get(r.used_store_id) || '-' : null,
         })),
       },
     };
   } catch (error) {
     console.error('getCustomerDetail 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface CustomerSmsHistoryItem {
+  id: string;
+  action: string;
+  message: string | null;
+  sentAt: string;
+}
+
+/**
+ * 이 고객에게 발송된 문자 이력 (수동 대량발송, 생일쿠폰, 컴백쿠폰 자동발송 포함).
+ * 각 발송의 audit_logs.after_data.customerIds 배열에 이 고객 ID가 포함돼 있는지로 찾습니다.
+ */
+export async function getCustomerSmsHistory(customerId: string): Promise<ApiResponse<CustomerSmsHistoryItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('id, action, after_data, created_at')
+      .in('action', [AUDIT_ACTION.SMS_SEND, AUDIT_ACTION.BIRTHDAY_COUPON_ISSUE, AUDIT_ACTION.COMEBACK_COUPON_ISSUE])
+      .contains('after_data', { customerIds: [customerId] })
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      return { success: false, error: '문자 발송 이력을 불러올 수 없습니다.' };
+    }
+
+    const result: CustomerSmsHistoryItem[] = (data || []).map((l) => ({
+      id: l.id,
+      action: l.action,
+      message: (l.after_data as { message?: string } | null)?.message ?? null,
+      sentAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getCustomerSmsHistory 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface CustomerAuditHistoryItem {
+  id: string;
+  action: string;
+  adminUsername: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * 이 고객의 정보 변경 이력 (수정/삭제/탈퇴 등, target_type='customer' 기준).
+ */
+export async function getCustomerAuditHistory(customerId: string): Promise<ApiResponse<CustomerAuditHistoryItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('id, admin_id, action, reason, created_at')
+      .eq('target_type', 'customer')
+      .eq('target_id', customerId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      return { success: false, error: '변경 이력을 불러올 수 없습니다.' };
+    }
+
+    const adminIds = [...new Set((data || []).map((l) => l.admin_id).filter((id): id is string => !!id))];
+    const adminUsernameMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase.from('admin_users').select('id, username').in('id', adminIds);
+      (admins || []).forEach((a) => adminUsernameMap.set(a.id, a.username));
+    }
+
+    const result: CustomerAuditHistoryItem[] = (data || []).map((l) => ({
+      id: l.id,
+      action: l.action,
+      adminUsername: l.admin_id ? adminUsernameMap.get(l.admin_id) ?? null : null,
+      reason: l.reason,
+      createdAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getCustomerAuditHistory 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -2685,7 +3004,7 @@ export async function sendSmsToCustomers(
 
     const finalMessage =
       messageType === 'ad'
-        ? `(광고) ${trimmedMessage}\n무료수신거부 ${normalizePhone(process.env.ALIGO_SENDER || '')}`
+        ? `(광고) [해율푸드] ${trimmedMessage}\n무료수신거부 ${normalizePhone(process.env.ALIGO_SENDER || '')}`
         : trimmedMessage;
 
     const receivers = validTargets.map((c) => c.phone.replace(/\D/g, ''));
@@ -2714,6 +3033,7 @@ export async function sendSmsToCustomers(
         successCount: sendResult.successCount,
         errorCount: sendResult.errorCount,
         message: finalMessage,
+        customerIds: validTargets.map((c) => c.id),
       },
     });
 
@@ -2727,6 +3047,108 @@ export async function sendSmsToCustomers(
     };
   } catch (error) {
     console.error('sendSmsToCustomers 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 활동 이력 (감사 로그)
+// ============================================================
+
+export interface AuditLogItem {
+  id: string;
+  adminUsername: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * 최근 관리자/시스템 활동 이력을 조회합니다.
+ * 방문취소·할인권복구·고객삭제·회원탈퇴·QR재발행·SMS발송 등은 각 처리 시점에
+ * 이미 audit_logs에 기록되고 있으며, 이 함수는 그 기록을 읽어오기만 합니다.
+ */
+export interface AuditLogFilters {
+  /** AUDIT_ACTION 값 중 하나. 생략하면 전체 */
+  action?: string;
+  /** 'YYYY-MM-DD', 이 날짜(한국시간) 자정부터 */
+  dateFrom?: string;
+  /** 'YYYY-MM-DD', 이 날짜(한국시간) 끝까지 */
+  dateTo?: string;
+  /** 고객명·사유 등 자유 검색어. before_data/after_data/reason 안에서 찾습니다 */
+  query?: string;
+}
+
+/**
+ * 최근 활동 이력을 조회합니다. 기간·작업종류로 DB에서 먼저 걸러내고,
+ * 자유 검색어는 조회된 최근 `limit`건 안에서 JSON 내용까지 훑어봅니다
+ * (전체 이력을 대상으로 한 전문 검색은 아니며, 최근 활동 위주의 검색입니다).
+ */
+export async function getAuditLogs(
+  filters: AuditLogFilters = {},
+  limit = 300
+): Promise<ApiResponse<AuditLogItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    let logsQuery = supabase
+      .from('audit_logs')
+      .select('id, admin_id, action, target_type, target_id, reason, before_data, after_data, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (filters.action) {
+      logsQuery = logsQuery.eq('action', filters.action);
+    }
+    if (filters.dateFrom) {
+      logsQuery = logsQuery.gte('created_at', `${filters.dateFrom}T00:00:00+09:00`);
+    }
+    if (filters.dateTo) {
+      logsQuery = logsQuery.lte('created_at', `${filters.dateTo}T23:59:59+09:00`);
+    }
+
+    const { data: logs, error } = await logsQuery;
+
+    if (error) {
+      return { success: false, error: '활동 이력을 불러올 수 없습니다.' };
+    }
+
+    let filteredLogs = logs || [];
+    const keyword = filters.query?.trim().toLowerCase();
+    if (keyword) {
+      filteredLogs = filteredLogs.filter((l) => {
+        const haystack = `${l.reason ?? ''} ${JSON.stringify(l.before_data ?? '')} ${JSON.stringify(l.after_data ?? '')}`.toLowerCase();
+        return haystack.includes(keyword);
+      });
+    }
+
+    const adminIds = [...new Set(filteredLogs.map((l) => l.admin_id).filter((id): id is string => !!id))];
+    const adminUsernameMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase.from('admin_users').select('id, username').in('id', adminIds);
+      (admins || []).forEach((a) => adminUsernameMap.set(a.id, a.username));
+    }
+
+    const result: AuditLogItem[] = filteredLogs.map((l) => ({
+      id: l.id,
+      adminUsername: l.admin_id ? adminUsernameMap.get(l.admin_id) ?? null : null,
+      action: l.action,
+      targetType: l.target_type,
+      targetId: l.target_id,
+      reason: l.reason,
+      createdAt: l.created_at,
+    }));
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getAuditLogs 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

@@ -25,12 +25,24 @@ const TIER_DEFINITIONS: TierDefinition[] = [
 export const VIP_MESSAGE =
   '해율푸드 VIP가 되셨습니다. 오랜 시간 자연의 흐름을 함께해 주셔서 감사합니다.';
 
+/** VIP 등급 달성(30회) 이후, 31회부터 계속 보여줄 문구 */
+export const VIP_ONGOING_MESSAGE =
+  '오랜 시간 함께해 주신 해율푸드 VIP 고객님, 늘 감사한 마음으로 자연을 전합니다.';
+
 /**
  * 등급 안내(여권 설명서 등)에서 쓰기 위한 전체 등급 목록.
  * 낮은 등급부터 순서대로 반환합니다.
  */
 export function getAllTiers(): TierDefinition[] {
   return TIER_DEFINITIONS.map((t) => ({ ...t }));
+}
+
+/**
+ * 방문 할인권의 기준 횟수가 등급 승급 시점과 일치하면 그 등급 정의를 반환합니다.
+ * 새싹(1회)은 가입 시점이라 등급업 쿠폰 대상에서 제외합니다.
+ */
+export function getTierUpDefinition(thresholdVisits: number): TierDefinition | null {
+  return TIER_DEFINITIONS.find((t) => t.minVisits === thresholdVisits && t.minVisits > 1) ?? null;
 }
 
 export interface VisitTierInfo {

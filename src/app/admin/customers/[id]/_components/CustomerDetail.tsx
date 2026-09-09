@@ -7,12 +7,18 @@ import {
   getCustomerDetail,
   updateCustomer,
   deleteCustomer,
+  updateCustomerAdminNote,
+  getCustomerSmsHistory,
+  getCustomerAuditHistory,
   type CustomerDetail as CustomerDetailData,
+  type CustomerSmsHistoryItem,
+  type CustomerAuditHistoryItem,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getVisitTierInfo } from '@/lib/tiers';
 import { getStoreAdminColor } from '@/lib/storeColors';
 import { getReferralSourceLabel } from '@/lib/referralSource';
+import { AUDIT_ACTION_LABELS } from '@/lib/constants';
 
 interface CustomerDetailProps {
   customerId: string;
@@ -62,6 +68,14 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState('');
+
+  const [smsHistory, setSmsHistory] = useState<CustomerSmsHistoryItem[] | null>(null);
+  const [auditHistory, setAuditHistory] = useState<CustomerAuditHistoryItem[] | null>(null);
+
   const fetchDetail = useCallback(async () => {
     const result = await getCustomerDetail(customerId);
     if (result.success && result.data) {
@@ -70,6 +84,19 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
       setError(result.error || '고객 정보를 불러올 수 없습니다.');
     }
   }, [customerId]);
+
+  const fetchHistory = useCallback(async () => {
+    const [smsResult, auditResult] = await Promise.all([
+      getCustomerSmsHistory(customerId),
+      getCustomerAuditHistory(customerId),
+    ]);
+    if (smsResult.success && smsResult.data) setSmsHistory(smsResult.data);
+    if (auditResult.success && auditResult.data) setAuditHistory(auditResult.data);
+  }, [customerId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   useEffect(() => {
     fetchDetail();
@@ -115,6 +142,29 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
       fetchDetail();
     } else {
       setSaveError(result.error || '수정 중 오류가 발생했습니다.');
+    }
+  }
+
+  function startEditNote() {
+    if (!data) return;
+    setNoteValue(data.customer.admin_note || '');
+    setNoteError('');
+    setEditingNote(true);
+  }
+
+  async function handleSaveNote() {
+    setNoteSaving(true);
+    setNoteError('');
+
+    const result = await updateCustomerAdminNote(customerId, noteValue);
+
+    setNoteSaving(false);
+
+    if (result.success) {
+      setEditingNote(false);
+      fetchDetail();
+    } else {
+      setNoteError(result.error || '메모 저장 중 오류가 발생했습니다.');
     }
   }
 
@@ -309,6 +359,49 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     </div>
                   )}
 
+                  <div className="pt-3 border-t border-[#F0EDE6]">
+                    <p className="text-sm text-[#6B6B5E] mb-1">관리자 메모</p>
+                    {editingNote ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={noteValue}
+                          onChange={(e) => setNoteValue(e.target.value)}
+                          rows={3}
+                          placeholder="알러지, 선호 메뉴, 응대 시 참고사항 등을 적어두세요."
+                          className="w-full px-3 py-2.5 text-[15px] border-2 border-[#D4D0C8] rounded-xl resize-none
+                                     focus:border-[#2D5A3D] focus:outline-none transition-colors duration-200"
+                        />
+                        {noteError && <p className="text-sm text-[#D4442A]">{noteError}</p>}
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setEditingNote(false)}
+                            disabled={noteSaving}
+                            className="px-4 py-2 text-sm text-[#6B6B5E] underline disabled:cursor-not-allowed"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={handleSaveNote}
+                            disabled={noteSaving}
+                            className="px-4 py-2 text-sm font-semibold text-[#2D5A3D] underline disabled:opacity-50"
+                          >
+                            {noteSaving ? '저장 중...' : '저장'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[15px] text-[#333] whitespace-pre-line">{data.customer.admin_note || '메모 없음'}</p>
+                        <button
+                          onClick={startEditNote}
+                          className="flex-shrink-0 text-sm text-[#2D5A3D] underline"
+                        >
+                          수정
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex gap-2 pt-3 border-t border-[#F0EDE6]">
                     <button
                       onClick={startEdit}
@@ -376,10 +469,14 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     >
                       <div>
                         <p className="text-[15px] font-medium text-[#333]">
-                          {r.amount.toLocaleString()}원 할인권 <span className="text-xs text-[#6B6B5E]">({r.thresholdVisits}회)</span>
+                          {r.amount.toLocaleString()}원 할인권{' '}
+                          <span className="text-xs text-[#6B6B5E]">
+                            ({r.source === 'birthday' ? '생일축하' : r.source === 'comeback' ? '컴백' : `${r.thresholdVisits}회`})
+                          </span>
                         </p>
                         <p className="text-xs text-[#6B6B5E]">
-                          발급일: {formatDateKR(r.issuedAt)} · {r.issuedStoreName}
+                          발급일: {formatDateKR(r.issuedAt)}
+                          {r.issuedStoreName && ` · ${r.issuedStoreName}`}
                         </p>
                         {r.status === 'used' && r.usedAt && (
                           <p className="text-xs text-[#6B6B5E]">
@@ -417,6 +514,59 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                       </li>
                     );
                   })}
+                </ul>
+              )}
+            </div>
+
+            {/* 문자 발송 이력 */}
+            <div className="space-y-2">
+              <h2 className="text-base font-semibold text-[#555]">문자 발송 이력</h2>
+              {!smsHistory ? (
+                <div className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+              ) : smsHistory.length === 0 ? (
+                <p className="text-[15px] text-[#6B6B5E] py-2">발송된 문자가 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {smsHistory.map((s) => (
+                    <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#2D5A3D]">
+                          {AUDIT_ACTION_LABELS[s.action] || s.action}
+                        </span>
+                        <span className="text-xs text-[#6B6B5E]">{formatDateKR(s.sentAt)}</span>
+                      </div>
+                      {s.message && (
+                        <p className="mt-1 text-sm text-[#555] whitespace-pre-line">{s.message}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* 정보 변경 이력 */}
+            <div className="space-y-2">
+              <h2 className="text-base font-semibold text-[#555]">정보 변경 이력</h2>
+              {!auditHistory ? (
+                <div className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
+              ) : auditHistory.length === 0 ? (
+                <p className="text-[15px] text-[#6B6B5E] py-2">변경 이력이 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {auditHistory.map((a) => (
+                    <li key={a.id} className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#2D5A3D]">
+                          {AUDIT_ACTION_LABELS[a.action] || a.action}
+                        </span>
+                        <span className="text-xs text-[#6B6B5E]">{formatDateKR(a.createdAt)}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-[#6B6B5E]">
+                        {a.adminUsername ? `처리자: ${a.adminUsername}` : '처리자: 시스템'}
+                        {a.reason && ` · ${a.reason}`}
+                      </p>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>
