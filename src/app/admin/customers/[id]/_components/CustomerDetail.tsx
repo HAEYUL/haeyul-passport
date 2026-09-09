@@ -17,6 +17,7 @@ import {
 import { formatDateKR } from '@/lib/utils';
 import { getVisitTierInfo } from '@/lib/tiers';
 import { getStoreAdminColor } from '@/lib/storeColors';
+import { getReferralSourceLabel } from '@/lib/referralSource';
 import { AUDIT_ACTION_LABELS } from '@/lib/constants';
 
 interface CustomerDetailProps {
@@ -324,6 +325,15 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
                     <div className="flex justify-between">
                       <span className="text-[#6B6B5E]">가입 매장</span>
                       <span className="text-[#333]">{data.signupStoreName || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B6B5E]">유입 경로</span>
+                      <span className="text-[#333]">
+                        {getReferralSourceLabel(data.customer.referral_source) || '-'}
+                        {data.customer.referral_source === 'other' && data.customer.referral_source_detail
+                          ? ` (${data.customer.referral_source_detail})`
+                          : ''}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#6B6B5E]">가입일</span>
