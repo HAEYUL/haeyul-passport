@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { registerCustomer } from '@/app/actions';
 import type { GeoCoords } from '@/lib/geolocation';
+import { REFERRAL_SOURCE_OPTIONS } from '@/lib/referralSource';
 
 interface RegisterFormProps {
   onBack: () => void;
@@ -27,6 +28,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [privacyConsent, setPrivacyConsent] = useState(true);
   const [marketingConsent, setMarketingConsent] = useState(true);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
+  const [referralSource, setReferralSource] = useState('');
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -140,6 +142,45 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                          focus:border-[#2D5A3D] focus:outline-none
                          transition-colors duration-200"
             />
+          </div>
+
+          {/* 해율을 알게 된 경로 (선택) */}
+          <div>
+            <label className="block text-base font-medium text-[#333] mb-2">
+              해율을 알게 되신 경로 <span className="text-sm text-[#AAA]">(선택)</span>
+            </label>
+            <div className="space-y-2.5">
+              {REFERRAL_SOURCE_OPTIONS.map((option) => (
+                <label
+                  key={option.key}
+                  htmlFor={`referral-${option.key}`}
+                  className="flex items-center gap-3 text-[15px] text-[#333] cursor-pointer"
+                >
+                  <input
+                    id={`referral-${option.key}`}
+                    type="radio"
+                    name="referral_source"
+                    value={option.key}
+                    checked={referralSource === option.key}
+                    onChange={() => setReferralSource(option.key)}
+                    className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+            {referralSource === 'other' && (
+              <input
+                type="text"
+                name="referral_source_detail"
+                placeholder="어떤 경로였는지 알려주세요"
+                maxLength={100}
+                className="mt-2.5 w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl
+                           bg-white placeholder-[#B0B0A0]
+                           focus:border-[#2D5A3D] focus:outline-none
+                           transition-colors duration-200"
+              />
+            )}
           </div>
 
           {/* 구분선 */}

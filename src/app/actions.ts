@@ -8,6 +8,7 @@ import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
 import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
+import { isReferralSourceKey } from '@/lib/referralSource';
 import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
@@ -67,6 +68,10 @@ export async function registerCustomer(
     const birthDate = (formData.get('birth_date') as string)?.trim() || null;
     const marketingConsent = formData.get('marketing_consent') === 'true';
     const privacyConsent = formData.get('privacy_consent') === 'true';
+    const rawReferralSource = (formData.get('referral_source') as string)?.trim() || null;
+    const referralSource = rawReferralSource && isReferralSourceKey(rawReferralSource) ? rawReferralSource : null;
+    const referralSourceDetail =
+      referralSource === 'other' ? (formData.get('referral_source_detail') as string)?.trim() || null : null;
 
     // ─── 유효성 검사 ─────────────────────────────
     if (!name) {
@@ -133,6 +138,8 @@ export async function registerCustomer(
         birth_date: birthDate || null,
         marketing_consent: marketingConsent,
         signup_store_id: storeId,
+        referral_source: referralSource,
+        referral_source_detail: referralSourceDetail,
       })
       .select()
       .single();

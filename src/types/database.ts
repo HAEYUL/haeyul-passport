@@ -2,6 +2,8 @@
  * 해율 자연의 흐름 전자여권 — 데이터베이스 타입 정의
  */
 
+import type { ReferralSourceKey } from '@/lib/referralSource';
+
 // ============================================================
 // ENUM 타입
 // ============================================================
@@ -65,6 +67,8 @@ export interface Customer {
   is_active: boolean;
   admin_note: string | null;
   signup_store_id: string | null;
+  referral_source: ReferralSourceKey | null;
+  referral_source_detail: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -15,6 +15,7 @@ import {
 } from '@/lib/utils';
 import { AUDIT_ACTION } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
+import { REFERRAL_SOURCE_OPTIONS } from '@/lib/referralSource';
 import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
 import { sendSms } from '@/lib/sms';
 import {
@@ -1083,6 +1084,67 @@ export async function getTierBreakdown(storeId?: string | null): Promise<ApiResp
     };
   } catch (error) {
     console.error('getTierBreakdown 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface ReferralSourceBreakdownItem {
+  key: string;
+  label: string;
+  count: number;
+}
+
+/**
+ * 유입 경로별 고객 수 집계. 가입 시 응답하지 않은 고객은 "미응답"으로 별도 집계합니다.
+ */
+export async function getReferralSourceBreakdown(
+  storeId?: string | null
+): Promise<ApiResponse<ReferralSourceBreakdownItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const counts = await Promise.all(
+      REFERRAL_SOURCE_OPTIONS.map((option) => {
+        let q = supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_active', true)
+          .eq('referral_source', option.key);
+        if (storeId) {
+          q = q.eq('signup_store_id', storeId);
+        }
+        return q;
+      })
+    );
+
+    let unansweredQuery = supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .is('referral_source', null);
+    if (storeId) {
+      unansweredQuery = unansweredQuery.eq('signup_store_id', storeId);
+    }
+    const unanswered = await unansweredQuery;
+
+    return {
+      success: true,
+      data: [
+        ...REFERRAL_SOURCE_OPTIONS.map((option, i) => ({
+          key: option.key,
+          label: option.label,
+          count: counts[i].count || 0,
+        })),
+        { key: 'unanswered', label: '미응답', count: unanswered.count || 0 },
+      ],
+    };
+  } catch (error) {
+    console.error('getReferralSourceBreakdown 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

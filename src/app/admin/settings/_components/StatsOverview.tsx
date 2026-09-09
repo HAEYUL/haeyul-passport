@@ -6,6 +6,7 @@ import {
   getSignupTrend,
   getNewVsReturningTrend,
   getTierBreakdown,
+  getReferralSourceBreakdown,
   getRewardStats,
   getVipConversionTrend,
   getLongAbsentBuckets,
@@ -13,6 +14,7 @@ import {
   type TrendResult,
   type NewReturningPoint,
   type TierBreakdownItem,
+  type ReferralSourceBreakdownItem,
   type RewardStatItem,
   type VipConversionResult,
   type LongAbsentBuckets,
@@ -20,7 +22,7 @@ import {
   type LongAbsentCustomerItem,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
-import { LineChart, BarChart, DonutChart, CHART_COLORS, getTierColor } from './charts';
+import { LineChart, BarChart, DonutChart, CHART_COLORS, getTierColor, getCategoricalColor } from './charts';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
 type Period = 'day' | 'week' | 'month';
@@ -273,6 +275,29 @@ function TierBreakdownSection({ storeId }: { storeId: string | null }) {
   );
 }
 
+function ReferralSourceSection({ storeId }: { storeId: string | null }) {
+  const [data, setData] = useState<ReferralSourceBreakdownItem[] | null>(null);
+
+  useEffect(() => {
+    setData(null);
+    getReferralSourceBreakdown(storeId).then((result) => {
+      if (result.success && result.data) setData(result.data);
+    });
+  }, [storeId]);
+
+  return (
+    <ChartCard title="가입 유입 경로" description="신규 회원이 해율을 알게 된 경로별 비중입니다.">
+      {!data ? (
+        <div className="h-48 rounded-xl bg-[#E8E8E0] animate-pulse" />
+      ) : (
+        <DonutChart
+          slices={data.map((s, i) => ({ label: s.label, value: s.count, color: getCategoricalColor(i) }))}
+        />
+      )}
+    </ChartCard>
+  );
+}
+
 function RewardUsageSection({ storeId }: { storeId: string | null }) {
   const [data, setData] = useState<RewardStatItem[] | null>(null);
 
@@ -507,6 +532,7 @@ export default function StatsOverview() {
         <SignupTrendSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
         <NewVsReturningSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
         <TierBreakdownSection storeId={storeId} />
+        <ReferralSourceSection storeId={storeId} />
         <VipConversionSection period={period} dateFrom={dateFrom} dateTo={dateTo} storeId={storeId} />
         <div className="lg:col-span-2">
           <RewardUsageSection storeId={storeId} />
