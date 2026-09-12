@@ -18,7 +18,7 @@ import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
 import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR, AUDIT_ACTION } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
-import type { ApiResponse, Customer, RewardStatus } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, NoticeKind } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
 const OUTSIDE_STORE_HOURS_ERROR =
@@ -359,6 +359,13 @@ export interface StoreVisitCount {
   count: number;
 }
 
+export interface ActiveNotice {
+  id: string;
+  kind: NoticeKind;
+  title: string;
+  body: string;
+}
+
 export interface PassportData {
   customer: Customer;
   todayVisited: boolean;
@@ -374,6 +381,29 @@ export interface PassportData {
   storeVisitBreakdown: StoreVisitCount[];
   /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
   soonExpiringReward: { amount: number; daysLeft: number } | null;
+  /** 지금 게시기간 안에 있는 알림/이벤트(3개 매장 공통, 최대 1건). 없으면 null */
+  activeNotice: ActiveNotice | null;
+}
+
+/**
+ * 지금 게시기간 안에 있고 활성 상태인 알림/이벤트를 1건 조회합니다.
+ * 여러 건이 겹쳐 있으면 가장 최근에 작성된 것을 보여줍니다.
+ */
+async function getActiveNotice(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<ActiveNotice | null> {
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase
+    .from('notices')
+    .select('id, kind, title, body')
+    .eq('is_active', true)
+    .lte('starts_at', nowIso)
+    .gte('ends_at', nowIso)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data ?? null;
 }
 
 /** 할인권 만료 알림 기준(일). 이 기간 이내로 남으면 홈 화면에 임박 알림을 띄웁니다. */
@@ -536,6 +566,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
         storeVisitBreakdown,
         soonExpiringReward,
+        activeNotice: await getActiveNotice(supabase),
       },
     };
   } catch (error) {

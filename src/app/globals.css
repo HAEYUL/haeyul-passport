@@ -63,3 +63,19 @@ input[type="checkbox"] {
   height: 22px;
   cursor: pointer;
 }
+
+/* 알림/이벤트 박스 — 눈에 띄도록 살짝 흔들리는 움직임 */
+@keyframes notice-pill-nudge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+.notice-pill-animated {
+  animation: notice-pill-nudge 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-pill-animated {
+    animation: none;
+  }
+}

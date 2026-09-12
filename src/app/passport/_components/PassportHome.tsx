@@ -8,6 +8,7 @@ import { VIP_MESSAGE, VIP_ONGOING_MESSAGE } from '@/lib/tiers';
 import { getCurrentPositionWithRetry } from '@/lib/geolocation';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
+import NoticeDetail from './NoticeDetail';
 import BrandLogo from '@/components/BrandLogo';
 
 // 매장 주소 (매장별 방문 횟수 카드의 매장명과 매칭)
@@ -47,6 +48,7 @@ export default function PassportHome() {
   const [tierUpMessage, setTierUpMessage] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [showNotice, setShowNotice] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installMessage, setInstallMessage] = useState('');
   const [showScrollHint, setShowScrollHint] = useState(false);
@@ -110,6 +112,11 @@ export default function PassportHome() {
     setShowHistory(true);
   }, []);
 
+  const openNotice = useCallback(() => {
+    window.history.pushState({ passportOverlay: 'notice' }, '');
+    setShowNotice(true);
+  }, []);
+
   const closeOverlay = useCallback(() => {
     window.history.back();
   }, []);
@@ -118,6 +125,7 @@ export default function PassportHome() {
     function handlePopState() {
       setShowMyInfo(false);
       setShowHistory(false);
+      setShowNotice(false);
     }
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -211,6 +219,11 @@ export default function PassportHome() {
         onLogout={handleLogout}
       />
     );
+  }
+
+  // 알림/이벤트 상세 화면
+  if (showNotice && data.activeNotice) {
+    return <NoticeDetail notice={data.activeNotice} onBack={closeOverlay} />;
   }
 
   return (
@@ -403,6 +416,31 @@ export default function PassportHome() {
               방문 기록은 하루에 한 번만 가능합니다.
             </p>
           </div>
+        )}
+
+        {/* 알림/이벤트 박스 — 관리자가 등록해 둔 것이 있을 때만 나타남 */}
+        {data.activeNotice && (
+          <button
+            type="button"
+            onClick={openNotice}
+            className={`notice-pill-animated w-full flex items-center gap-2.5 rounded-full border-2 px-5 py-3
+                       text-left active:scale-[0.98] transition-transform duration-150
+                       ${
+                         data.activeNotice.kind === 'event'
+                           ? 'bg-[#FBF0F4] border-[#C15B82] text-[#7D2F51]'
+                           : 'bg-[#EEF4FB] border-[#4E7DB5] text-[#2B4F78]'
+                       }`}
+          >
+            <span
+              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                data.activeNotice.kind === 'event' ? 'bg-[#C15B82]' : 'bg-[#4E7DB5]'
+              }`}
+            />
+            <span className="flex-1 text-[15.5px] font-bold">
+              {data.activeNotice.kind === 'event' ? '이벤트가 있습니다' : '알림이 있습니다'}
+            </span>
+            <span className="text-[13px] font-extrabold opacity-75 flex-shrink-0">확인 ›</span>
+          </button>
         )}
 
         {/* 다음 혜택까지 카드 (주황/노랑 계열) */}

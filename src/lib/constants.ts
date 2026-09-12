@@ -42,6 +42,9 @@ export const AUDIT_ACTION = {
   SMS_SEND: 'sms_send',
   BIRTHDAY_COUPON_ISSUE: 'birthday_coupon_issue',
   COMEBACK_COUPON_ISSUE: 'comeback_coupon_issue',
+  NOTICE_CREATE: 'notice_create',
+  NOTICE_UPDATE: 'notice_update',
+  NOTICE_END: 'notice_end',
 } as const;
 
 // 감사 로그 액션 한글 라벨 (관리자 화면 여러 곳에서 공용으로 사용)
@@ -65,4 +68,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   [AUDIT_ACTION.SMS_SEND]: '문자 발송',
   [AUDIT_ACTION.BIRTHDAY_COUPON_ISSUE]: '생일축하 쿠폰 자동발급',
   [AUDIT_ACTION.COMEBACK_COUPON_ISSUE]: '컴백 쿠폰 자동발급',
+  [AUDIT_ACTION.NOTICE_CREATE]: '알림/이벤트 등록',
+  [AUDIT_ACTION.NOTICE_UPDATE]: '알림/이벤트 수정',
+  [AUDIT_ACTION.NOTICE_END]: '알림/이벤트 중단',
 };
