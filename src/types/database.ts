@@ -14,6 +14,9 @@ export type ConsentType = 'privacy' | 'marketing';
 /** 매장 코드 (store_code) */
 export type StoreCode = 'haeyul' | 'gondre' | 'jeongdam';
 
+/** 알림/이벤트 구분 */
+export type NoticeKind = 'notice' | 'event';
+
 /** 방문 등록 시 위치 확인 결과 */
 export type LocationVerifiedStatus = 'success' | 'failed' | 'unavailable';
 
@@ -144,6 +147,20 @@ export interface CustomerReward {
   issued_store_id: string | null;
   used_store_id: string | null;
   created_at: string;
+}
+
+/** notices 테이블 — 고객 홈 화면에 노출하는 알림/이벤트 */
+export interface Notice {
+  id: string;
+  kind: NoticeKind;
+  title: string;
+  body: string;
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** employees 테이블 */

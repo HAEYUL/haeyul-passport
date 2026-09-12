@@ -23,7 +23,7 @@ import {
   getAdminSession,
   clearAdminSession,
 } from '@/lib/adminSession';
-import type { ApiResponse, Customer, RewardStatus, Store, LocationVerifiedStatus } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, Store, LocationVerifiedStatus, NoticeKind } from '@/types/database';
 
 /**
  * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
@@ -3149,6 +3149,253 @@ export async function getAuditLogs(
     return { success: true, data: result };
   } catch (error) {
     console.error('getAuditLogs 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 알림/이벤트 관리 (고객 홈 화면에 노출)
+// ============================================================
+
+export interface NoticeAdminItem {
+  id: string;
+  kind: NoticeKind;
+  title: string;
+  body: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  createdByUsername: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 지금까지 작성된 알림/이벤트를 전부 조회합니다(비활성·종료된 것 포함).
+ * 삭제하지 않고 계속 쌓이는 구조라 이 목록 자체가 작성 이력입니다.
+ */
+export async function getNotices(): Promise<ApiResponse<NoticeAdminItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase
+      .from('notices')
+      .select('id, kind, title, body, starts_at, ends_at, is_active, created_by, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { success: false, error: '알림/이벤트 목록 조회 중 오류가 발생했습니다.' };
+    }
+
+    const creatorIds = [...new Set((data || []).map((n) => n.created_by).filter((id): id is string => !!id))];
+    const creatorUsernameMap = new Map<string, string>();
+    if (creatorIds.length > 0) {
+      const { data: admins } = await supabase.from('admin_users').select('id, username').in('id', creatorIds);
+      (admins || []).forEach((a) => creatorUsernameMap.set(a.id, a.username));
+    }
+
+    return {
+      success: true,
+      data: (data || []).map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        startsAt: n.starts_at,
+        endsAt: n.ends_at,
+        isActive: n.is_active,
+        createdByUsername: n.created_by ? creatorUsernameMap.get(n.created_by) ?? null : null,
+        createdAt: n.created_at,
+        updatedAt: n.updated_at,
+      })),
+    };
+  } catch (error) {
+    console.error('getNotices 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface NoticeInput {
+  kind: NoticeKind;
+  title: string;
+  body: string;
+  /** 'YYYY-MM-DD' (한국시간 기준 이 날짜 00:00부터 노출) */
+  startDate: string;
+  /** 'YYYY-MM-DD' (한국시간 기준 이 날짜 23:59:59까지 노출) */
+  endDate: string;
+}
+
+function validateNoticeInput(input: NoticeInput): string | null {
+  if (input.kind !== 'notice' && input.kind !== 'event') {
+    return '알림/이벤트 구분을 선택해 주세요.';
+  }
+  if (!input.title.trim()) {
+    return '제목을 입력해 주세요.';
+  }
+  if (!input.body.trim()) {
+    return '내용을 입력해 주세요.';
+  }
+  if (!input.startDate || !input.endDate) {
+    return '게시 시작일과 종료일을 모두 선택해 주세요.';
+  }
+  if (input.endDate < input.startDate) {
+    return '종료일은 시작일보다 빠를 수 없습니다.';
+  }
+  return null;
+}
+
+/**
+ * 새 알림/이벤트를 등록합니다. 기존 글은 건드리지 않고 새 행으로 쌓이며,
+ * 고객 화면에는 게시기간 안에 있는 것 중 가장 최근 글 1건만 노출됩니다.
+ */
+export async function createNotice(input: NoticeInput): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const validationError = validateNoticeInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: after, error: insertError } = await supabase
+      .from('notices')
+      .insert({
+        kind: input.kind,
+        title: input.title.trim(),
+        body: input.body.trim(),
+        starts_at: `${input.startDate}T00:00:00+09:00`,
+        ends_at: `${input.endDate}T23:59:59+09:00`,
+        is_active: true,
+        created_by: admin.adminId,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      return { success: false, error: '알림/이벤트 등록 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.NOTICE_CREATE,
+      target_type: 'notice',
+      target_id: after.id,
+      before_data: null,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('createNotice 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 기존 알림/이벤트 내용을 수정합니다(오타 정정, 기간 연장 등).
+ */
+export async function updateNotice(noticeId: string, input: NoticeInput): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const validationError = validateNoticeInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase.from('notices').select('*').eq('id', noticeId).single();
+    if (!before) {
+      return { success: false, error: '알림/이벤트를 찾을 수 없습니다.' };
+    }
+
+    const { data: after, error: updateError } = await supabase
+      .from('notices')
+      .update({
+        kind: input.kind,
+        title: input.title.trim(),
+        body: input.body.trim(),
+        starts_at: `${input.startDate}T00:00:00+09:00`,
+        ends_at: `${input.endDate}T23:59:59+09:00`,
+      })
+      .eq('id', noticeId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return { success: false, error: '알림/이벤트 수정 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.NOTICE_UPDATE,
+      target_type: 'notice',
+      target_id: noticeId,
+      before_data: before,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('updateNotice 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 게시기간이 남아 있어도 지금 바로 고객 화면에서 내리고 싶을 때 사용합니다.
+ * 행 자체는 지우지 않아 이력에는 계속 남습니다.
+ */
+export async function endNoticeNow(noticeId: string): Promise<ApiResponse<null>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: before } = await supabase.from('notices').select('*').eq('id', noticeId).single();
+    if (!before) {
+      return { success: false, error: '알림/이벤트를 찾을 수 없습니다.' };
+    }
+
+    const { data: after, error: updateError } = await supabase
+      .from('notices')
+      .update({ is_active: false })
+      .eq('id', noticeId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return { success: false, error: '중단 처리 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.NOTICE_END,
+      target_type: 'notice',
+      target_id: noticeId,
+      before_data: before,
+      after_data: after,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('endNoticeNow 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
