@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendSms } from '@/lib/sms';
 import { getTodayKST } from '@/lib/utils';
+import { decryptPII } from '@/lib/pii';
 import { BIRTHDAY_COUPON_AMOUNT, BIRTHDAY_COUPON_VALID_DAYS, AUDIT_ACTION } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -41,18 +42,24 @@ export async function GET(request: Request) {
     const todayKST = getTodayKST();
     const [, month, day] = todayKST.split('-');
 
-    const { data: candidates, error: candidatesError } = await supabase
+    const { data: candidateRows, error: candidatesError } = await supabase
       .from('customers')
-      .select('id, phone, birth_date')
+      .select('id, phone_enc, birth_date_enc')
       .eq('is_active', true)
-      .not('birth_date', 'is', null);
+      .not('birth_date_enc', 'is', null);
 
     if (candidatesError) {
       return NextResponse.json({ error: candidatesError.message }, { status: 500 });
     }
 
-    const todaysBirthdayCustomers = (candidates || []).filter((c) => {
-      const [, m, d] = (c.birth_date as string).split('-');
+    const candidates = (candidateRows || []).map((c) => ({
+      id: c.id,
+      phone: decryptPII(c.phone_enc),
+      birthDate: decryptPII(c.birth_date_enc as string),
+    }));
+
+    const todaysBirthdayCustomers = candidates.filter((c) => {
+      const [, m, d] = c.birthDate.split('-');
       return m === month && d === day;
     });
 
@@ -96,7 +103,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    const receivers = toIssue.map((c) => (c.phone as string).replace(/\D/g, ''));
+    const receivers = toIssue.map((c) => c.phone.replace(/\D/g, ''));
     const message = `[해율푸드] 생일을 진심으로 축하드립니다! 🎂 저희 마음을 담아 ${BIRTHDAY_COUPON_AMOUNT.toLocaleString()}원 생일 축하 선물을 준비했어요. 전자여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${BIRTHDAY_COUPON_VALID_DAYS}일)`;
 
     let smsSuccessCount: number | null = null;

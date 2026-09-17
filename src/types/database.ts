@@ -58,13 +58,37 @@ export interface DiningTable {
   updated_at: string;
 }
 
-/** customers 테이블 */
+/** customers 테이블 (복호화된 형태 — 서버 액션이 반환하고 화면/컴포넌트가 사용하는 모양) */
 export interface Customer {
   id: string;
   customer_number: string;
   name: string;
   phone: string;
   birth_date: string | null;
+  marketing_consent: boolean;
+  visit_count: number;
+  is_active: boolean;
+  admin_note: string | null;
+  signup_store_id: string | null;
+  referral_source: ReferralSourceKey | null;
+  referral_source_detail: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * customers 테이블의 실제 DB 컬럼 형태 — 이름/전화번호/생년월일은 암호화되어 저장됩니다.
+ * Supabase에서 직접 읽고 쓸 때만 이 타입을 쓰고, 화면에 내려줄 때는 반드시
+ * `decryptCustomerRow()`(src/lib/pii.ts)로 Customer로 변환해서 사용합니다.
+ */
+export interface CustomerRow {
+  id: string;
+  customer_number: string;
+  name_enc: string;
+  phone_enc: string;
+  /** 전화번호 조회/중복확인용 해시 (HMAC-SHA256, 복호화 불가) */
+  phone_hash: string;
+  birth_date_enc: string | null;
   marketing_consent: boolean;
   visit_count: number;
   is_active: boolean;

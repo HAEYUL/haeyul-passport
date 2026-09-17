@@ -23,7 +23,28 @@ import {
   getAdminSession,
   clearAdminSession,
 } from '@/lib/adminSession';
+import { encryptPII, decryptPII, decryptCustomerRow, hashPhoneForLookup } from '@/lib/pii';
 import type { ApiResponse, Customer, RewardStatus, Store, LocationVerifiedStatus, NoticeKind } from '@/types/database';
+
+/**
+ * 이름/전화번호 부분검색(관리자 고객·방문 검색). 두 컬럼 모두 암호화되어 있어
+ * DB에서 LIKE 검색을 할 수 없으므로, 후보를 모두 불러와 복호화한 뒤
+ * 애플리케이션에서 대조합니다. 검색어가 없으면 호출하지 않습니다.
+ */
+async function findCustomerIdsByNameOrPhone(
+  supabase: ReturnType<typeof createAdminClient>,
+  term: string
+): Promise<string[]> {
+  const { data } = await supabase.from('customers').select('id, name_enc, phone_enc');
+  const needle = term.toLowerCase();
+  return (data || [])
+    .filter((c) => {
+      const name = decryptPII(c.name_enc).toLowerCase();
+      const phone = decryptPII(c.phone_enc);
+      return name.includes(needle) || phone.includes(term);
+    })
+    .map((c) => c.id);
+}
 
 /**
  * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
@@ -628,7 +649,7 @@ export async function getRewardCustomerList({
     ];
 
     const [{ data: customers }, { data: stores }] = await Promise.all([
-      supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds),
+      supabase.from('customers').select('id, name_enc, customer_number, phone_enc').in('id', customerIds),
       supabase.from('stores').select('id, name').in('id', storeIds),
     ]);
 
@@ -642,9 +663,9 @@ export async function getRewardCustomerList({
         return {
           id: reward.id,
           customerId: reward.customer_id,
-          customerName: customer?.name || '알 수 없음',
+          customerName: customer ? decryptPII(customer.name_enc) : '알 수 없음',
           customerNumber: customer?.customer_number || '-',
-          phone: customer?.phone || '-',
+          phone: customer ? decryptPII(customer.phone_enc) : '-',
           amount: reward.amount ?? 0,
           thresholdVisits: reward.threshold_visits ?? 0,
           status: reward.status,
@@ -692,7 +713,7 @@ async function fetchRewardUsage(
   ];
 
   const [{ data: customers }, { data: stores }] = await Promise.all([
-    supabase.from('customers').select('id, name, customer_number').in('id', customerIds),
+    supabase.from('customers').select('id, name_enc, customer_number').in('id', customerIds),
     supabase.from('stores').select('id, name').in('id', storeIds),
   ]);
 
@@ -704,7 +725,7 @@ async function fetchRewardUsage(
     return {
       id: cr.id,
       customerId: cr.customer_id,
-      customerName: c?.name || '알 수 없음',
+      customerName: c ? decryptPII(c.name_enc) : '알 수 없음',
       customerNumber: c?.customer_number || '-',
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
@@ -1142,11 +1163,14 @@ export async function getCustomerList(
       const currentMonth = getTodayKST().slice(5, 7);
       const { data: customers } = await supabase
         .from('customers')
-        .select('id, birth_date')
+        .select('id, birth_date_enc')
         .eq('is_active', true)
-        .not('birth_date', 'is', null);
+        .not('birth_date_enc', 'is', null);
       idFilter = (customers || [])
-        .filter((c) => c.birth_date && c.birth_date.slice(5, 7) === currentMonth)
+        .filter((c) => {
+          const birthDate = c.birth_date_enc ? decryptPII(c.birth_date_enc) : null;
+          return birthDate && birthDate.slice(5, 7) === currentMonth;
+        })
         .map((c) => c.id);
     } else if (filter === 'visitedStore') {
       if (!storeId) {
@@ -1164,7 +1188,7 @@ export async function getCustomerList(
         .from('customers')
         .select('id')
         .eq('is_active', true)
-        .is('birth_date', null);
+        .is('birth_date_enc', null);
       idFilter = (customersWithoutBirthDate || []).map((c) => c.id);
     } else if (filter === 'tierUpThisMonth') {
       const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
@@ -1180,13 +1204,22 @@ export async function getCustomerList(
       idFilter = [...new Set((tierUpRewards || []).map((r) => r.customer_id))];
     }
 
+    const trimmed = query.trim();
+    if (trimmed) {
+      // 이름/전화번호는 암호화되어 있어 DB에서 부분검색할 수 없으므로, 복호화 후
+      // 대조한 후보 ID를 기존 idFilter(필터 조건)와 교집합으로 합칩니다.
+      const safe = trimmed.replace(/[,()]/g, '');
+      const searchIds = await findCustomerIdsByNameOrPhone(supabase, safe);
+      idFilter = idFilter ? idFilter.filter((id) => searchIds.includes(id)) : searchIds;
+    }
+
     if (idFilter && idFilter.length === 0) {
       return { success: true, data: [] };
     }
 
     let request = supabase
       .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id, admin_note')
+      .select('id, customer_number, name_enc, phone_enc, visit_count, created_at, marketing_consent, signup_store_id, admin_note')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(idFilter ? 1000 : 100);
@@ -1223,13 +1256,6 @@ export async function getCustomerList(
       }
     }
 
-    const trimmed = query.trim();
-    if (trimmed) {
-      // or() 필터 문법에서 구분자로 쓰이는 문자는 제거해 필터 인젝션을 방지합니다.
-      const safe = trimmed.replace(/[,()]/g, '');
-      request = request.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
-    }
-
     const { data, error } = await request;
 
     if (error) {
@@ -1242,8 +1268,8 @@ export async function getCustomerList(
     const result: CustomerListItem[] = (data || []).map((c) => ({
       id: c.id,
       customerNumber: c.customer_number,
-      name: c.name,
-      phone: c.phone,
+      name: decryptPII(c.name_enc),
+      phone: decryptPII(c.phone_enc),
       visitCount: c.visit_count,
       createdAt: c.created_at,
       recentVisitDate: latestVisitMap.get(c.id) ?? null,
@@ -1429,11 +1455,7 @@ async function fetchVisitRecords(
   const trimmed = (opts.query || '').trim();
   if (trimmed) {
     const safe = trimmed.replace(/[,()]/g, '');
-    const { data: matches } = await supabase
-      .from('customers')
-      .select('id')
-      .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
-    idFilter = (matches || []).map((m) => m.id);
+    idFilter = await findCustomerIdsByNameOrPhone(supabase, safe);
     if (idFilter.length === 0) return [];
   }
 
@@ -1467,7 +1489,7 @@ async function fetchVisitRecords(
 
   const customerIds = [...new Set(visits.map((v) => v.customer_id))];
   const [{ data: customers }, { data: stores }] = await Promise.all([
-    supabase.from('customers').select('id, name, customer_number, phone, visit_count').in('id', customerIds),
+    supabase.from('customers').select('id, name_enc, customer_number, phone_enc, visit_count').in('id', customerIds),
     supabase.from('stores').select('id, name'),
   ]);
 
@@ -1479,9 +1501,9 @@ async function fetchVisitRecords(
     return {
       id: v.id,
       customerId: v.customer_id,
-      customerName: c?.name || '알 수 없음',
+      customerName: c ? decryptPII(c.name_enc) : '알 수 없음',
       customerNumber: c?.customer_number || '-',
-      phone: c?.phone || '-',
+      phone: c ? decryptPII(c.phone_enc) : '-',
       storeId: v.store_id,
       storeName: storeMap.get(v.store_id) || '알 수 없음',
       visitDate: v.visit_date,
@@ -1594,7 +1616,7 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
     const customerIds = [...new Set(duplicates.map((d) => d.customerId))];
     const { data: customers } = await supabase
       .from('customers')
-      .select('id, name, customer_number, phone')
+      .select('id, name_enc, customer_number, phone_enc')
       .in('id', customerIds);
     const customerMap = new Map((customers || []).map((c) => [c.id, c]));
 
@@ -1603,9 +1625,9 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
         const c = customerMap.get(d.customerId);
         return {
           customerId: d.customerId,
-          customerName: c?.name || '알 수 없음',
+          customerName: c ? decryptPII(c.name_enc) : '알 수 없음',
           customerNumber: c?.customer_number || '-',
-          phone: c?.phone || '-',
+          phone: c ? decryptPII(c.phone_enc) : '-',
           visitDate: d.visitDate,
           storeName: storeMap.get(d.storeId) || '알 수 없음',
           visits: d.visits.sort((a, b) => a.visitTime.localeCompare(b.visitTime)),
@@ -1642,7 +1664,7 @@ export async function getVisitCountMismatches(): Promise<ApiResponse<VisitCountM
     const supabase = createAdminClient();
 
     const [{ data: customers, error: custError }, { data: visits, error: visitError }] = await Promise.all([
-      supabase.from('customers').select('id, name, customer_number, phone, visit_count').eq('is_active', true),
+      supabase.from('customers').select('id, name_enc, customer_number, phone_enc, visit_count').eq('is_active', true),
       supabase.from('visits').select('customer_id').eq('is_cancelled', false),
     ]);
 
@@ -1659,9 +1681,9 @@ export async function getVisitCountMismatches(): Promise<ApiResponse<VisitCountM
       .filter((c) => c.visit_count !== (actualCounts.get(c.id) || 0))
       .map((c) => ({
         customerId: c.id,
-        customerName: c.name,
+        customerName: decryptPII(c.name_enc),
         customerNumber: c.customer_number,
-        phone: c.phone,
+        phone: decryptPII(c.phone_enc),
         recordedVisitCount: c.visit_count,
         actualVisitCount: actualCounts.get(c.id) || 0,
       }));
@@ -1926,7 +1948,7 @@ export async function getTodayVipVisitors(): Promise<ApiResponse<TodayVipVisitor
 
     const { data: customers, error } = await supabase
       .from('customers')
-      .select('id, name, customer_number, visit_count')
+      .select('id, name_enc, customer_number, visit_count')
       .in('id', customerIds)
       .eq('is_active', true)
       .gte('visit_count', vipMinVisits);
@@ -1939,7 +1961,7 @@ export async function getTodayVipVisitors(): Promise<ApiResponse<TodayVipVisitor
       success: true,
       data: (customers || []).map((c) => ({
         id: c.id,
-        name: c.name,
+        name: decryptPII(c.name_enc),
         customerNumber: c.customer_number,
       })),
     };
@@ -2168,15 +2190,17 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
 
     const supabase = createAdminClient();
 
-    const { data: customer, error: custError } = await supabase
+    const { data: customerRow, error: custError } = await supabase
       .from('customers')
       .select()
       .eq('id', customerId)
       .single();
 
-    if (custError || !customer) {
+    if (custError || !customerRow) {
       return { success: false, error: '고객 정보를 찾을 수 없습니다.' };
     }
+
+    const customer = decryptCustomerRow(customerRow);
 
     const [{ data: visits }, { data: customerRewards }, { data: stores }] = await Promise.all([
       supabase
@@ -2387,9 +2411,10 @@ export async function updateCustomer(
     const { data: updated, error } = await supabase
       .from('customers')
       .update({
-        name,
-        phone,
-        birth_date: input.birthDate || null,
+        name_enc: encryptPII(name),
+        phone_enc: encryptPII(phone),
+        phone_hash: hashPhoneForLookup(phone),
+        birth_date_enc: input.birthDate ? encryptPII(input.birthDate) : null,
         marketing_consent: input.marketingConsent,
         visit_count: input.visitCount,
       })
@@ -2896,7 +2921,7 @@ export async function getLongAbsentCustomers(
 
     let customersQuery = supabase
       .from('customers')
-      .select('id, name, visit_count')
+      .select('id, name_enc, visit_count')
       .eq('is_active', true)
       .in('id', matchingIds);
     if (storeId) {
@@ -2917,7 +2942,7 @@ export async function getLongAbsentCustomers(
       const lastVisit = latestVisitMap.get(c.id) || null;
       return {
         customerId: c.id,
-        name: c.name,
+        name: decryptPII(c.name_enc),
         tierLabel: getVisitTierInfo(c.visit_count).label,
         visitCount: c.visit_count,
         recentVisitDate: lastVisit,
@@ -2974,15 +2999,17 @@ export async function sendSmsToCustomers(
     }
 
     const supabase = createAdminClient();
-    const { data: customers, error } = await supabase
+    const { data: customerRows, error } = await supabase
       .from('customers')
-      .select('id, phone, marketing_consent')
+      .select('id, phone_enc, marketing_consent')
       .in('id', customerIds)
       .eq('is_active', true);
 
-    if (error || !customers) {
+    if (error || !customerRows) {
       return { success: false, error: '고객 정보를 불러올 수 없습니다.' };
     }
+
+    const customers = customerRows.map((c) => ({ ...c, phone: decryptPII(c.phone_enc) }));
 
     let targets = customers;
     let excludedCount = 0;
