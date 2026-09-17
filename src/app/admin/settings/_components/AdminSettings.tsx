@@ -8,8 +8,9 @@ import StoreLocationSettings from './StoreLocationSettings';
 import NoticeManagement from './NoticeManagement';
 import AdminAccountSettings from './AdminAccountSettings';
 import AuditLogView from './AuditLogView';
+import DataBackup from './DataBackup';
 
-type Section = 'qr' | 'location' | 'notice' | 'stats' | 'account' | 'audit';
+type Section = 'qr' | 'location' | 'notice' | 'stats' | 'account' | 'audit' | 'backup';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'qr', label: 'QR 관리' },
@@ -18,6 +19,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'stats', label: '통계' },
   { key: 'account', label: '계정' },
   { key: 'audit', label: '활동이력' },
+  { key: 'backup', label: '데이터 백업' },
 ];
 
 function TabButton({
@@ -81,6 +83,7 @@ export default function AdminSettings() {
         {section === 'stats' && <StatsOverview />}
         {section === 'account' && <AdminAccountSettings />}
         {section === 'audit' && <AuditLogView />}
+        {section === 'backup' && <DataBackup />}
       </div>
     </main>
   );
