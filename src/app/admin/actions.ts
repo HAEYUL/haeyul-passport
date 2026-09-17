@@ -15,7 +15,7 @@ import {
 } from '@/lib/utils';
 import { AUDIT_ACTION } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
-import { REFERRAL_SOURCE_OPTIONS } from '@/lib/referralSource';
+import { REFERRAL_SOURCE_OPTIONS, getReferralSourceLabel, type ReferralSourceKey } from '@/lib/referralSource';
 import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
 import { sendSms } from '@/lib/sms';
 import {
@@ -3396,6 +3396,118 @@ export async function endNoticeNow(noticeId: string): Promise<ApiResponse<null>>
     return { success: true };
   } catch (error) {
     console.error('endNoticeNow 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 데이터 백업
+// ============================================================
+
+export interface BackupCustomerRow {
+  customerNumber: string;
+  name: string;
+  phone: string;
+  birthDate: string | null;
+  visitCount: number;
+  marketingConsent: boolean;
+  signupStoreName: string | null;
+  referralSource: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface BackupRewardRow {
+  customerNumber: string;
+  customerName: string;
+  phone: string;
+  amount: number;
+  thresholdVisits: number;
+  source: 'visit' | 'birthday' | 'comeback';
+  status: RewardStatus;
+  issuedAt: string;
+  expiresAt: string | null;
+  usedAt: string | null;
+}
+
+export interface BackupData {
+  customers: BackupCustomerRow[];
+  rewards: BackupRewardRow[];
+}
+
+/**
+ * 관리자가 직접 내려받는 백업용 원자료.
+ * 해율여권 시스템 자체에 문제가 생겨도 다른 곳에서 재사용할 수 있도록,
+ * 내부 고유번호(UUID) 대신 회원번호/전화번호를 기준으로 두 표를 연결해서 반환합니다.
+ */
+export async function getBackupData(): Promise<ApiResponse<BackupData>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const [{ data: customers, error: custError }, { data: rewards, error: rewardError }, { data: stores }] =
+      await Promise.all([
+        supabase
+          .from('customers')
+          .select(
+            'id, customer_number, name, phone, birth_date, visit_count, marketing_consent, signup_store_id, referral_source, is_active, created_at'
+          )
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('customer_rewards')
+          .select('customer_id, amount, threshold_visits, source, status, issued_at, expires_at, used_at')
+          .not('reward_rule_id', 'is', null)
+          .order('issued_at', { ascending: true }),
+        supabase.from('stores').select('id, name'),
+      ]);
+
+    if (custError || rewardError) {
+      return { success: false, error: '백업 데이터 조회 중 오류가 발생했습니다.' };
+    }
+
+    const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
+    const customerMap = new Map((customers || []).map((c) => [c.id, c]));
+
+    const backupCustomers: BackupCustomerRow[] = (customers || []).map((c) => ({
+      customerNumber: c.customer_number,
+      name: c.name,
+      phone: c.phone,
+      birthDate: c.birth_date,
+      visitCount: c.visit_count,
+      marketingConsent: c.marketing_consent,
+      signupStoreName: c.signup_store_id ? storeMap.get(c.signup_store_id) || null : null,
+      referralSource: getReferralSourceLabel(c.referral_source as ReferralSourceKey | null),
+      isActive: c.is_active,
+      createdAt: c.created_at,
+    }));
+
+    const backupRewards: BackupRewardRow[] = (rewards || [])
+      .map((r) => {
+        const c = customerMap.get(r.customer_id);
+        if (!c) return null;
+        const row: BackupRewardRow = {
+          customerNumber: c.customer_number,
+          customerName: c.name,
+          phone: c.phone,
+          amount: r.amount ?? 0,
+          thresholdVisits: r.threshold_visits ?? 0,
+          source: (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
+          status: r.status,
+          issuedAt: r.issued_at,
+          expiresAt: r.expires_at,
+          usedAt: r.used_at,
+        };
+        return row;
+      })
+      .filter((r): r is BackupRewardRow => r !== null);
+
+    return { success: true, data: { customers: backupCustomers, rewards: backupRewards } };
+  } catch (error) {
+    console.error('getBackupData 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
