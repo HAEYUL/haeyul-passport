@@ -53,18 +53,6 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | 같은 위치 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | 같은 위치 (비공개) |
 | `NEXT_PUBLIC_APP_URL` | 매장 QR 생성 시 사용할 절대주소 | 배포 후에는 실제 운영 도메인으로 설정 |
-| `PII_ENCRYPTION_KEY` | 고객 이름/전화번호/생년월일 암호화 키 | 아래 "개인정보 암호화 키 생성" 참고 |
-| `PII_HASH_KEY` | 전화번호 조회·중복확인용 해시 키 | 아래 "개인정보 암호화 키 생성" 참고 |
-
-#### 개인정보 암호화 키 생성
-
-터미널에서 아래 명령을 두 번 실행해 서로 다른 값 2개를 만들고, 각각 `PII_ENCRYPTION_KEY`, `PII_HASH_KEY`에 넣으세요.
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-⚠️ **이 두 키는 한 번 설정한 뒤 절대 잃어버리면 안 됩니다.** 키를 잃어버리면 이미 저장된 고객의 이름·전화번호·생년월일을 다시는 복호화할 수 없게 됩니다(비밀번호 찾기 같은 복구 수단이 없습니다). 생성한 값은 이 프로젝트의 `.env.local`과 Vercel 프로젝트 환경변수에 설정하는 것 외에, 회사 비밀번호 관리자(1Password 등) 같은 안전한 곳에 반드시 별도로 백업해 두세요.
 
 ### 4. Supabase 데이터베이스 설정
 
@@ -247,7 +235,6 @@ haeyul-passport/
 - `SUPABASE_SERVICE_ROLE_KEY`는 절대 클라이언트에 노출하지 마세요.
 - 환경변수(`.env.local`)를 GitHub에 올리지 마세요.
 - 관리자 비밀번호는 배포 후 즉시 변경하세요.
-- 고객 이름/전화번호/생년월일은 애플리케이션 단에서 암호화되어 저장됩니다(`src/lib/pii.ts`). 기존 데이터가 있는 상태에서 처음 적용할 때는 `supabase/migrations/022_encrypt_customer_pii.sql` 적용 → `scripts/encrypt-existing-pii.mjs` 백필 → 정상 동작 확인 → (선택) `023_drop_plaintext_customer_pii.sql`로 평문 컬럼 삭제 순서를 반드시 지키세요. 각 파일 상단 주석에 절차가 적혀 있습니다.
 
 ---
 

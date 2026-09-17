@@ -18,7 +18,6 @@ import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
 import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR, AUDIT_ACTION } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
-import { encryptPII, decryptCustomerRow, hashPhoneForLookup } from '@/lib/pii';
 import type { ApiResponse, Customer, RewardStatus, NoticeKind } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
@@ -128,7 +127,6 @@ export async function registerCustomer(
     }
 
     const phone = normalizePhone(rawPhone);
-    const phoneHash = hashPhoneForLookup(phone);
 
     const supabase = createAdminClient();
 
@@ -146,8 +144,8 @@ export async function registerCustomer(
     // ─── 중복 전화번호 확인 ─────────────────────────
     const { data: existing } = await supabase
       .from('customers')
-      .select('id')
-      .eq('phone_hash', phoneHash)
+      .select('id, name')
+      .eq('phone', phone)
       .eq('is_active', true)
       .single();
 
@@ -163,10 +161,9 @@ export async function registerCustomer(
       .from('customers')
       .insert({
         customer_number: '', // 트리거가 자동 생성
-        name_enc: encryptPII(name),
-        phone_enc: encryptPII(phone),
-        phone_hash: phoneHash,
-        birth_date_enc: birthDate ? encryptPII(birthDate) : null,
+        name,
+        phone,
+        birth_date: birthDate || null,
         marketing_consent: marketingConsent,
         signup_store_id: storeId,
         referral_source: referralSource,
@@ -228,7 +225,7 @@ export async function registerCustomer(
       .eq('id', customer.id)
       .single();
 
-    const finalCustomer = decryptCustomerRow(updatedCustomer || customer);
+    const finalCustomer = updatedCustomer || customer;
 
     // 세션 설정
     await setSession({
@@ -277,27 +274,17 @@ export async function loginCustomer(
     }
 
     const phone = normalizePhone(rawPhone);
-    const phoneHash = hashPhoneForLookup(phone);
     const supabase = createAdminClient();
 
-    const { data: customerRow, error } = await supabase
+    const { data: customer, error } = await supabase
       .from('customers')
       .select()
-      .eq('phone_hash', phoneHash)
+      .eq('phone', phone)
+      .eq('name', name)
       .eq('is_active', true)
       .single();
 
-    if (error || !customerRow) {
-      return {
-        success: false,
-        error: '일치하는 회원 정보가 없습니다. 성함과 전화번호를 다시 확인해 주세요.',
-      };
-    }
-
-    const customer = decryptCustomerRow(customerRow);
-
-    // 전화번호는 해시로 조회했으니, 성함은 복호화한 값과 직접 대조합니다.
-    if (customer.name !== name) {
+    if (error || !customer) {
       return {
         success: false,
         error: '일치하는 회원 정보가 없습니다. 성함과 전화번호를 다시 확인해 주세요.',
@@ -313,7 +300,7 @@ export async function loginCustomer(
       // 처음 로그인 시 생년월일이 없던 기존 고객은 이번 입력값을 그대로 등록합니다.
       const { error: updateError } = await supabase
         .from('customers')
-        .update({ birth_date_enc: encryptPII(birthDate) })
+        .update({ birth_date: birthDate })
         .eq('id', customer.id);
 
       if (updateError) {
@@ -475,18 +462,16 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     const storeId = await getVerifiedStoreId();
 
     // 고객 정보
-    const { data: customerRow, error: custError } = await supabase
+    const { data: customer, error: custError } = await supabase
       .from('customers')
       .select()
       .eq('id', session.customerId)
       .eq('is_active', true)
       .single();
 
-    if (custError || !customerRow) {
+    if (custError || !customer) {
       return { success: false, error: '회원 정보를 찾을 수 없습니다.' };
     }
-
-    const customer = decryptCustomerRow(customerRow);
 
     // 오늘 방문 여부 (QR로 확인된 현재 매장 기준 — 다른 매장은 오늘 이미 방문했어도 별개)
     const todayKST = getTodayKST();
@@ -985,7 +970,7 @@ export async function updateBirthDate(birthDigits: string): Promise<ApiResponse<
 
     const { error } = await supabase
       .from('customers')
-      .update({ birth_date_enc: encryptPII(birthDate) })
+      .update({ birth_date: birthDate })
       .eq('id', session.customerId);
 
     if (error) {
