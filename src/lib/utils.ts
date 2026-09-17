@@ -103,7 +103,8 @@ export interface DateBucket {
 
 const DEFAULT_BUCKET_SPAN: Record<StatsPeriod, number> = { day: 14, week: 12, month: 12 };
 
-function startOfWeekKST(dateStr: string): string {
+/** 'YYYY-MM-DD'가 속한 주의 월요일 날짜('YYYY-MM-DD', KST 기준)를 반환합니다. */
+export function startOfWeekKST(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   const day = date.getUTCDay(); // 0=일, 1=월 ... 6=토

@@ -22,12 +22,19 @@ import {
 import { formatDateKR, getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
+import RewardReconciliation from './RewardReconciliation';
 
-type Section = 'stats' | 'amountByStore' | 'available' | 'used' | 'catalog';
+type Section = 'stats' | 'amountByStore' | 'reconciliation' | 'available' | 'used' | 'catalog';
 
 const SECTIONS: { key: Section; label: string; icon: string; desc: string }[] = [
   { key: 'stats', label: '등급별 통계', icon: '📈', desc: '할인권의 발급·사용 현황' },
   { key: 'amountByStore', label: '매장별 금액', icon: '💰', desc: '매장별 할인권 발급·사용 금액' },
+  {
+    key: 'reconciliation',
+    label: '할인권 사용 대사',
+    icon: '🧾',
+    desc: '기간·매장별로 사용된 할인권을 금액별로 확인해 매장 POS 기록과 대조할 수 있습니다.',
+  },
   { key: 'available', label: '사용 가능한 할인권', icon: '✅', desc: '사용 가능한 할인권 목록' },
   { key: 'used', label: '사용 완료 할인권', icon: '✔️', desc: '사용이 완료된 할인권' },
   { key: 'catalog', label: '할인권 규칙 관리', icon: '⚙️', desc: '할인권 규칙 설정' },
@@ -857,7 +864,9 @@ export default function RewardStats() {
           ))}
         </div>
 
-        {section !== 'catalog' && section !== 'amountByStore' && <StoreFilterBar value={storeId} onChange={setStoreId} />}
+        {section !== 'catalog' && section !== 'amountByStore' && section !== 'reconciliation' && (
+          <StoreFilterBar value={storeId} onChange={setStoreId} />
+        )}
 
         <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
           <div className="mb-5 pb-4 border-b border-[#F0EDE6]">
@@ -867,6 +876,7 @@ export default function RewardStats() {
 
           {section === 'stats' && <StatsSection storeId={storeId} />}
           {section === 'amountByStore' && <AmountByStoreSection />}
+          {section === 'reconciliation' && <RewardReconciliation />}
           {section === 'available' && <RewardUsageSection statusFilter="available" storeId={storeId} />}
           {section === 'used' && <RewardUsageSection statusFilter="used" storeId={storeId} />}
           {section === 'catalog' && <CatalogSection />}
