@@ -535,6 +535,105 @@ export async function getRewardAmountByStore(
   }
 }
 
+export interface RewardUsageAmountRow {
+  amount: number;
+  count: number;
+}
+
+export interface StoreRewardUsageSummary {
+  storeId: string;
+  storeName: string;
+  totalCount: number;
+  totalAmount: number;
+  /** amounts와 같은 순서로 정렬된 금액별 사용 수량 (POS 매장별 대사용) */
+  byAmount: RewardUsageAmountRow[];
+}
+
+export interface RewardUsageByPeriodResult {
+  /** 선택된 기간·매장 범위 안에서 실제로 사용된 금액대 목록 (오름차순) */
+  amounts: number[];
+  stores: StoreRewardUsageSummary[];
+}
+
+/**
+ * 매장 POS의 할인 기록과 대조하기 위한 "기간별·매장별·금액별 할인권 사용 수량" 집계.
+ * 발급종류(방문/생일/컴백) 구분 없이 금액 기준으로 합산하고, 발급일이 아니라
+ * 실제로 손님이 할인받은 "사용일(used_at)" 기준으로 기간을 필터링합니다
+ * — POS에는 사용 시점 기준으로만 기록이 남기 때문입니다.
+ */
+export async function getRewardUsageByPeriod(
+  dateFrom: string,
+  dateTo: string,
+  storeId?: string | null
+): Promise<ApiResponse<RewardUsageByPeriodResult>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: stores, error: storesError } = await supabase
+      .from('stores')
+      .select('id, name')
+      .eq('is_active', true);
+
+    if (storesError) {
+      return { success: false, error: '매장 목록 조회 중 오류가 발생했습니다.' };
+    }
+
+    const fromISO = `${dateFrom}T00:00:00+09:00`;
+    const toISO = `${dateTo}T23:59:59.999+09:00`;
+
+    let query = supabase
+      .from('customer_rewards')
+      .select('amount, used_store_id')
+      .eq('status', 'used')
+      .not('reward_rule_id', 'is', null)
+      .not('used_store_id', 'is', null)
+      .gte('used_at', fromISO)
+      .lte('used_at', toISO);
+
+    if (storeId) {
+      query = query.eq('used_store_id', storeId);
+    }
+
+    const { data: usedRows, error: usedError } = await query;
+
+    if (usedError) {
+      return { success: false, error: '집계 중 오류가 발생했습니다.' };
+    }
+
+    const byStoreAmount = new Map<string, Map<number, number>>();
+    const amountSet = new Set<number>();
+    for (const r of usedRows || []) {
+      if (!r.used_store_id) continue;
+      const amount = r.amount ?? 0;
+      amountSet.add(amount);
+      const storeMap = byStoreAmount.get(r.used_store_id) || new Map<number, number>();
+      storeMap.set(amount, (storeMap.get(amount) || 0) + 1);
+      byStoreAmount.set(r.used_store_id, storeMap);
+    }
+
+    const amounts = [...amountSet].sort((a, b) => a - b);
+    const relevantStores = storeId ? (stores || []).filter((s) => s.id === storeId) : stores || [];
+
+    const storeSummaries: StoreRewardUsageSummary[] = relevantStores.map((s) => {
+      const storeMap = byStoreAmount.get(s.id) || new Map<number, number>();
+      const byAmount = amounts.map((amount) => ({ amount, count: storeMap.get(amount) || 0 }));
+      const totalCount = byAmount.reduce((sum, r) => sum + r.count, 0);
+      const totalAmount = byAmount.reduce((sum, r) => sum + r.amount * r.count, 0);
+      return { storeId: s.id, storeName: s.name, totalCount, totalAmount, byAmount };
+    });
+
+    return { success: true, data: { amounts, stores: storeSummaries } };
+  } catch (error) {
+    console.error('getRewardUsageByPeriod 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 export interface RewardUsageItem {
   id: string;
   customerId: string;
