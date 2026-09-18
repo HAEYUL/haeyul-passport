@@ -15,12 +15,22 @@ import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
 import { getVisitTierInfo, type VisitTierInfo } from '@/lib/tiers';
 import { getNextCouponInfo, type RewardRuleInput } from '@/lib/couponRules';
-import { REWARD_EXPIRY_MONTHS, STORE_OPEN_HOUR, STORE_CLOSE_HOUR, AUDIT_ACTION } from '@/lib/constants';
+import {
+  REWARD_EXPIRY_MONTHS,
+  STORE_OPEN_HOUR,
+  STORE_CLOSE_HOUR,
+  AUDIT_ACTION,
+  LOCATION_ABUSE_WINDOW,
+  LOCATION_ABUSE_THRESHOLD,
+  SUSPICIOUS_ACTIVITY_TYPE,
+} from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
 import type { ApiResponse, Customer, RewardStatus, NoticeKind } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
+const LOCATION_ABUSE_ERROR =
+  '최근 위치 확인이 여러 차례 되지 않았습니다.\n휴대폰 설정에서 위치 권한을 허용한 뒤 다시 시도해 주세요.';
 const OUTSIDE_STORE_HOURS_ERROR =
   `지금은 매장 운영시간이 아닙니다.\n매일 오전 ${STORE_OPEN_HOUR}시~오후 ${STORE_CLOSE_HOUR - 12}시에 이용해 주세요.`;
 
@@ -620,6 +630,29 @@ export async function registerVisit(
     const locationResult = await checkStoreLocation(supabase, storeId, latitude ?? null, longitude ?? null);
     if (locationResult.status === 'failed') {
       return { success: false, error: LOCATION_REJECTED_ERROR };
+    }
+
+    // 위치 확인이 안 된 경우, 최근 방문 중 같은 상황이 반복되고 있으면
+    // (QR 사진 + 위치 권한 거부를 반복하는 패턴) 이번엔 엄격하게 막습니다.
+    if (locationResult.status === 'unavailable') {
+      const { data: recentVisits } = await supabase
+        .from('visits')
+        .select('location_verified')
+        .eq('customer_id', session.customerId)
+        .eq('is_cancelled', false)
+        .order('visit_time', { ascending: false })
+        .limit(LOCATION_ABUSE_WINDOW);
+
+      const unavailableCount = (recentVisits || []).filter((v) => v.location_verified === 'unavailable').length;
+
+      if (unavailableCount >= LOCATION_ABUSE_THRESHOLD) {
+        await supabase.from('suspicious_activities').insert({
+          activity_type: SUSPICIOUS_ACTIVITY_TYPE.LOCATION_UNAVAILABLE_REPEATED,
+          description: `최근 ${LOCATION_ABUSE_WINDOW}건 중 ${unavailableCount}건 위치 확인 안 됨 — 방문 등록 차단`,
+          customer_id: session.customerId,
+        });
+        return { success: false, error: LOCATION_ABUSE_ERROR };
+      }
     }
 
     // 오늘 이 매장에 이미 방문했는지 확인 (다른 매장은 같은 날에도 별도로 방문 가능)

@@ -7,6 +7,7 @@ import {
   getVisitRecords,
   getDuplicateVisits,
   getVisitCountMismatches,
+  getSuspiciousActivities,
   cancelVisit,
   addManualVisit,
   getCustomerList,
@@ -15,6 +16,7 @@ import {
   type VisitRecordItem,
   type DuplicateVisitGroup,
   type VisitCountMismatchItem,
+  type SuspiciousActivityItem,
   type CustomerListItem,
 } from '@/app/admin/actions';
 import type { Store } from '@/types/database';
@@ -24,13 +26,14 @@ import { getVisitTierInfo } from '@/lib/tiers';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 
-type Section = 'today' | 'all' | 'duplicates' | 'mismatches' | 'manualAdd';
+type Section = 'today' | 'all' | 'duplicates' | 'mismatches' | 'suspicious' | 'manualAdd';
 
 const SECTIONS: { key: Section; label: string; icon: string; desc: string }[] = [
   { key: 'today', label: '오늘 방문자 목록', icon: '📅', desc: '오늘 방문한 고객' },
   { key: 'all', label: '전체 방문 기록', icon: '📋', desc: '전체 방문 기록 조회' },
   { key: 'duplicates', label: '중복 방문 확인', icon: '⚠️', desc: '중복 방문 감지' },
   { key: 'mismatches', label: '비정상 등록 확인', icon: '❌', desc: '데이터 불일치' },
+  { key: 'suspicious', label: '의심 활동', icon: '🚨', desc: '위치 확인 반복 실패로 차단된 기록' },
   { key: 'manualAdd', label: '수동 방문 추가', icon: '➕', desc: '수동으로 추가' },
 ];
 
@@ -659,6 +662,75 @@ function MismatchesSection() {
   );
 }
 
+function SuspiciousActivitySection() {
+  const [items, setItems] = useState<SuspiciousActivityItem[] | null>(null);
+  const [error, setError] = useState('');
+
+  const fetchData = useCallback(async () => {
+    const result = await getSuspiciousActivities();
+    if (result.success && result.data) {
+      setItems(result.data);
+      setError('');
+    } else if (!result.success) {
+      setError(result.error || '의심 활동 기록을 불러올 수 없습니다.');
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[#6B6B5E]">
+        같은 고객이 최근 방문에서 위치 확인(GPS)이 반복적으로 안 돼서 방문 등록이 차단된 기록입니다.
+        (QR 사진을 찍어두고 매장 밖에서 위치를 꺼서 방문을 조작하려는 시도를 걸러내기 위한 기능입니다.)
+      </p>
+      {error && (
+        <div className="bg-[#FFF8F0] border border-[#F0D4B8] text-[#996633] px-4 py-3 rounded-xl text-[15px]">
+          {error}
+        </div>
+      )}
+      {!items ? (
+        <div className="h-40 rounded-2xl bg-[#E8E8E0] animate-pulse" />
+      ) : items.length === 0 ? (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#E8E4DA] text-center">
+          <p className="text-[15px] text-[#2D5A3D]">차단된 의심 활동이 없습니다.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-[#E8E4DA]">
+          <table className="w-full text-sm min-w-[620px]">
+            <thead>
+              <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
+                <th className="px-4 py-3 font-medium">발생일시</th>
+                <th className="px-4 py-3 font-medium">고객명</th>
+                <th className="px-4 py-3 font-medium">연락처</th>
+                <th className="px-4 py-3 font-medium">유형</th>
+                <th className="px-4 py-3 font-medium">내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.id} className="border-b border-[#F0EDE6] last:border-0">
+                  <td className="px-4 py-3 whitespace-nowrap text-[#555]">
+                    {formatDateKR(it.createdAt)} {formatTimeKR(it.createdAt)}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">
+                    {it.customerName ?? '탈퇴한 고객'}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-[#555]">{it.phone ?? '-'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-[#D4442A] font-semibold">{it.activityLabel}</td>
+                  <td className="px-4 py-3 text-[#555]">{it.description ?? '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ManualAddSection() {
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<CustomerListItem[]>([]);
@@ -881,6 +953,7 @@ export default function VisitManagement() {
           {section === 'all' && <AllVisitRecordsSection storeId={storeId} />}
           {section === 'duplicates' && <DuplicateVisitsSection />}
           {section === 'mismatches' && <MismatchesSection />}
+          {section === 'suspicious' && <SuspiciousActivitySection />}
           {section === 'manualAdd' && <ManualAddSection />}
         </div>
       </div>

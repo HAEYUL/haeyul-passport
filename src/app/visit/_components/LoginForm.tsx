@@ -116,6 +116,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
           <p className="text-sm text-[#8C8C80] leading-relaxed -mt-2">
             처음 등록하신 분은 이번에 입력하신 생년월일이 그대로 등록되며,
             다음부터는 같은 기기에서 별도 입력 없이 자동으로 열립니다.
+            (60일 이상 방문이 없으면 확인을 위해 한 번 더 입력해 주세요.)
           </p>
 
           {/* 로그인 버튼 */}
