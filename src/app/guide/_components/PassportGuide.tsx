@@ -155,6 +155,15 @@ export default function PassportGuide() {
           </p>
         </section>
 
+        {/* 전자여권 이용 안내 */}
+        <section className="space-y-3">
+          <h2 className="text-[17px] font-bold text-[#333331]">전자여권 이용 안내</h2>
+          <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
+            60일 이상 매장을 방문하지 않으시면, 다음 방문 시 성함·전화번호·생년월일을 다시 한번
+            확인합니다. 확인만 해주시면 그동안 쌓인 방문 기록과 할인권은 그대로 유지됩니다.
+          </p>
+        </section>
+
         <div className="pb-8" />
       </div>
     </main>
