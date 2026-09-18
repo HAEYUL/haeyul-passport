@@ -2495,6 +2495,108 @@ export async function getCustomerAuditHistory(customerId: string): Promise<ApiRe
 }
 
 // ============================================================
+// 관리자 수동 회원가입 (매장 밖에서 만난 단골손님용 — QR/위치 확인 없음)
+// ============================================================
+
+export interface AdminRegisterCustomerInput {
+  name: string;
+  phone: string;
+  /** 'YYYY-MM-DD' */
+  birthDate: string;
+  storeId: string;
+  marketingConsent: boolean;
+}
+
+/**
+ * 관리자가 매장 밖에서 만난 단골손님을 대신 등록합니다. QR 스캔·위치 확인을
+ * 거치지 않으므로(관리자 로그인 자체가 신뢰의 근거), 실제 매장 방문이 아니라서
+ * 첫 방문 기록은 만들지 않습니다 — 이후 실제로 매장에 와서 QR을 찍을 때부터
+ * 방문횟수가 쌓입니다.
+ */
+export async function adminRegisterCustomer(
+  input: AdminRegisterCustomerInput
+): Promise<ApiResponse<{ customerId: string; customerNumber: string }>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+
+    const name = input.name.trim();
+    if (!name) {
+      return { success: false, error: '성함을 입력해 주세요.' };
+    }
+
+    if (!isValidPhone(input.phone)) {
+      return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+    }
+    const phone = normalizePhone(input.phone);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.birthDate)) {
+      return { success: false, error: '생년월일을 정확히 입력해 주세요.' };
+    }
+
+    if (!input.storeId) {
+      return { success: false, error: '가입 매장을 선택해 주세요.' };
+    }
+
+    const supabase = createAdminClient();
+
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('phone', phone)
+      .eq('is_active', true)
+      .single();
+
+    if (existing) {
+      return { success: false, error: '이미 가입된 번호입니다.' };
+    }
+
+    const { data: customer, error: insertError } = await supabase
+      .from('customers')
+      .insert({
+        customer_number: '', // 트리거가 자동 생성
+        name,
+        phone,
+        birth_date: input.birthDate,
+        marketing_consent: input.marketingConsent,
+        signup_store_id: input.storeId,
+      })
+      .select('id, customer_number')
+      .single();
+
+    if (insertError || !customer) {
+      if (insertError?.code === '23505') {
+        return { success: false, error: '이미 가입된 번호입니다.' };
+      }
+      return { success: false, error: '등록 중 오류가 발생했습니다.' };
+    }
+
+    await supabase.from('consent_logs').insert([
+      { customer_id: customer.id, consent_type: 'privacy', consented: true },
+      ...(input.marketingConsent
+        ? [{ customer_id: customer.id, consent_type: 'marketing', consented: true }]
+        : []),
+    ]);
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.CUSTOMER_MANUAL_REGISTER,
+      target_type: 'customer',
+      target_id: customer.id,
+      before_data: null,
+      after_data: { name, phone, birthDate: input.birthDate, storeId: input.storeId },
+    });
+
+    return { success: true, data: { customerId: customer.id, customerNumber: customer.customer_number } };
+  } catch (error) {
+    console.error('adminRegisterCustomer 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
 // 고객 정보 수정 / 삭제
 // ============================================================
 
