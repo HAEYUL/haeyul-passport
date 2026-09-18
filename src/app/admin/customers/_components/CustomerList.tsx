@@ -17,6 +17,7 @@ import { getStoreAdminColor } from '@/lib/storeColors';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 import SmsComposeModal from './SmsComposeModal';
+import ManualRegisterModal from './ManualRegisterModal';
 
 function AdminNoteCell({
   customerId,
@@ -234,6 +235,7 @@ export default function CustomerList() {
   const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showSmsModal, setShowSmsModal] = useState(false);
+  const [showManualRegisterModal, setShowManualRegisterModal] = useState(false);
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
@@ -466,6 +468,14 @@ export default function CustomerList() {
             <div className="flex justify-end gap-2.5">
               <button
                 type="button"
+                onClick={() => setShowManualRegisterModal(true)}
+                className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
+                           hover:bg-[#F5F5EC] transition-all duration-200 hover:shadow-sm"
+              >
+                ➕ 신규 회원 등록
+              </button>
+              <button
+                type="button"
                 onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter === 'vip')}
                 disabled={!customers || customers.length === 0}
                 className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
@@ -613,6 +623,13 @@ export default function CustomerList() {
           customerIds={[...selectedIds]}
           consentedCount={customers.filter((c) => selectedIds.has(c.id) && c.marketingConsent).length}
           onClose={() => setShowSmsModal(false)}
+        />
+      )}
+
+      {showManualRegisterModal && (
+        <ManualRegisterModal
+          onClose={() => setShowManualRegisterModal(false)}
+          onRegistered={() => fetchCustomers(query)}
         />
       )}
     </main>
