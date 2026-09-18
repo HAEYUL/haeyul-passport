@@ -21,6 +21,22 @@ export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기
 export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
 export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
 
+// 위치 확인 반복 실패(GPS 미확인) 악용 방지
+// QR 사진 + 위치 권한 거부를 반복하는 패턴을 걸러내기 위한 기준입니다.
+// 최근 방문 LOCATION_ABUSE_WINDOW건 중 '확인 안 됨'이 LOCATION_ABUSE_THRESHOLD건 이상이면,
+// 그다음 방문부터는 위치 확인 안 됨도 반경 밖과 동일하게 차단합니다.
+export const LOCATION_ABUSE_WINDOW = 5;
+export const LOCATION_ABUSE_THRESHOLD = 3;
+
+// 의심 활동 유형 (suspicious_activities.activity_type)
+export const SUSPICIOUS_ACTIVITY_TYPE = {
+  LOCATION_UNAVAILABLE_REPEATED: 'location_unavailable_repeated',
+} as const;
+
+export const SUSPICIOUS_ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  [SUSPICIOUS_ACTIVITY_TYPE.LOCATION_UNAVAILABLE_REPEATED]: '위치 확인 반복 실패로 방문 차단',
+};
+
 // 감사 로그 액션
 export const AUDIT_ACTION = {
   VISIT_CANCEL: 'visit_cancel',

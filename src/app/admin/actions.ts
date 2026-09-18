@@ -13,7 +13,7 @@ import {
   type StatsPeriod,
   type DateBucket,
 } from '@/lib/utils';
-import { AUDIT_ACTION } from '@/lib/constants';
+import { AUDIT_ACTION, SUSPICIOUS_ACTIVITY_TYPE_LABELS } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import { REFERRAL_SOURCE_OPTIONS, getReferralSourceLabel, type ReferralSourceKey } from '@/lib/referralSource';
 import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
@@ -1768,6 +1768,69 @@ export async function getVisitCountMismatches(): Promise<ApiResponse<VisitCountM
     return { success: true, data: mismatches };
   } catch (error) {
     console.error('getVisitCountMismatches 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+export interface SuspiciousActivityItem {
+  id: string;
+  activityType: string;
+  activityLabel: string;
+  description: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  customerNumber: string | null;
+  phone: string | null;
+  createdAt: string;
+}
+
+/**
+ * 위치 확인 반복 실패(QR 사진 + 위치 권한 거부 반복 패턴) 등으로 차단된
+ * 의심 활동 기록을 최신순으로 조회합니다.
+ */
+export async function getSuspiciousActivities(): Promise<ApiResponse<SuspiciousActivityItem[]>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase
+      .from('suspicious_activities')
+      .select('id, activity_type, description, customer_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      return { success: false, error: '의심 활동 기록을 불러올 수 없습니다.' };
+    }
+
+    const customerIds = [...new Set((data || []).map((d) => d.customer_id).filter((id): id is string => !!id))];
+    const { data: customers } =
+      customerIds.length > 0
+        ? await supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds)
+        : { data: [] };
+    const customerMap = new Map((customers || []).map((c) => [c.id, c]));
+
+    const result: SuspiciousActivityItem[] = (data || []).map((d) => {
+      const c = d.customer_id ? customerMap.get(d.customer_id) : undefined;
+      return {
+        id: d.id,
+        activityType: d.activity_type,
+        activityLabel: SUSPICIOUS_ACTIVITY_TYPE_LABELS[d.activity_type] ?? d.activity_type,
+        description: d.description,
+        customerId: d.customer_id,
+        customerName: c?.name ?? null,
+        customerNumber: c?.customer_number ?? null,
+        phone: c?.phone ?? null,
+        createdAt: d.created_at,
+      };
+    });
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('getSuspiciousActivities 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
