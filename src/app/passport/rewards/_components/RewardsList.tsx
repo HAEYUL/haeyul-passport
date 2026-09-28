@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import Image from 'next/image';
-import { getRewards, confirmRewardUse, type RewardItem } from '@/app/actions';
+import { getRewards, confirmRewardsUse, type RewardItem } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getTierUpDefinition } from '@/lib/tiers';
 import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
@@ -90,9 +90,12 @@ function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isEx
 export default function RewardsList() {
   const [rewards, setRewards] = useState<RewardItem[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [confirmingReward, setConfirmingReward] = useState<RewardItem | null>(null);
+  const [doneMessage, setDoneMessage] = useState('');
+  // 한 번 결제에 쓸 할인권 (최대 MAX_REWARDS_PER_PAYMENT장) — 고른 뒤 직원 확인 한 번으로 처리합니다.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirming, setConfirming] = useState(false);
 
   const fetchRewards = useCallback(async () => {
     const result = await getRewards();
@@ -110,20 +113,33 @@ export default function RewardsList() {
     window.location.href = '/passport';
   }
 
-  async function handleConfirmUse() {
-    if (!confirmingReward) return;
-    const id = confirmingReward.id;
+  function toggleSelect(id: string) {
+    setError('');
+    setDoneMessage('');
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < MAX_REWARDS_PER_PAYMENT ? [...prev, id] : prev
+    );
+  }
 
-    setConfirmingReward(null);
-    setActionLoadingId(id);
+  const selectedRewards = (rewards || []).filter((r) => selectedIds.includes(r.id));
+  const selectedTotal = selectedRewards.reduce((sum, r) => sum + r.amount, 0);
+
+  async function handleConfirmUse() {
+    if (selectedIds.length === 0) return;
+
+    setConfirming(false);
+    setSubmitting(true);
     setError('');
 
-    const result = await confirmRewardUse(id);
+    const result = await confirmRewardsUse(selectedIds);
 
-    setActionLoadingId(null);
+    setSubmitting(false);
 
     if (result.success) {
+      setDoneMessage(result.message || `✓ 할인권 ${selectedIds.length}장(${selectedTotal.toLocaleString()}원) 사용이 완료되었습니다.`);
+      setSelectedIds([]);
       fetchRewards();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setError(result.error || '처리 중 오류가 발생했습니다.');
     }
@@ -166,9 +182,15 @@ export default function RewardsList() {
             해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
           </p>
           <p className="mt-1 text-[15px] font-bold text-[#8A5800]">
-            한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.
+            사용할 할인권을 골라 직원에게 보여주세요. (한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지)
           </p>
         </div>
+
+        {doneMessage && (
+          <div className="bg-[#F0F7F2] border-2 border-[#8FC49F] text-[#1F4A2E] px-5 py-4 rounded-2xl text-[17px] font-bold leading-relaxed">
+            {doneMessage}
+          </div>
+        )}
 
         {error && (
           <div className="bg-[#FFF3E4] border-2 border-[#EAC28E] text-[#7A4A16] px-5 py-4 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
@@ -188,6 +210,8 @@ export default function RewardsList() {
           <ul className="space-y-4">
             {rewards.map((reward) => {
               const isUsable = reward.status !== 'used' && !reward.isExpired;
+              const isSelected = selectedIds.includes(reward.id);
+              const selectionFull = !isSelected && selectedIds.length >= MAX_REWARDS_PER_PAYMENT;
               const { text: rewardLabel, icon: rewardIcon, kind } = getRewardLabel(reward);
               const style = REWARD_CARD_STYLES[kind];
               return (
@@ -195,7 +219,7 @@ export default function RewardsList() {
                   key={reward.id}
                   className={`rounded-2xl p-5 space-y-3 border-2 ${
                     isUsable ? style.usableBg : 'bg-[#F5F5EC] border-[#E0E0D0]'
-                  }`}
+                  } ${isSelected ? 'ring-4 ring-[#2D5A3D] ring-offset-2' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2">
@@ -232,13 +256,18 @@ export default function RewardsList() {
 
                   {isUsable && (
                     <button
-                      onClick={() => setConfirmingReward(reward)}
-                      disabled={actionLoadingId === reward.id}
-                      className="w-full min-h-[52px] py-3 px-4 bg-[#2D5A3D] text-white text-base font-bold rounded-xl
-                                 shadow-sm hover:bg-[#245032] active:scale-[0.98]
-                                 transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={() => toggleSelect(reward.id)}
+                      disabled={submitting || selectionFull}
+                      aria-pressed={isSelected}
+                      className={`w-full min-h-[52px] py-3 px-4 text-base font-bold rounded-xl
+                                 active:scale-[0.98] transition-all duration-200 disabled:cursor-not-allowed ${
+                                   isSelected
+                                     ? 'bg-[#2D5A3D] text-white shadow-sm'
+                                     : 'bg-white text-[#2D5A3D] border-2 border-[#2D5A3D] disabled:opacity-40'
+                                 }`}
                     >
-                      {actionLoadingId === reward.id ? '처리 중...' : '직원확인'}
+                      {isSelected ? '✓ 선택됨 (다시 누르면 취소)' : selectionFull ? `${MAX_REWARDS_PER_PAYMENT}장까지 고를 수 있어요` : '이 할인권 사용하기'}
                     </button>
                   )}
                 </li>
@@ -247,17 +276,45 @@ export default function RewardsList() {
           </ul>
         )}
 
-        <div className="pb-8" />
+        {/* 아래 고정 바에 가려지지 않도록 여백 */}
+        <div className={selectedIds.length > 0 ? 'pb-32' : 'pb-8'} />
       </div>
 
+      {/* 고른 할인권 — 직원 확인 한 번으로 처리 */}
+      {selectedIds.length > 0 && !confirming && (
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-white border-t-2 border-[#E0DCD0] shadow-[0_-4px_16px_rgba(0,0,0,0.08)] px-5 py-4">
+          <div className="w-full max-w-sm mx-auto space-y-2">
+            <p className="text-center text-[17px] font-bold text-[#2D5A3D]">
+              {selectedIds.length}장 선택 · 합계 {selectedTotal.toLocaleString()}원
+            </p>
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              disabled={submitting}
+              className="w-full min-h-[56px] bg-[#2D5A3D] text-white text-lg font-bold rounded-xl shadow-md
+                         hover:bg-[#245032] active:scale-[0.98] transition-all duration-200 disabled:bg-[#999]"
+            >
+              {submitting ? '처리 중...' : '직원확인'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 할인권 사용 확인 모달 */}
-      {confirmingReward && (
+      {confirming && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-6 py-8">
           <div className="w-full max-w-sm bg-white rounded-2xl p-6 space-y-5 shadow-lg">
             <div className="space-y-2">
               <p className="text-xl font-bold text-[#2D5A3D]">
-                {confirmingReward.amount.toLocaleString()}원 할인권을 사용하시겠습니까?
+                할인권 {selectedIds.length}장, 합계 {selectedTotal.toLocaleString()}원을 사용하시겠습니까?
               </p>
+              <ul className="space-y-1 text-[15px] font-semibold text-[#44443C]">
+                {selectedRewards.map((r) => (
+                  <li key={r.id}>
+                    · {r.amount.toLocaleString()}원 {getRewardLabel(r).text}
+                  </li>
+                ))}
+              </ul>
               <p className="text-[15px] font-medium text-[#7A4A16] bg-[#FFF3E4] border border-[#EAC28E] rounded-xl px-4 py-3">
                 사용 후에는 취소할 수 없습니다.<br />
                 한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요. (포장 불가)
@@ -266,7 +323,7 @@ export default function RewardsList() {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setConfirmingReward(null)}
+                onClick={() => setConfirming(false)}
                 className="flex-1 min-h-[52px] py-3 px-4 bg-white text-[#55534A] text-base font-bold rounded-xl
                            border-2 border-[#D4D0C8] active:scale-[0.98] transition-all duration-200"
               >

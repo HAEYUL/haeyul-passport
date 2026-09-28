@@ -264,5 +264,7 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  /** 화면에서 실패 종류에 맞는 안내를 보여주기 위한 구분값 (예: 'LOCATION' — 위치 확인 실패) */
+  code?: string;
   message?: string;
 }

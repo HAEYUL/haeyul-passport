@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { getPassportData, type PassportData } from '@/app/actions';
+import { getPassportData, updateReferralSource, type PassportData } from '@/app/actions';
+import { REFERRAL_SOURCE_OPTIONS, type ReferralSourceKey } from '@/lib/referralSource';
 import { STORE_NAMES } from '@/lib/storeAccents';
 import { getTierUpDefinition } from '@/lib/tiers';
 import StoreStamps from '@/components/passport/StoreStamps';
@@ -17,6 +18,17 @@ import { useAddToHome } from '@/components/passport/useAddToHome';
 export default function WelcomeScreen() {
   const [data, setData] = useState<PassportData | null>(null);
   const { isInstalledApp, installMessage, addToHome } = useAddToHome();
+  // 해율을 알게 된 경로 (선택) — 가입을 빠르게 하려고 가입 화면이 아니라 여기서 묻습니다.
+  const [referralChoice, setReferralChoice] = useState<ReferralSourceKey | null>(null);
+  const [referralDetail, setReferralDetail] = useState('');
+  const [referralSaved, setReferralSaved] = useState(false);
+
+  async function saveReferral(source: ReferralSourceKey, detail?: string) {
+    setReferralChoice(source);
+    if (source === 'other' && detail === undefined) return; // '기타'는 내용을 적은 뒤 저장
+    const result = await updateReferralSource(source, detail);
+    if (result.success) setReferralSaved(true);
+  }
 
   useEffect(() => {
     getPassportData().then((result) => {
@@ -122,6 +134,57 @@ export default function WelcomeScreen() {
               <p className="text-[15px] leading-relaxed text-[#55534A]">{installMessage}</p>
             )}
           </div>
+        )}
+
+        {/* 해율을 알게 된 경로 (선택) — 한 번 누르면 바로 저장 */}
+        {!data.customer.referral_source && (
+          <section className="bg-white rounded-2xl border-2 border-[#E0DCD0] p-4 space-y-3">
+            {referralSaved ? (
+              <p className="text-center text-[17px] font-bold text-[#2D5A3D]">알려주셔서 감사합니다 😊</p>
+            ) : (
+              <>
+                <p className="text-center text-[15px] font-semibold text-[#44443C]">
+                  해율을 어떻게 알고 오셨어요? <span className="text-[#8C8C80]">(선택)</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {REFERRAL_SOURCE_OPTIONS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => saveReferral(option.key)}
+                      className={`min-h-[48px] px-2 rounded-xl border-2 text-[15px] font-semibold leading-tight transition-colors duration-200 ${
+                        referralChoice === option.key
+                          ? 'bg-[#2D5A3D] border-[#2D5A3D] text-white'
+                          : 'bg-white border-[#D4D0C8] text-[#44443C] hover:bg-[#F5F5EC]'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {referralChoice === 'other' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={referralDetail}
+                      onChange={(e) => setReferralDetail(e.target.value)}
+                      placeholder="어떤 경로였는지 알려주세요"
+                      maxLength={100}
+                      className="flex-1 min-w-0 px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl bg-white
+                                 placeholder-[#B0B0A0] focus:border-[#2D5A3D] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveReferral('other', referralDetail)}
+                      className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-[#2D5A3D] text-white text-[15px] font-bold"
+                    >
+                      저장
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
         )}
 
         <div className="text-center">

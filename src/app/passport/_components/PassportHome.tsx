@@ -14,6 +14,7 @@ import BrandLogo from '@/components/BrandLogo';
 import StoreStamps from '@/components/passport/StoreStamps';
 import StoreMealList from '@/components/passport/StoreMealList';
 import { useAddToHome } from '@/components/passport/useAddToHome';
+import LocationHelp from '@/components/passport/LocationHelp';
 
 /** 방금 기록한 방문 결과 — 축하 카드 한 장으로 보여줍니다 */
 interface JustRecordedVisit {
@@ -23,6 +24,8 @@ interface JustRecordedVisit {
   tierUpgraded: boolean;
   newCouponAmounts: number[];
   allStoresGiftAmount: number | null;
+  /** 이번 기록에서 위치 확인이 안 됐는지 (권한 거부 등) — 반복되면 기록이 막히므로 미리 안내 */
+  locationMissing: boolean;
 }
 
 /** 할인권 카드에 보여줄 "가장 급한 한 줄" */
@@ -80,6 +83,8 @@ export default function PassportHome() {
   const [loading, setLoading] = useState(true);
   const [visitLoading, setVisitLoading] = useState(false);
   const [visitError, setVisitError] = useState('');
+  // 위치 확인 실패로 기록이 막혔는지 — 위치 허용 방법을 펼쳐서 보여줍니다.
+  const [visitErrorIsLocation, setVisitErrorIsLocation] = useState(false);
   const [justRecorded, setJustRecorded] = useState<JustRecordedVisit | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -152,6 +157,7 @@ export default function PassportHome() {
     const storeName = data?.storeName ?? '매장';
     setVisitLoading(true);
     setVisitError('');
+    setVisitErrorIsLocation(false);
 
     const { coords } = await getCurrentPositionWithRetry();
     const result = await registerVisit(coords?.latitude ?? null, coords?.longitude ?? null);
@@ -159,10 +165,19 @@ export default function PassportHome() {
     if (result.success && result.data) {
       const { visitCount, newCouponAmounts, allStoresGiftAmount, tier, tierUpgraded } = result.data;
       await refreshPassportData();
-      setJustRecorded({ storeName, visitCount, tier, tierUpgraded, newCouponAmounts, allStoresGiftAmount });
+      setJustRecorded({
+        storeName,
+        visitCount,
+        tier,
+        tierUpgraded,
+        newCouponAmounts,
+        allStoresGiftAmount,
+        locationMissing: !coords,
+      });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setVisitError(result.error || '방문 등록 중 오류가 발생했습니다.');
+      setVisitErrorIsLocation(result.code === 'LOCATION' || !coords);
     }
     setVisitLoading(false);
   }, [data?.storeName, refreshPassportData]);
@@ -268,7 +283,13 @@ export default function PassportHome() {
             {visitError && (
               <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-xl text-[15px] font-medium leading-relaxed whitespace-pre-line text-left">
                 {visitError}
-                <p className="mt-1 text-sm">QR 인증은 방문 당일 매장 영업시간까지만 유효해요.</p>
+                {visitErrorIsLocation ? (
+                  <div className="mt-2">
+                    <LocationHelp defaultOpen />
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm">QR 인증은 방문 당일 매장 영업시간까지만 유효해요.</p>
+                )}
               </div>
             )}
           </section>
@@ -308,6 +329,15 @@ export default function PassportHome() {
                 >
                   할인권 보기
                 </button>
+              </div>
+            )}
+            {justRecorded.locationMissing && (
+              <div className="bg-[#FFF3E4] border border-[#EAC28E] rounded-xl px-3 py-2.5 text-left">
+                <p className="text-[15px] font-semibold text-[#7A4A16] leading-relaxed">
+                  이번에는 위치 확인이 되지 않았어요. 위치 확인이 계속 안 되면 방문 기록이 어려울 수 있으니,
+                  다음 방문부터는 위치를 허용해 주세요.
+                </p>
+                <LocationHelp />
               </div>
             )}
           </section>

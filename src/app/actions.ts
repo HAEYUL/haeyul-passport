@@ -150,7 +150,7 @@ export async function registerCustomer(
     const locationResult = await checkStoreLocation(supabase, storeId, clientLat, clientLng);
 
     if (locationResult.status === 'failed') {
-      return { success: false, error: LOCATION_REJECTED_ERROR };
+      return { success: false, error: LOCATION_REJECTED_ERROR, code: 'LOCATION' };
     }
 
     // ─── 중복 전화번호 확인 ─────────────────────────
@@ -659,7 +659,7 @@ export async function registerVisit(
     // ─── 위치 확인 (QR 부정 스캔 방지) ─────────────────
     const locationResult = await checkStoreLocation(supabase, storeId, latitude ?? null, longitude ?? null);
     if (locationResult.status === 'failed') {
-      return { success: false, error: LOCATION_REJECTED_ERROR };
+      return { success: false, error: LOCATION_REJECTED_ERROR, code: 'LOCATION' };
     }
 
     // 위치 확인이 안 된 경우, 최근 방문 중 같은 상황이 반복되고 있으면
@@ -681,7 +681,7 @@ export async function registerVisit(
           description: `최근 ${LOCATION_ABUSE_WINDOW}건 중 ${unavailableCount}건 위치 확인 안 됨 — 방문 등록 차단`,
           customer_id: session.customerId,
         });
-        return { success: false, error: LOCATION_ABUSE_ERROR };
+        return { success: false, error: LOCATION_ABUSE_ERROR, code: 'LOCATION' };
       }
     }
 
@@ -912,17 +912,25 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
 }
 
 /**
- * 할인권 사용 확인 — '사용 완료'로 즉시 처리합니다.
+ * 할인권 사용 확인 — 고른 할인권(1~2장)을 한 번에 '사용 완료'로 처리합니다.
  * 별도의 직원 인증 없이, 매장에서 직원이 확인 버튼을 눌러주면 바로 처리됩니다.
  * 지금 QR로 확인된 매장을 used_store_id로 함께 기록합니다.
  */
-export async function confirmRewardUse(
-  customerRewardId: string
+export async function confirmRewardsUse(
+  customerRewardIds: string[]
 ): Promise<ApiResponse<null>> {
   try {
     const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const ids = [...new Set(customerRewardIds)];
+    if (ids.length === 0) {
+      return { success: false, error: '사용할 할인권을 골라 주세요.' };
+    }
+    if (ids.length > MAX_REWARDS_PER_PAYMENT) {
+      return { success: false, error: `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.` };
     }
 
     const storeId = await getVerifiedStoreId();
@@ -935,22 +943,22 @@ export async function confirmRewardUse(
 
     const supabase = createAdminClient();
 
-    const { data: cr } = await supabase
+    const { data: crs } = await supabase
       .from('customer_rewards')
       .select('id, status, customer_id, issued_at, expires_at')
-      .eq('id', customerRewardId)
-      .single();
+      .in('id', ids);
 
-    if (!cr || cr.customer_id !== session.customerId) {
+    const mine = (crs || []).filter((cr) => cr.customer_id === session.customerId);
+    if (mine.length !== ids.length) {
       return { success: false, error: '할인권 정보를 찾을 수 없습니다.' };
     }
 
-    if (cr.status === 'used') {
-      return { success: false, error: '이미 사용된 할인권입니다.' };
+    if (mine.some((cr) => cr.status === 'used')) {
+      return { success: false, error: '이미 사용된 할인권이 있습니다.' };
     }
 
-    if (isRewardExpiredAt(cr.issued_at, cr.expires_at)) {
-      return { success: false, error: '유효기간이 지난 할인권입니다.\n사용하실 수 없습니다.' };
+    if (mine.some((cr) => isRewardExpiredAt(cr.issued_at, cr.expires_at))) {
+      return { success: false, error: '유효기간이 지난 할인권이 있습니다.\n사용하실 수 없습니다.' };
     }
 
     // 한 번 결제에 최대 MAX_REWARDS_PER_PAYMENT장 (금액 무관). 결제 단위는 알 수 없으므로
@@ -965,10 +973,14 @@ export async function confirmRewardUse(
       .gte('used_at', todayStart)
       .lt('used_at', todayEnd);
 
-    if ((usedTodayHere ?? 0) >= MAX_REWARDS_PER_PAYMENT) {
+    const remaining = MAX_REWARDS_PER_PAYMENT - (usedTodayHere ?? 0);
+    if (ids.length > remaining) {
       return {
         success: false,
-        error: `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`,
+        error:
+          remaining <= 0
+            ? `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`
+            : `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서는 ${remaining}장만 더 사용하실 수 있습니다.`,
       };
     }
 
@@ -979,7 +991,7 @@ export async function confirmRewardUse(
         used_at: new Date().toISOString(),
         used_store_id: storeId,
       })
-      .eq('id', customerRewardId)
+      .in('id', ids)
       .neq('status', 'used')
       .select('id');
 
@@ -992,9 +1004,16 @@ export async function confirmRewardUse(
       return { success: false, error: '이미 사용된 할인권입니다.' };
     }
 
+    if (updated.length < ids.length) {
+      return {
+        success: true,
+        message: `${updated.length}장만 사용 처리되었습니다. 나머지는 이미 사용된 할인권입니다.`,
+      };
+    }
+
     return { success: true };
   } catch (error) {
-    console.error('confirmRewardUse 오류:', error);
+    console.error('confirmRewardsUse 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -1002,6 +1021,43 @@ export async function confirmRewardUse(
 // ============================================================
 // 내 정보
 // ============================================================
+
+/**
+ * 해율을 알게 된 경로 저장 (선택). 가입 입력을 줄이기 위해 가입 직후 환영 화면에서 묻습니다.
+ * 이미 저장된 값이 있으면 덮어쓰지 않습니다.
+ */
+export async function updateReferralSource(
+  source: string,
+  detail?: string | null
+): Promise<ApiResponse<null>> {
+  try {
+    const session = await requireSession();
+    if (!session) {
+      return { success: false, error: '로그인이 필요합니다.' };
+    }
+    if (!isReferralSourceKey(source)) {
+      return { success: false, error: '선택 항목을 확인해 주세요.' };
+    }
+
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        referral_source: source,
+        referral_source_detail: source === 'other' ? detail?.trim().slice(0, 100) || null : null,
+      })
+      .eq('id', session.customerId)
+      .is('referral_source', null);
+
+    if (error) {
+      return { success: false, error: '저장 중 오류가 발생했습니다.' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('updateReferralSource 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
 
 /**
  * 마케팅 수신 동의 변경
