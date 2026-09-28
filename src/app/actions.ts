@@ -378,6 +378,15 @@ export interface ActiveNotice {
   body: string;
 }
 
+export interface NextCoupon {
+  /** 다음 할인권까지 남은 방문 횟수 */
+  visitsRemaining: number;
+  /** 다음 할인권을 받는 누적 방문 횟수 (예: 5번째 방문) */
+  atVisit: number;
+  /** 다음 할인권 금액(원) */
+  amount: number;
+}
+
 export interface PassportData {
   customer: Customer;
   todayVisited: boolean;
@@ -388,9 +397,16 @@ export interface PassportData {
   qrVerified: boolean;
   /** QR로 확인된 현재 매장 이름. 확인 안 됐으면 null */
   storeName: string | null;
-  rewardProgressMessage: string;
+  /** 다음 방문 할인권 안내. 더 받을 할인권이 없으면 null */
+  nextCoupon: NextCoupon | null;
   /** 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함) */
   storeVisitBreakdown: StoreVisitCount[];
+  /** 오늘(KST) 방문이 기록된 매장 이름 목록 */
+  todayVisitedStoreNames: string[];
+  /** 세 매장 완주 선물 금액(원). 행사가 꺼져 있으면 null */
+  allStoresGiftAmount: number | null;
+  /** 이미 세 매장 완주 선물을 받았는지 (사용 여부 무관) */
+  allStoresGiftReceived: boolean;
   /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
   soonExpiringReward: { amount: number; daysLeft: number } | null;
   /** 지금 게시기간 안에 있는 알림/이벤트(3개 매장 공통, 최대 1건). 없으면 null */
@@ -430,18 +446,13 @@ function computeExpiryDateKST(issuedAt: string, expiresAt: string | null): strin
 }
 
 /**
- * 다음 할인권까지 남은 방문 횟수와 예정 금액 안내 문구를 계산합니다.
+ * 다음 방문 할인권 안내(몇 번 더 오면, 몇 번째 방문에, 얼마). 더 받을 할인권이 없으면 null.
  * (실물 선물 대신 reward_rules 기반 금액형 할인권 — 008_coupon_rewards.sql 참고)
  */
-async function getRewardProgressMessage(
+async function getNextCouponForCustomer(
   supabase: ReturnType<typeof createAdminClient>,
-  visitCount: number,
-  tier: VisitTierInfo
-): Promise<string> {
-  if (tier.isMaxTier) {
-    return '가장 오랜 시간 자연을 함께한 해율푸드 VIP 입니다.';
-  }
-
+  visitCount: number
+): Promise<NextCoupon | null> {
   const { data: rules } = await supabase
     .from('reward_rules')
     .select('id, threshold_visits, amount, is_repeating, repeat_interval')
@@ -459,9 +470,8 @@ async function getRewardProgressMessage(
   }));
 
   const next = getNextCouponInfo(visitCount, ruleInputs);
-  if (!next) return '';
-
-  return `다음 할인권까지 ${next.visitsRemaining}회 남았습니다. (${next.amount.toLocaleString()}원)`;
+  if (!next) return null;
+  return { visitsRemaining: next.visitsRemaining, atVisit: visitCount + next.visitsRemaining, amount: next.amount };
 }
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
@@ -550,20 +560,32 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
       .order('created_at', { ascending: true });
     const { data: visitRows } = await supabase
       .from('visits')
-      .select('store_id')
+      .select('store_id, visit_date')
       .eq('customer_id', customer.id)
       .eq('is_cancelled', false);
 
     const visitCountMap = new Map<string, number>();
+    const todayStoreIds = new Set<string>();
     for (const v of visitRows || []) {
       visitCountMap.set(v.store_id, (visitCountMap.get(v.store_id) || 0) + 1);
+      if (v.visit_date === todayKST) todayStoreIds.add(v.store_id);
     }
-    const storeVisitBreakdown: StoreVisitCount[] = (allStores || [])
-      .map((s) => ({
-        storeName: s.name,
-        count: visitCountMap.get(s.id) || 0,
-      }))
-      .sort((a, b) => b.count - a.count);
+    const storeVisitBreakdown: StoreVisitCount[] = (allStores || []).map((s) => ({
+      storeName: s.name,
+      count: visitCountMap.get(s.id) || 0,
+    }));
+    const todayVisitedStoreNames = (allStores || []).filter((s) => todayStoreIds.has(s.id)).map((s) => s.name);
+
+    const [allStoresGiftAmount, { count: allStoresGiftCount }, nextCoupon, activeNotice] = await Promise.all([
+      getAllStoresGiftAmount(),
+      supabase
+        .from('customer_rewards')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', customer.id)
+        .eq('source', 'all_stores'),
+      getNextCouponForCustomer(supabase, customer.visit_count),
+      getActiveNotice(supabase),
+    ]);
 
     return {
       success: true,
@@ -576,10 +598,13 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         tier,
         qrVerified: storeId !== null,
         storeName,
-        rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
+        nextCoupon,
         storeVisitBreakdown,
+        todayVisitedStoreNames,
+        allStoresGiftAmount,
+        allStoresGiftReceived: (allStoresGiftCount ?? 0) > 0,
         soonExpiringReward,
-        activeNotice: await getActiveNotice(supabase),
+        activeNotice,
       },
     };
   } catch (error) {

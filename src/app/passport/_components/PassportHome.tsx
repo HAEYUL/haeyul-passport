@@ -2,49 +2,100 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
-import { formatDateKR } from '@/lib/utils';
-import { VIP_MESSAGE, VIP_ONGOING_MESSAGE } from '@/lib/tiers';
 import { getCurrentPositionWithRetry } from '@/lib/geolocation';
+import type { VisitTierInfo } from '@/lib/tiers';
+import { STORE_NAMES, HOMEPAGE_URL } from '@/lib/storeAccents';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import NoticeDetail from './NoticeDetail';
 import BrandLogo from '@/components/BrandLogo';
-import { STORE_ACCENTS, DEFAULT_STORE_ACCENT } from '@/lib/storeAccents';
-
-// 매장 주소 (매장별 방문 횟수 카드의 매장명과 매칭)
-const STORE_ADDRESSES: Record<string, string> = {
-  '해율만두전골': '용인시 수지구 고기로 173번길 5',
-  '곤드레밥집': '용인시 수지구 고기로 114',
-  '정담명가 남원추어탕': '용인시 수지구 고기로 129번길 12',
-};
-
-// 매장별 위치정보 홈페이지 링크 (매장별 위치 및 방문 횟수 카드에서 사용)
-const STORE_URLS: Record<string, string> = {
-  '해율만두전골': 'https://haeyul-homepage.vercel.app/haeyul',
-  '곤드레밥집': 'https://haeyul-homepage.vercel.app/gondre',
-  '정담명가 남원추어탕': 'https://haeyul-homepage.vercel.app/chueotang',
-};
+import StoreStamps from '@/components/passport/StoreStamps';
+import StoreMealList from '@/components/passport/StoreMealList';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 };
 
+/** 방금 기록한 방문 결과 — 축하 카드 한 장으로 보여줍니다 */
+interface JustRecordedVisit {
+  storeName: string;
+  visitCount: number;
+  tier: VisitTierInfo;
+  tierUpgraded: boolean;
+  newCouponAmounts: number[];
+  allStoresGiftAmount: number | null;
+}
+
+/** 할인권 카드에 보여줄 "가장 급한 한 줄" */
+interface CouponLine {
+  title: string;
+  sub?: string;
+}
+
+/**
+ * 할인권 카드의 한 줄 안내를 우선순위대로 하나만 고릅니다.
+ * 1) 곧 만료 → 2) 사용 가능 → 3) 세 매장 완주까지 한 곳 → 4) 다음 할인권까지
+ * 방금 방문을 기록한 직후에는 새로 받은 할인권을 축하 카드에서 이미 알렸으므로
+ * "사용 가능" 안내는 건너뜁니다.
+ */
+function getCouponLine(data: PassportData, justRecorded: boolean): CouponLine {
+  const { soonExpiringReward, availableRewards } = data;
+
+  if (soonExpiringReward) {
+    const when = soonExpiringReward.daysLeft <= 0 ? '오늘' : `${soonExpiringReward.daysLeft}일 후`;
+    return {
+      title: `⏰ ${soonExpiringReward.amount.toLocaleString()}원 할인권이 ${when} 만료돼요`,
+      sub: availableRewards > 1 ? `사용할 수 있는 할인권 ${availableRewards}장` : undefined,
+    };
+  }
+
+  if (availableRewards > 0 && !justRecorded) {
+    return { title: `🎫 사용할 수 있는 할인권 ${availableRewards}장` };
+  }
+
+  if (data.allStoresGiftAmount && !data.allStoresGiftReceived) {
+    const counts = new Map(data.storeVisitBreakdown.map((s) => [s.storeName, s.count]));
+    const notVisited = STORE_NAMES.filter((name) => (counts.get(name) ?? 0) === 0);
+    if (notVisited.length === 1) {
+      return {
+        title: `🏅 ${notVisited[0]}만 가시면`,
+        sub: `${data.allStoresGiftAmount.toLocaleString()}원 완주 선물을 드려요`,
+      };
+    }
+  }
+
+  if (data.nextCoupon) {
+    return {
+      title: `🎫 다음 할인권까지 ${data.nextCoupon.visitsRemaining}번 남았어요`,
+      sub: `${data.nextCoupon.atVisit}번째 방문에 ${data.nextCoupon.amount.toLocaleString()}원`,
+    };
+  }
+
+  return { title: '🎫 방문할수록 할인권이 쌓여요' };
+}
+
+function isRunningAsInstalledApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
+}
+
 export default function PassportHome() {
   const [data, setData] = useState<PassportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [visitLoading, setVisitLoading] = useState(false);
-  const [visitMessage, setVisitMessage] = useState('');
   const [visitError, setVisitError] = useState('');
-  const [newCouponAmounts, setNewCouponAmounts] = useState<number[]>([]);
-  const [tierUpMessage, setTierUpMessage] = useState('');
-  const [allStoresGiftAmount, setAllStoresGiftAmount] = useState<number | null>(null);
+  const [justRecorded, setJustRecorded] = useState<JustRecordedVisit | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installMessage, setInstallMessage] = useState('');
+  // 이미 홈 화면 앱으로 열었으면 "홈 화면에 추가"를 숨깁니다.
+  const [isInstalledApp] = useState(isRunningAsInstalledApp);
   const [showScrollHint, setShowScrollHint] = useState(false);
 
   // 화면이 한 번에 안 보이고 스크롤이 필요할 때만, 하단에 "더 있음" 표시를 보여줍니다.
@@ -134,38 +185,23 @@ export default function PassportHome() {
   }, []);
 
   const handleVisit = useCallback(async () => {
+    const storeName = data?.storeName ?? '매장';
     setVisitLoading(true);
-    setVisitMessage('');
     setVisitError('');
 
     const { coords } = await getCurrentPositionWithRetry();
     const result = await registerVisit(coords?.latitude ?? null, coords?.longitude ?? null);
 
-    setVisitLoading(false);
-
     if (result.success && result.data) {
       const { visitCount, newCouponAmounts, allStoresGiftAmount, tier, tierUpgraded } = result.data;
-      const tierLine = tier.isMaxTier
-        ? (visitCount === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE)
-        : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
-      setVisitMessage(
-        `오늘도 자연의 흐름이 여권에 기록되었습니다.\n현재까지 총 ${visitCount}회 방문하셨습니다.\n${tierLine}`
-      );
-      if (newCouponAmounts.length > 0) {
-        setNewCouponAmounts(newCouponAmounts);
-      }
-      if (allStoresGiftAmount) {
-        setAllStoresGiftAmount(allStoresGiftAmount);
-      }
-      if (tierUpgraded) {
-        setTierUpMessage(`${tier.label}(으)로 자라나셨습니다. 자연의 흐름을 함께해 주셔서 감사합니다.`);
-      }
-      // 데이터 새로고침
-      refreshPassportData();
+      await refreshPassportData();
+      setJustRecorded({ storeName, visitCount, tier, tierUpgraded, newCouponAmounts, allStoresGiftAmount });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setVisitError(result.error || '방문 등록 중 오류가 발생했습니다.');
     }
-  }, [refreshPassportData]);
+    setVisitLoading(false);
+  }, [data?.storeName, refreshPassportData]);
 
   useEffect(() => {
     async function init() {
@@ -211,6 +247,7 @@ export default function PassportHome() {
     return (
       <MyInfo
         customer={data.customer}
+        recentVisitDate={data.recentVisitDate}
         onBack={closeOverlay}
         onUpdated={refreshPassportData}
         onLogout={handleLogout}
@@ -223,391 +260,194 @@ export default function PassportHome() {
     return <NoticeDetail notice={data.activeNotice} onBack={closeOverlay} />;
   }
 
+  // 화면 상태: 매장 QR로 들어와 아직 기록 전(A) / 방금 기록함(B) / 평소(C)
+  const needsRecord = data.qrVerified && !data.todayVisited && !justRecorded;
+  const couponLine = getCouponLine(data, !!justRecorded);
+  const visitCounts = Object.fromEntries(data.storeVisitBreakdown.map((s) => [s.storeName, s.count]));
+  const recordedToday = data.todayVisitedStoreNames.length > 0;
+  const activeEvent = data.activeNotice?.kind === 'event' ? data.activeNotice : null;
+  const activeAlert = data.activeNotice?.kind === 'notice' ? data.activeNotice : null;
+
   return (
-    <main className="flex flex-col min-h-screen px-6 py-8">
+    <main className="flex flex-col min-h-screen px-5 py-6">
       <div className="w-full max-w-sm mx-auto space-y-3">
         {/* 헤더 */}
-        <header className="space-y-3">
-          <div className="grid grid-cols-[3fr_auto_4fr] items-center gap-2">
-            <div />
-            <BrandLogo height={56} textClassName="text-2xl" />
-            <a
-              href="https://haeyul-homepage.vercel.app/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="justify-self-end flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
-                         rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
-                         text-[13px] font-bold leading-tight text-center
-                         hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
-            >
-              <span>해율푸드</span>
-              <span>매장보기</span>
-            </a>
-          </div>
-          <p className="text-lg font-medium text-[#55534A] text-center">해율 자연의 흐름 통합 전자여권</p>
-          <div className="rounded-xl border border-[#D8D4C8] bg-white px-4 py-2.5">
-            <p className="text-sm font-medium text-[#55534A] text-center">
-              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕
-            </p>
-          </div>
+        <header className="text-center space-y-1">
+          <BrandLogo height={48} textClassName="text-2xl" />
+          <p className="text-[15px] font-medium text-[#6B6B5E]">음식은 달라도, 정성은 같습니다.</p>
         </header>
 
-        {/* 고객 정보 카드 */}
-        <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-[#2D5A3D]">
-                {data.customer.name} 고객님
-              </h1>
-              <p className="text-[15px] font-medium text-[#55534A] mt-1">
-                [해율 여권번호] {data.customer.customer_number}
+        {/* A. 매장 QR 확인 → 방문 기록하기 (가장 먼저) */}
+        {needsRecord && (
+          <section className="bg-[#EEF5FB] border-2 border-[#2B5D8A] rounded-2xl p-4 space-y-3 text-center">
+            <p className="text-[17px] font-bold text-[#204A6E]">✓ {data.storeName ?? '매장'} 방문이 확인되었어요</p>
+            <button
+              onClick={handleVisit}
+              disabled={visitLoading}
+              className="w-full min-h-[60px] py-4 px-6 bg-[#2D5A3D] text-white text-lg font-bold rounded-2xl
+                         shadow-md hover:bg-[#245032] active:scale-[0.98]
+                         transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
+              id="btn-visit"
+            >
+              {visitLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  기록 중...
+                </span>
+              ) : (
+                `${data.storeName ?? '매장'} 방문 기록하기`
+              )}
+            </button>
+            {visitError && (
+              <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-xl text-[15px] font-medium leading-relaxed whitespace-pre-line text-left">
+                {visitError}
+                <p className="mt-1 text-sm">QR 인증은 방문 당일 매장 영업시간까지만 유효해요.</p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* B. 방금 기록한 방문 — 축하 카드 한 장 */}
+        {justRecorded && (
+          <section className="bg-[#F0F7F2] border-2 border-[#8FC49F] rounded-2xl p-4 space-y-2.5 text-center" aria-live="polite">
+            <p className="text-xl font-extrabold text-[#1F4A2E]">✓ {justRecorded.storeName} 방문이 기록되었어요</p>
+            <p className="text-[17px] font-semibold text-[#1F4A2E]">오늘로 {justRecorded.visitCount}번째 방문, 감사합니다.</p>
+            {justRecorded.tierUpgraded && (
+              <div className="flex items-center justify-center gap-2 bg-white/70 rounded-xl py-2 px-3">
+                <Image src={justRecorded.tier.iconSrc} alt="" width={32} height={32} />
+                <p className="text-[17px] font-bold text-[#1F4A2E]">{justRecorded.tier.label} 등급으로 올랐어요</p>
+              </div>
+            )}
+            {justRecorded.allStoresGiftAmount && (
+              <p className="text-[17px] font-bold text-[#204A6E] bg-[#EEF5FB] rounded-xl py-2 px-3 leading-relaxed">
+                🏅 세 매장 완주를 축하드려요!<br />
+                {justRecorded.allStoresGiftAmount.toLocaleString()}원 완주 선물이 도착했어요
+              </p>
+            )}
+            {justRecorded.newCouponAmounts.length > 0 && (
+              <p className="text-[17px] font-bold text-[#8A5800] bg-[#FFF3D6] rounded-xl py-2 px-3">
+                🎫 {justRecorded.newCouponAmounts.map((a) => `${a.toLocaleString()}원`).join(' · ')} 할인권이 도착했어요
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* 고객 카드 — 이름 · 등급 · 총 방문 · 세 매장 도장 */}
+        <section className="bg-white rounded-2xl p-4 shadow-sm border-2 border-[#A8A296] space-y-3">
+          <div className="flex items-center gap-3">
+            <Image src={data.tier.iconSrc} alt={data.tier.label} width={48} height={48} priority className="flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-[#2D5A3D]">{data.customer.name} 고객님</h1>
+              <p className="text-[15px] font-semibold text-[#44443C]">
+                {data.tier.label} · 총 {data.customer.visit_count}회 방문
+                {recordedToday && <span className="text-[#2D5A3D]"> (오늘 ✓)</span>}
               </p>
             </div>
+          </div>
+          <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={openHistory}
+              type="button"
+              id="btn-history"
+              className="min-h-[48px] rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D] text-base font-bold
+                         hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+            >
+              방문기록
+            </button>
             <button
               onClick={openMyInfo}
               type="button"
-              className="flex-shrink-0 min-h-[52px] px-4 rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
-                         text-sm font-bold hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+              className="min-h-[48px] rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D] text-base font-bold
+                         hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
             >
               내 정보
             </button>
           </div>
-          <div className="flex items-center justify-between border-t border-[#F0EDE6] pt-2">
-            <span className="text-[15px] font-medium text-[#55534A]">최근 방문일</span>
-            <span className="text-base font-bold text-[#2C2C2C]">
-              {data.recentVisitDate ? formatDateKR(data.recentVisitDate) : '-'}
-            </span>
+        </section>
+
+        {/* 할인권 — 가장 급한 한 줄만 */}
+        <section className="bg-[#FFF3D6] border-2 border-[#DFBE5C] rounded-2xl p-4 space-y-3 text-center">
+          <div>
+            <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed">{couponLine.title}</p>
+            {couponLine.sub && <p className="text-[15px] font-medium text-[#8A5800]">{couponLine.sub}</p>}
           </div>
-        </div>
-
-        {/* 등급 카드 (초록 계열) */}
-        <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] rounded-2xl p-3 flex items-center gap-3">
-          <Image
-            src={data.tier.iconSrc}
-            alt={data.tier.label}
-            width={56}
-            height={56}
-            priority
-            className="flex-shrink-0"
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-semibold text-[#1F4A2E]">현재 등급</p>
-            <p className="text-[26px] font-extrabold text-[#1F4A2E] leading-tight">{data.tier.label}</p>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <p className="text-[15px] font-semibold text-[#1F4A2E]">총 방문</p>
-            <p className="text-[26px] font-extrabold text-[#1F4A2E] leading-tight">
-              {data.customer.visit_count}<span className="text-lg">회</span>
-            </p>
-          </div>
-          <button
-            onClick={openHistory}
-            type="button"
-            className="flex-shrink-0 flex flex-col items-center justify-center min-h-[52px] px-3 py-1.5
-                       rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D]
-                       text-[13px] font-bold leading-tight text-center
-                       hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
-            id="btn-history"
-          >
-            <span>방문</span>
-            <span>기록</span>
-          </button>
-        </div>
-
-        {/* 오늘의 방문 / 메시지 영역 */}
-        {visitMessage && (
-          <div className="bg-[#F0F7F2] border-2 border-[#8FC49F] text-[#1F4A2E] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line">
-            {visitMessage}
-          </div>
-        )}
-
-        {visitError && (
-          <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-2xl text-[17px] font-medium leading-relaxed whitespace-pre-line space-y-2">
-            <p>{visitError}</p>
-            {!data.todayVisited && (
-              <button
-                onClick={handleVisit}
-                disabled={visitLoading}
-                className="min-h-[44px] text-base font-bold text-[#2D5A3D] underline disabled:opacity-60"
-              >
-                다시 시도
-              </button>
-            )}
-          </div>
-        )}
-
-        {tierUpMessage && (
-          <div className="bg-[#E9F3EC] border-2 border-[#8FC49F] px-4 py-3 rounded-2xl text-center space-y-2">
-            <Image
-              src={data.tier.iconSrc}
-              alt={data.tier.label}
-              width={40}
-              height={40}
-              className="mx-auto"
-            />
-            <p className="text-[17px] text-[#1F4A2E] leading-relaxed font-bold">
-              {tierUpMessage}
-            </p>
-          </div>
-        )}
-
-        {allStoresGiftAmount && (
-          <div className="bg-[#EEF5FB] border-2 border-[#A9C8E4] px-4 py-3 rounded-2xl text-center space-y-2">
-            <p className="text-xl font-extrabold text-[#204A6E]">🏅 세 매장 완주를 축하드려요!</p>
-            <p className="text-[17px] font-semibold text-[#204A6E] leading-relaxed">
-              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
-              세 매장을 모두 방문하셨어요.<br />
-              {allStoresGiftAmount.toLocaleString()}원 완주 선물이 도착했습니다.
-            </p>
-            <p className="text-[15px] font-medium text-[#204A6E]">내 할인권함에서 확인해 주세요.</p>
-          </div>
-        )}
-
-        {newCouponAmounts.length > 0 && (
-          <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] px-4 py-3 rounded-2xl text-center space-y-2">
-            <p className="text-xl font-extrabold text-[#8A5800]">🎉 축하드립니다!</p>
-            <p className="text-[17px] font-semibold text-[#5A3E00] leading-relaxed">
-              새로운 할인권이 도착했습니다.<br />
-              {newCouponAmounts.map((a) => `${a.toLocaleString()}원`).join(' · ')}
-            </p>
-            <p className="text-[15px] font-medium text-[#8A5800]">내 할인권함에서 확인해 주세요.</p>
-          </div>
-        )}
-
-        {/* 방문 확인 및 기록 */}
-        {!data.todayVisited && !visitMessage && (
-          data.qrVerified ? (
-            <div className="bg-white rounded-2xl p-3 shadow-sm border-2 border-[#A8A296] text-center space-y-2">
-              <p className="text-[17px] font-semibold text-[#1F4A2E] leading-relaxed">
-                {data.storeName ?? '매장'} 방문이 확인되었습니다.<br />
-                오늘의 방문을 기록하시겠습니까?
-              </p>
-              <button
-                onClick={handleVisit}
-                disabled={visitLoading}
-                className="w-full min-h-[56px] py-4 px-6 bg-[#2D5A3D] text-white text-lg font-bold rounded-2xl
-                           shadow-md hover:bg-[#245032] active:scale-[0.98]
-                           transition-all duration-200 disabled:bg-[#999] disabled:cursor-not-allowed"
-                id="btn-visit"
-              >
-                {visitLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    기록 중...
-                  </span>
-                ) : (
-                  `${data.storeName ?? '매장'} 방문 기록하기`
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
-              <p className="text-[17px] font-semibold text-[#44443C] leading-relaxed">
-                매장 방문 확인이 필요합니다.<br />
-                매장의 QR코드를 다시 스캔해 주세요.
-              </p>
-              <p className="mt-1 text-sm font-medium text-[#6B6B5E]">
-                QR 인증은 방문 당일 매장 영업시간까지만 유효해요.
-              </p>
-            </div>
-          )
-        )}
-
-        {data.todayVisited && !visitMessage && (
-          <div className="text-center py-3 px-4 bg-[#F5F5EC] border-2 border-[#C2C2AE] rounded-2xl">
-            <p className="text-[17px] font-semibold text-[#1F4A2E]">
-              ✅ 오늘의 자연이 이미 기록되었습니다.
-            </p>
-            <p className="text-[15px] font-medium text-[#55534A] mt-1">
-              방문 기록은 하루에 한 번만 가능합니다.
-            </p>
-          </div>
-        )}
-
-        {/* 알림/이벤트 박스 — 관리자가 등록해 둔 것이 있을 때만 나타남 */}
-        {data.activeNotice && (
-          <button
-            type="button"
-            onClick={openNotice}
-            className={`notice-pill-animated w-full flex items-center gap-2.5 rounded-full border-2 px-5 py-3
-                       text-left active:scale-[0.98] transition-transform duration-150
-                       ${
-                         data.activeNotice.kind === 'event'
-                           ? 'bg-[#FBF0F4] border-[#C15B82] text-[#7D2F51]'
-                           : 'bg-[#EEF4FB] border-[#4E7DB5] text-[#2B4F78]'
-                       }`}
-          >
-            <span
-              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                data.activeNotice.kind === 'event' ? 'bg-[#C15B82]' : 'bg-[#4E7DB5]'
-              }`}
-            />
-            <span className="flex-1 text-[15.5px] font-bold">
-              {data.activeNotice.kind === 'event' ? '이벤트가 있습니다' : '알림이 있습니다'}
-            </span>
-            <span className="text-[13px] font-extrabold opacity-75 flex-shrink-0">확인 ›</span>
-          </button>
-        )}
-
-        {/* 다음 혜택까지 카드 (주황/노랑 계열) */}
-        <div className="bg-[#FFF3D6] border-2 border-[#DFBE5C] rounded-2xl p-3 space-y-2">
-          {data.tier.isMaxTier ? (
-            <p className="text-[17px] font-bold text-[#8A5800] leading-relaxed text-center">
-              {data.customer.visit_count === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex justify-between items-baseline text-[15px] font-semibold text-[#8A5800]">
-                <span>{data.tier.label}</span>
-                <span>{data.tier.nextTierLabel} 등급까지 {data.tier.visitsUntilNext}회</span>
-              </div>
-              <div className="w-full h-4 bg-white/70 rounded-full overflow-hidden border border-[#DFBE5C]">
-                <div
-                  className="h-full bg-[#D99A2B] rounded-full transition-all duration-500"
-                  style={{ width: `${data.tier.progressPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {data.rewardProgressMessage && (
-            <p className="text-[17px] font-bold text-[#8A5800] text-center leading-relaxed border-t border-[#F0D98C] pt-3">
-              🎫 {data.rewardProgressMessage}
-            </p>
-          )}
-
-          {data.availableRewards > 0 && (
-            <p className="text-[15px] font-semibold text-[#8A5800] text-center">
-              지금 사용 가능한 할인권 {data.availableRewards}개가 있어요
-            </p>
-          )}
-
-          {data.soonExpiringReward && (
-            <p className="text-[15px] font-bold text-[#D4442A] text-center">
-              ⏰ {data.soonExpiringReward.amount.toLocaleString()}원 할인권이{' '}
-              {data.soonExpiringReward.daysLeft <= 0 ? '오늘' : `${data.soonExpiringReward.daysLeft}일 후`} 만료돼요
-            </p>
-          )}
-        </div>
-
-        {/* 내 할인권 / 여권 설명서 */}
-        <div className="flex gap-3">
           <button
             onClick={() => {
               window.location.href = '/passport/rewards';
             }}
-            className={`flex-1 min-h-[56px] py-3 px-3 text-base font-bold rounded-2xl border-2 shadow-sm
-                       transition-all duration-200
-                       ${data.hasRewardToUse
-                         ? 'bg-[#FFF3D6] text-[#8A5800] border-[#F0D98C] hover:bg-[#FCE9BC]'
-                         : 'bg-white text-[#2D5A3D] border-[#D4D0C8] hover:bg-[#F5F5EC]'
-                       } active:scale-[0.98]`}
             id="btn-rewards"
+            className="w-full min-h-[52px] rounded-xl bg-white border-2 border-[#DFBE5C] text-[#8A5800] text-base font-bold
+                       hover:bg-[#FCE9BC] active:scale-[0.98] transition-all duration-200"
           >
-            내 할인권 {data.availableRewards > 0 && `(${data.availableRewards})`}
+            내 할인권 보기
           </button>
+        </section>
 
-          <button
-            onClick={() => {
-              window.location.href = '/guide';
-            }}
-            className="flex-1 min-h-[56px] py-3 px-3 bg-white text-[#2D5A3D] text-base font-bold rounded-2xl
-                       border-2 border-[#D4D0C8] shadow-sm
-                       hover:bg-[#F5F5EC] active:scale-[0.98]
-                       transition-all duration-200"
-          >
-            여권 설명서
-          </button>
-        </div>
+        {/* 기록 전(A)에는 기록에 집중하도록 아래 내용은 보여주지 않습니다 */}
+        {!needsRecord && (
+          <>
+            {activeEvent && (
+              <button
+                type="button"
+                onClick={openNotice}
+                className="notice-pill-animated w-full flex items-center gap-2.5 rounded-full border-2 px-5 py-3
+                           text-left active:scale-[0.98] transition-transform duration-150
+                           bg-[#FBF0F4] border-[#C15B82] text-[#7D2F51]"
+              >
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-[#C15B82]" />
+                <span className="flex-1 text-[15.5px] font-bold">🎉 {activeEvent.title}</span>
+                <span className="text-[13px] font-extrabold opacity-75 flex-shrink-0">확인 ›</span>
+              </button>
+            )}
 
-        {/* 매장별 위치 및 방문 횟수 */}
-        {data.storeVisitBreakdown.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[15px] font-bold text-[#44443C] px-1">매장별 위치 및 방문 횟수</p>
-            {data.storeVisitBreakdown.map((s) => {
-              const accent = STORE_ACCENTS[s.storeName] ?? DEFAULT_STORE_ACCENT;
-              const url = STORE_URLS[s.storeName];
-              const content = (
-                <>
-                  <div className="min-w-0">
-                    <p className="text-base font-bold" style={{ color: accent.text }}>
-                      {s.storeName}
-                    </p>
-                    <p className="text-xs mt-0.5 truncate opacity-80" style={{ color: accent.text }}>
-                      {STORE_ADDRESSES[s.storeName] ?? ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2.5 flex-shrink-0">
-                    <p className="text-xl font-extrabold" style={{ color: accent.text }}>
-                      {s.count}<span className="text-sm font-semibold">회</span>
-                    </p>
-                    {url && (
-                      <span
-                        className="inline-flex items-center gap-0.5 rounded-full bg-white border-2 px-2.5 py-1.5 text-xs font-bold whitespace-nowrap"
-                        style={{ borderColor: accent.border, color: accent.text }}
-                      >
-                        위치보기
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-                </>
-              );
-              const className = 'flex items-center justify-between rounded-xl py-3 px-4 border-l-[6px] transition-all duration-200';
-              const style = { backgroundColor: accent.bg, borderLeftColor: accent.border };
-
-              return url ? (
-                <a
-                  key={s.storeName}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`${className} active:scale-[0.98]`}
-                  style={style}
-                >
-                  {content}
-                </a>
-              ) : (
-                <div key={s.storeName} className={className} style={style}>
-                  {content}
-                </div>
-              );
-            })}
-          </div>
+            <StoreMealList
+              title={data.qrVerified ? '해율푸드의 세 가지 밥상' : '오늘은 어떤 한 끼가 생각나세요?'}
+              todayStoreNames={data.todayVisitedStoreNames}
+            />
+            <a
+              href={HOMEPAGE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center w-full min-h-[48px] rounded-xl bg-white border-2 border-[#D4D0C8]
+                         text-[#2D5A3D] text-base font-bold hover:bg-[#F5F5EC] active:scale-[0.98] transition-all duration-200"
+            >
+              세 매장 둘러보기
+            </a>
+          </>
         )}
 
-        {/* 하단 문구 */}
-        <footer className="pt-3 border-t border-[#E8E4DA] space-y-3">
-          <p className="text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
-            봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
-            가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
-            해율을 찾아주시는 한 걸음 한 걸음이<br />
-            자연의 흐름을 이어갑니다. 감사합니다.
-          </p>
-          <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={handleAddToHome}
-              className="min-h-[48px] w-full max-w-[260px] rounded-xl border-2 border-[#2D5A3D] bg-[#2D5A3D]
-                         px-5 py-2.5 text-base font-bold text-white shadow-sm
-                         hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
-            >
-              홈 바로가기 추가
-            </button>
-            {installMessage && (
-              <p className="text-center text-[13px] leading-relaxed text-[#55534A]">
-                {installMessage}
-              </p>
+        {/* 하단 — 알림 · 여권 안내 · 홈 화면에 추가 */}
+        <footer className="pt-3 border-t border-[#E8E4DA] space-y-2">
+          <nav className="flex flex-wrap items-center justify-center text-[15px] font-semibold text-[#55534A]">
+            {activeAlert && (
+              <>
+                <button type="button" onClick={openNotice} className="min-h-[44px] px-3 inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#4E7DB5]" aria-hidden="true" />
+                  알림
+                </button>
+                <span aria-hidden="true">·</span>
+              </>
             )}
-            <p className="text-center text-xs text-[#8C8C80]">
-              © 2026 해율푸드. All rights reserved.
-            </p>
-          </div>
+            <Link href="/guide" className="min-h-[44px] px-3 inline-flex items-center">
+              여권 안내
+            </Link>
+            {!isInstalledApp && (
+              <>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={handleAddToHome} className="min-h-[44px] px-3 inline-flex items-center">
+                  홈 화면에 추가
+                </button>
+              </>
+            )}
+          </nav>
+          {installMessage && (
+            <p className="text-center text-[13px] leading-relaxed text-[#55534A]">{installMessage}</p>
+          )}
+          <p className="text-center text-xs text-[#8C8C80]">© 2026 해율푸드. All rights reserved.</p>
         </footer>
       </div>
 

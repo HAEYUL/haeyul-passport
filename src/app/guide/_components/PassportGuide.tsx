@@ -3,9 +3,10 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getRewardCatalog, type RewardRuleCatalogItem } from '@/app/actions';
+import { getRewardCatalog, getAllStoresGiftAmount, type RewardRuleCatalogItem } from '@/app/actions';
 import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
+import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
 
 const tiers = getAllTiers();
 
@@ -44,6 +45,7 @@ function getCatalogCardInfo(r: RewardRuleCatalogItem): {
 export default function PassportGuide() {
   const router = useRouter();
   const [rewards, setRewards] = useState<RewardRuleCatalogItem[] | null>(null);
+  const [allStoresGiftAmount, setAllStoresGiftAmount] = useState<number | null>(null);
 
   useEffect(() => {
     getRewardCatalog().then((result) => {
@@ -51,6 +53,7 @@ export default function PassportGuide() {
         setRewards(result.data);
       }
     });
+    getAllStoresGiftAmount().then(setAllStoresGiftAmount);
   }, []);
 
   return (
@@ -72,9 +75,10 @@ export default function PassportGuide() {
         <header className="text-center space-y-3">
           <BrandLogo height={48} textClassName="text-xl" />
           <div>
-            <h1 className="text-xl font-bold text-[#2D5A3D]">해율푸드 여권 설명서</h1>
+            <h1 className="text-xl font-bold text-[#2D5A3D]">해율푸드 방문여권 안내</h1>
             <p className="mt-1 text-[15px] font-medium text-[#55534A]">
-              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 3개 매장에서 함께 사용하는 통합 전자여권입니다.
+              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
+              세 매장에서 함께 쓰는 방문여권입니다.
             </p>
             <p className="mt-1 text-[15px] font-medium text-[#55534A]">
               방문할수록 등급이 오르고, 할인권도 받으실 수 있어요.
@@ -155,14 +159,51 @@ export default function PassportGuide() {
           </p>
         </section>
 
-        {/* 전자여권 이용 안내 */}
+        {/* 세 매장 완주 선물 */}
+        {allStoresGiftAmount && (
+          <section className="space-y-3">
+            <h2 className="text-[17px] font-bold text-[#333331]">세 매장 완주 선물</h2>
+            <div className="bg-[#EEF5FB] border-2 border-[#A9C8E4] rounded-xl px-4 py-3.5 flex items-center gap-3">
+              <span className="text-2xl leading-none">🏅</span>
+              <div className="flex-1">
+                <p className="text-2xl font-extrabold text-[#204A6E]">{allStoresGiftAmount.toLocaleString()}원</p>
+                <p className="text-[13px] font-bold text-[#204A6E]">세 매장을 모두 방문하면 한 번 드려요</p>
+              </div>
+            </div>
+            <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
+              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕을 모두 방문해 기록하시면 완주 선물이 할인권함에
+              자동으로 담깁니다. 고객님 한 분께 한 번만 드리며, 유효기간은 발급일로부터 6개월입니다.
+            </p>
+          </section>
+        )}
+
+        {/* 할인권 사용 방법 */}
         <section className="space-y-3">
-          <h2 className="text-[17px] font-bold text-[#333331]">전자여권 이용 안내</h2>
+          <h2 className="text-[17px] font-bold text-[#333331]">할인권 사용 방법</h2>
+          <ul className="bg-white rounded-2xl shadow-sm border border-[#E8E4DA] divide-y divide-[#F0EDE6] text-[15px] font-medium text-[#44443C]">
+            <li className="px-4 py-3">세 매장 어디서나 사용하실 수 있어요.</li>
+            <li className="px-4 py-3">한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.</li>
+            <li className="px-4 py-3">매장에서 식사하실 때 사용하실 수 있어요. (포장은 사용 불가)</li>
+            <li className="px-4 py-3">결제 전에 할인권함을 열어 직원에게 보여주세요.</li>
+          </ul>
+        </section>
+
+        {/* 방문여권 이용 안내 */}
+        <section className="space-y-3">
+          <h2 className="text-[17px] font-bold text-[#333331]">방문여권 이용 안내</h2>
           <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
             60일 이상 매장을 방문하지 않으시면, 다음 방문 시 성함·전화번호·생년월일을 다시 한번
             확인합니다. 확인만 해주시면 그동안 쌓인 방문 기록과 할인권은 그대로 유지됩니다.
           </p>
         </section>
+
+        {/* 해율 이야기 — 등급 이름(새싹·푸른잎·나무·숲)에 담긴 뜻 */}
+        <p className="pt-4 border-t border-[#E8E4DA] text-center text-[15px] font-medium text-[#6B6B5E] leading-relaxed">
+          봄에는 새싹이 나고, 여름에는 푸르러지며,<br />
+          가을에는 열매를 맺고, 겨울에는 다시 쉼을 얻습니다.<br />
+          해율을 찾아주시는 한 걸음 한 걸음이<br />
+          자연의 흐름을 이어갑니다. 감사합니다.
+        </p>
 
         <div className="pb-8" />
       </div>

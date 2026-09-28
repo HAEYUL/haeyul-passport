@@ -223,7 +223,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                   <li>수집 목적: 방문 기록 관리 및 할인권·생일 혜택 제공</li>
                   <li>보유 기간: 회원 탈퇴 시까지</li>
                   <li>해율만두전골·곤드레밥집·정담명가 남원추어탕에서 함께 이용됩니다.</li>
-                  <li>동의를 거부할 수 있으며, 거부 시 전자여권 서비스 이용이 제한됩니다.</li>
+                  <li>동의를 거부할 수 있으며, 거부 시 방문여권 서비스 이용이 제한됩니다.</li>
                 </ul>
               </div>
             </div>
@@ -234,7 +234,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 <div>
                   <p className="font-semibold text-[#333] mb-1">1. 수집하는 개인정보</p>
                   <p className="mb-1">
-                    해율 전자여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
+                    해율푸드 방문여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
                     통합 회원 서비스이며, 다음의 개인정보를 수집합니다.
                   </p>
                   <ul className="space-y-1 list-disc list-inside">

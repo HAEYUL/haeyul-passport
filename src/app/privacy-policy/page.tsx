@@ -21,7 +21,7 @@ export default function PrivacyPolicyPage() {
         <header>
           <h1 className="text-2xl font-bold text-[#2D5A3D]">개인정보처리방침</h1>
           <p className="mt-2 text-[15px] text-[#8C8C80]">
-            해율 자연의 흐름 전자여권
+            해율푸드 방문여권
           </p>
         </header>
 
@@ -29,7 +29,7 @@ export default function PrivacyPolicyPage() {
           <div>
             <p className="font-semibold text-[#333] mb-1">1. 수집하는 개인정보</p>
             <p className="mb-1">
-              해율 전자여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
+              해율푸드 방문여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
               통합 회원 서비스이며, 다음의 개인정보를 수집합니다.
             </p>
             <ul className="space-y-1 list-disc list-inside">

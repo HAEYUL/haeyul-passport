@@ -1,6 +1,7 @@
 /**
- * 고객용 화면 전용 매장별 강조색입니다. (관리자 화면은 storeColors.ts를 따로 씁니다)
- * 가입 첫 화면과 여권 화면에서 같은 색을 써서 매장을 눈에 익게 합니다.
+ * 고객용 화면 전용 매장 표시 정보(강조색·짧은 이름·소개 문구·매장 페이지 주소)입니다.
+ * (관리자 화면 색상은 storeColors.ts를 따로 씁니다)
+ * 가입 첫 화면·환영 화면·여권 화면에서 같은 색과 문구를 써서 매장을 눈에 익게 합니다.
  */
 export interface StoreAccent {
   border: string;
@@ -18,3 +19,27 @@ export const STORE_ACCENTS: Record<string, StoreAccent> = {
 };
 
 export const DEFAULT_STORE_ACCENT: StoreAccent = { border: '#8C8C80', bg: '#F5F5EC', text: '#44443C' };
+
+/** 좁은 칸(세 매장 도장)에 쓰는 짧은 매장 이름 */
+export const STORE_SHORT_NAMES: Record<string, string> = {
+  '해율만두전골': '해율만두전골',
+  '곤드레밥집': '곤드레밥집',
+  '정담명가 남원추어탕': '정담명가',
+};
+
+/** 매장 목록에서 이름 아래 붙이는 한 줄 소개 */
+export const STORE_MEAL_LABELS: Record<string, string> = {
+  '해율만두전골': '🍲 뜨끈한 버섯 만두전골',
+  '곤드레밥집': '🍚 정갈한 곤드레 한 상',
+  '정담명가 남원추어탕': '🥣 든든한 추어탕 한 그릇',
+};
+
+/** 해율푸드 홈페이지 첫 화면 (세 매장 둘러보기) */
+export const HOMEPAGE_URL = 'https://haeyul-homepage.vercel.app/';
+
+/** 해율푸드 홈페이지의 매장별 소개 페이지 */
+export const STORE_PAGE_URLS: Record<string, string> = {
+  '해율만두전골': 'https://haeyul-homepage.vercel.app/haeyul',
+  '곤드레밥집': 'https://haeyul-homepage.vercel.app/gondre',
+  '정담명가 남원추어탕': 'https://haeyul-homepage.vercel.app/chueotang',
+};
