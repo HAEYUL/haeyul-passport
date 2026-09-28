@@ -149,7 +149,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={allConsent}
                 onChange={(e) => handleAllConsentChange(e.target.checked)}
-                className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <label htmlFor="check-all" className="text-[16px] font-semibold text-[#333] cursor-pointer">
                 모두 동의합니다
@@ -163,7 +163,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={privacyConsent}
                 onChange={(e) => setPrivacyConsent(e.target.checked)}
-                className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <div className="flex-1">
                 <label htmlFor="check-privacy" className="text-[15px] text-[#333] leading-snug cursor-pointer">
@@ -246,7 +246,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={marketingConsent}
                 onChange={(e) => setMarketingConsent(e.target.checked)}
-                className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <div className="flex-1">
                 <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">

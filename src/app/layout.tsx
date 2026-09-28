@@ -24,8 +24,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // 글씨가 작게 느껴지는 손님이 두 손가락으로 확대할 수 있도록 확대를 막지 않습니다.
   themeColor: "#2D5A3D",
 };
 

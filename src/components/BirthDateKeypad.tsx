@@ -35,7 +35,7 @@ export default function BirthDateKeypad({ value, onChange, label = '생년월일
         {required ? (
           <span className="text-red-500">*</span>
         ) : (
-          <span className="text-sm text-[#AAA]">(선택)</span>
+          <span className="text-sm text-[#6B6B5E]">(선택)</span>
         )}
       </label>
 
@@ -53,7 +53,7 @@ export default function BirthDateKeypad({ value, onChange, label = '생년월일
           </div>
         ))}
       </div>
-      <p className="text-xs text-[#AAA] mb-3">예: 1990년 3월 5일생 → 900305</p>
+      <p className="text-sm font-medium text-[#6B6B5E] mb-3">예: 1990년 3월 5일생 → 900305</p>
 
       <div className="grid grid-cols-3 gap-2">
         {DIGIT_ROWS.flat().map((digit) => (

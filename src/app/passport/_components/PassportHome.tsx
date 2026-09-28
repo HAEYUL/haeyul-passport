@@ -430,26 +430,20 @@ export default function PassportHome() {
 
         {/* 하단 — 알림 · 여권 안내 · 홈 화면에 추가 */}
         <footer className="pt-3 border-t border-[#E8E4DA] space-y-2">
-          <nav className="flex flex-wrap items-center justify-center text-[15px] font-semibold text-[#55534A]">
+          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[15px] font-semibold text-[#55534A]">
             {activeAlert && (
-              <>
-                <button type="button" onClick={openNotice} className="min-h-[44px] px-3 inline-flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#4E7DB5]" aria-hidden="true" />
-                  알림
-                </button>
-                <span aria-hidden="true">·</span>
-              </>
+              <button type="button" onClick={openNotice} className="min-h-[44px] px-3 inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#4E7DB5]" aria-hidden="true" />
+                알림
+              </button>
             )}
             <Link href="/guide" className="min-h-[44px] px-3 inline-flex items-center">
               여권 안내
             </Link>
             {!isInstalledApp && (
-              <>
-                <span aria-hidden="true">·</span>
-                <button type="button" onClick={addToHome} className="min-h-[44px] px-3 inline-flex items-center">
-                  홈 화면에 추가
-                </button>
-              </>
+              <button type="button" onClick={addToHome} className="min-h-[44px] px-3 inline-flex items-center">
+                홈 화면에 추가
+              </button>
             )}
           </nav>
           {installMessage && (

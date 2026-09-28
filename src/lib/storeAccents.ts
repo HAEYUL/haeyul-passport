@@ -20,10 +20,14 @@ export const STORE_ACCENTS: Record<string, StoreAccent> = {
 
 export const DEFAULT_STORE_ACCENT: StoreAccent = { border: '#8C8C80', bg: '#F5F5EC', text: '#44443C' };
 
-/** 좁은 칸(세 매장 도장)에 쓰는 짧은 매장 이름 */
+/**
+ * 좁은 칸(세 매장 도장)에 쓰는 짧은 매장 이름.
+ * 글씨를 크게 설정한 휴대폰에서 줄이 바뀌어야 할 때 "해율 / 만두전골"처럼
+ * 자연스러운 자리에서만 바뀌도록 줄바꿈 가능 위치(\u200B)를 넣어 둡니다.
+ */
 export const STORE_SHORT_NAMES: Record<string, string> = {
-  '해율만두전골': '해율만두전골',
-  '곤드레밥집': '곤드레밥집',
+  '해율만두전골': '해율\u200B만두전골',
+  '곤드레밥집': '곤드레\u200B밥집',
   '정담명가 남원추어탕': '정담명가',
 };
 

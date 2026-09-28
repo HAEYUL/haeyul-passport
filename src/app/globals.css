@@ -26,6 +26,10 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  /* 한글은 낱말 중간에서 줄이 바뀌지 않게 하고(예: "2/장"), 칸보다 긴 낱말만 예외로 끊습니다.
+     휴대폰 글씨를 크게 설정한 어르신 화면에서 특히 중요합니다. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 모바일 입력 필드 확대 방지 */
