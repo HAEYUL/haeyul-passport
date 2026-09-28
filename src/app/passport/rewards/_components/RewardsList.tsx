@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { getRewards, confirmRewardUse, type RewardItem } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getTierUpDefinition } from '@/lib/tiers';
+import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
 
 /**
  * 할인권 카드를 종류별로 다르게 보이게 하기 위한 스타일 세트.
@@ -35,11 +36,20 @@ const REWARD_CARD_STYLES = {
     borderTop: 'border-[#F0BE94]',
     subText: 'text-[#9C4A0A]',
   },
+  allStores: {
+    usableBg: 'bg-[#EEF5FB] border-[#A9C8E4] shadow-sm',
+    accentText: 'text-[#204A6E]',
+    borderTop: 'border-[#A9C8E4]',
+    subText: 'text-[#204A6E]',
+  },
 } as const;
 
 function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; kind: keyof typeof REWARD_CARD_STYLES } {
   if (reward.source === 'birthday') {
     return { text: '생일 축하 선물', icon: <span className="text-2xl leading-none mt-0.5">🎂</span>, kind: 'birthday' };
+  }
+  if (reward.source === 'all_stores') {
+    return { text: '세 매장 완주 선물', icon: <span className="text-2xl leading-none mt-0.5">🏅</span>, kind: 'allStores' };
   }
   if (reward.source === 'comeback') {
     return { text: '다시 만나 반가워요 선물', icon: <span className="text-2xl leading-none mt-0.5">🧡</span>, kind: 'comeback' };
@@ -155,6 +165,9 @@ export default function RewardsList() {
           <p className="mt-1 text-[15px] font-medium text-[#55534A]">
             해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
           </p>
+          <p className="mt-1 text-[15px] font-bold text-[#8A5800]">
+            한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.
+          </p>
         </div>
 
         {error && (
@@ -246,7 +259,8 @@ export default function RewardsList() {
                 {confirmingReward.amount.toLocaleString()}원 할인권을 사용하시겠습니까?
               </p>
               <p className="text-[15px] font-medium text-[#7A4A16] bg-[#FFF3E4] border border-[#EAC28E] rounded-xl px-4 py-3">
-                사용 후에는 취소할 수 없습니다.
+                사용 후에는 취소할 수 없습니다.<br />
+                한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요. (포장 불가)
               </p>
             </div>
             <div className="flex gap-3">

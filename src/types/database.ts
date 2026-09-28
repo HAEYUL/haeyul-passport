@@ -114,9 +114,16 @@ export interface RewardRule {
   is_active: boolean;
   /** 생일축하 쿠폰 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
   is_birthday: boolean;
+  /** 컴백 쿠폰 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
+  is_comeback: boolean;
+  /** 세 매장 완주 선물 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
+  is_all_stores: boolean;
   created_at: string;
   updated_at: string;
 }
+
+/** 할인권 종류: 방문 기준 · 생일축하 · 컴백 · 세 매장 완주 */
+export type RewardSource = 'visit' | 'birthday' | 'comeback' | 'all_stores';
 
 /** customer_rewards 테이블 */
 export interface CustomerReward {
@@ -131,8 +138,7 @@ export interface CustomerReward {
   /** 발급 시점에 고정된 할인 금액(원). 이후 규칙 금액이 바뀌어도 변하지 않음 */
   amount: number | null;
   status: RewardStatus;
-  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) | 'comeback'(컴백 쿠폰) */
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   /** 명시적으로 지정된 만료 시각(예: 생일축하 쿠폰의 30일). 없으면 issued_at + 6개월로 계산 */
   expires_at: string | null;
   /** 생일축하 쿠폰의 중복 발급 방지용 발급 연도. source가 'birthday'일 때만 값이 있음 */

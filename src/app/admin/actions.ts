@@ -13,7 +13,7 @@ import {
   type StatsPeriod,
   type DateBucket,
 } from '@/lib/utils';
-import { AUDIT_ACTION, SUSPICIOUS_ACTIVITY_TYPE_LABELS } from '@/lib/constants';
+import { AUDIT_ACTION, SUSPICIOUS_ACTIVITY_TYPE_LABELS, ALL_STORES_CODES } from '@/lib/constants';
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import { REFERRAL_SOURCE_OPTIONS, getReferralSourceLabel, type ReferralSourceKey } from '@/lib/referralSource';
 import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
@@ -23,7 +23,7 @@ import {
   getAdminSession,
   clearAdminSession,
 } from '@/lib/adminSession';
-import type { ApiResponse, Customer, RewardStatus, Store, LocationVerifiedStatus, NoticeKind } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, RewardSource, Store, LocationVerifiedStatus, NoticeKind } from '@/types/database';
 
 /**
  * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
@@ -45,6 +45,69 @@ async function getLatestVisitDateMap(
     }
   }
   return map;
+}
+
+interface AllStoresVisitInfo {
+  /** 세 매장 완주 대상 매장 (ALL_STORES_CODES 순서) */
+  stores: { id: string; name: string }[];
+  /** 고객 ID → 취소되지 않은 방문으로 다녀간 대상 매장 ID 집합 */
+  visitedByCustomer: Map<string, Set<string>>;
+}
+
+/**
+ * 세 매장 완주 여부 판단용 — 고객별로 다녀간 대상 매장을 모읍니다.
+ * 발급·회수 기준(DB 트리거 sync_all_stores_coupon)과 같은 조건(취소되지 않은 방문)을 씁니다.
+ * 방문 기록이 많아도 빠짐없이 읽도록 1,000건씩 나눠 조회합니다.
+ */
+async function getAllStoresVisitInfo(
+  supabase: ReturnType<typeof createAdminClient>,
+  customerIds?: string[]
+): Promise<AllStoresVisitInfo> {
+  const { data: storeRows } = await supabase
+    .from('stores')
+    .select('id, name, store_code')
+    .in('store_code', [...ALL_STORES_CODES]);
+  const stores = ALL_STORES_CODES.flatMap((code) => {
+    const row = (storeRows || []).find((st) => st.store_code === code);
+    return row ? [{ id: row.id, name: row.name }] : [];
+  });
+
+  const visitedByCustomer = new Map<string, Set<string>>();
+  if (stores.length === 0 || (customerIds && customerIds.length === 0)) {
+    return { stores, visitedByCustomer };
+  }
+
+  const PAGE_SIZE = 1000;
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let q = supabase
+      .from('visits')
+      .select('customer_id, store_id')
+      .eq('is_cancelled', false)
+      .in('store_id', stores.map((st) => st.id))
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (customerIds) {
+      q = q.in('customer_id', customerIds);
+    }
+    const { data: rows } = await q;
+    for (const v of rows || []) {
+      const set = visitedByCustomer.get(v.customer_id) || new Set<string>();
+      set.add(v.store_id);
+      visitedByCustomer.set(v.customer_id, set);
+    }
+    if (!rows || rows.length < PAGE_SIZE) break;
+  }
+
+  return { stores, visitedByCustomer };
+}
+
+/** 한 고객이 취소되지 않은 방문으로 다녀간 세 매장 완주 대상 매장 수 */
+async function countVisitedAllStores(
+  supabase: ReturnType<typeof createAdminClient>,
+  customerId: string
+): Promise<number> {
+  const { visitedByCustomer } = await getAllStoresVisitInfo(supabase, [customerId]);
+  return visitedByCustomer.get(customerId)?.size ?? 0;
 }
 
 // ============================================================
@@ -163,6 +226,10 @@ export interface DashboardStats {
   longAbsentCount: number;
   monthlyIssuedRewards: number;
   monthlyUsedRewards: number;
+  /** 세 매장을 모두 방문한 고객 수 */
+  allStoresCompletedCount: number;
+  /** 세 매장 중 한 곳만 남은 고객 수 */
+  oneStoreLeftCount: number;
 }
 
 export async function getDashboardStats(storeId?: string | null): Promise<ApiResponse<DashboardStats>> {
@@ -244,6 +311,7 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       latestVisitMap,
       { count: monthlyIssuedRewards },
       { count: monthlyUsedRewards },
+      allStoresInfo,
     ] = await Promise.all([
       customersBase,
       visitsBase,
@@ -255,6 +323,7 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       getLatestVisitDateMap(supabase),
       monthlyIssuedBase,
       monthlyUsedBase,
+      getAllStoresVisitInfo(supabase),
     ]);
 
     const activeIds = new Set((activeCustomers || []).map((c) => c.id));
@@ -264,6 +333,15 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       if (activeIds.has(customerId) && lastVisitDate < cutoff) {
         longAbsentCount += 1;
       }
+    }
+
+    let allStoresCompletedCount = 0;
+    let oneStoreLeftCount = 0;
+    const totalStores = allStoresInfo.stores.length;
+    for (const [customerId, visited] of allStoresInfo.visitedByCustomer) {
+      if (!activeIds.has(customerId) || totalStores === 0) continue;
+      if (visited.size >= totalStores) allStoresCompletedCount += 1;
+      else if (visited.size === totalStores - 1) oneStoreLeftCount += 1;
     }
 
     return {
@@ -278,6 +356,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
         longAbsentCount,
         monthlyIssuedRewards: monthlyIssuedRewards || 0,
         monthlyUsedRewards: monthlyUsedRewards || 0,
+        allStoresCompletedCount,
+        oneStoreLeftCount,
       },
     };
   } catch (error) {
@@ -324,6 +404,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       .eq('is_active', true)
       .eq('is_birthday', false)
       .eq('is_comeback', false)
+      .eq('is_all_stores', false)
       .order('threshold_visits', { ascending: true });
 
     if (rulesError) {
@@ -397,7 +478,7 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
 
 export interface RewardAmountBreakdownItem {
   amount: number;
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   count: number;
 }
 
@@ -493,7 +574,7 @@ export async function getRewardAmountByStore(
       usedMap.set(r.used_store_id, cur);
 
       const amount = r.amount ?? 0;
-      const source = (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit';
+      const source = (r.source as RewardSource) ?? 'visit';
       const breakdownKey = `${amount}_${source}`;
       const storeBreakdown = usedBreakdownMap.get(r.used_store_id) || new Map();
       const item = storeBreakdown.get(breakdownKey) || { amount, source, count: 0 };
@@ -641,6 +722,7 @@ export interface RewardUsageItem {
   customerNumber: string;
   amount: number;
   thresholdVisits: number;
+  source: RewardSource;
   issuedAt: string;
   usedAt: string | null;
   issuedStoreName: string;
@@ -767,7 +849,7 @@ async function fetchRewardUsage(
 ): Promise<RewardUsageItem[]> {
   let request = supabase
     .from('customer_rewards')
-    .select('id, customer_id, threshold_visits, amount, issued_at, used_at, status, issued_store_id, used_store_id')
+    .select('id, customer_id, threshold_visits, amount, source, issued_at, used_at, status, issued_store_id, used_store_id')
     .not('reward_rule_id', 'is', null)
     .order(statusFilter === 'used' ? 'used_at' : 'issued_at', { ascending: false })
     .limit(300);
@@ -807,6 +889,7 @@ async function fetchRewardUsage(
       customerNumber: c?.customer_number || '-',
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
+      source: (cr.source as RewardSource) ?? 'visit',
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,
       issuedStoreName: storeMap.get(cr.issued_store_id) || '-',
@@ -941,6 +1024,7 @@ export async function getRewardRules(): Promise<ApiResponse<RewardRuleAdminItem[
       .select('id, threshold_visits, amount, is_repeating, repeat_interval, is_active')
       .eq('is_birthday', false)
       .eq('is_comeback', false)
+      .eq('is_all_stores', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
@@ -1157,6 +1241,12 @@ export interface CustomerListItem {
   vipAchievedAt?: string | null;
   /** VIP 등급 선물(감사 할인권) 사용 여부. filter='vip'가 아니면 undefined */
   giftUsed?: boolean;
+  /** 세 매장 완주 선물 발급일(완주일). filter='allStoresCompleted'가 아니면 undefined */
+  allStoresCompletedAt?: string | null;
+  /** 세 매장 완주 선물 사용 여부. filter='allStoresCompleted'가 아니면 undefined */
+  allStoresGiftUsed?: boolean;
+  /** 아직 방문하지 않은 마지막 한 매장 이름. filter='oneStoreLeft'가 아니면 undefined */
+  missingStoreName?: string;
 }
 
 /**
@@ -1186,7 +1276,9 @@ export type CustomerListFilter =
   | 'birthdayThisMonth'
   | 'visitedStore'
   | 'missingBirthDate'
-  | 'tierUpThisMonth';
+  | 'tierUpThisMonth'
+  | 'allStoresCompleted'
+  | 'oneStoreLeft';
 
 export async function getCustomerList(
   query: string,
@@ -1209,6 +1301,8 @@ export async function getCustomerList(
 
     // 방문/선물/생일 기준 필터는 대상 고객 ID를 먼저 구한 뒤 customers 테이블에 적용합니다.
     let idFilter: string[] | null = null;
+    // 세 매장 완주 관련 필터에서 목록 표시에 다시 쓰기 위해 보관합니다.
+    let allStoresInfo: AllStoresVisitInfo | null = null;
 
     if (filter === 'todayVisits') {
       const { data: visits } = await supabase
@@ -1277,6 +1371,20 @@ export async function getCustomerList(
         .not('reward_rule_id', 'is', null)
         .gte('issued_at', monthStart);
       idFilter = [...new Set((tierUpRewards || []).map((r) => r.customer_id))];
+    } else if (filter === 'allStoresCompleted' || filter === 'oneStoreLeft') {
+      const info = await getAllStoresVisitInfo(supabase);
+      allStoresInfo = info;
+      const totalStores = info.stores.length;
+      idFilter = [...info.visitedByCustomer.entries()]
+        .filter(([, visited]) => {
+          if (filter === 'allStoresCompleted') {
+            return totalStores > 0 && visited.size >= totalStores;
+          }
+          if (visited.size !== totalStores - 1) return false;
+          // "한 곳만 남은 고객"에서 매장을 고르면, 그 매장만 남은 고객으로 좁힙니다.
+          return !storeId || !visited.has(storeId);
+        })
+        .map(([customerId]) => customerId);
     }
 
     if (idFilter && idFilter.length === 0) {
@@ -1294,7 +1402,7 @@ export async function getCustomerList(
       request = request.in('id', idFilter);
     }
 
-    if (storeId && filter !== 'visitedStore') {
+    if (storeId && filter !== 'visitedStore' && filter !== 'oneStoreLeft') {
       request = request.eq('signup_store_id', storeId);
     }
 
@@ -1378,6 +1486,31 @@ export async function getCustomerList(
       }
 
       result.sort((a, b) => b.visitCount - a.visitCount);
+    }
+
+    if (filter === 'allStoresCompleted' && result.length > 0) {
+      const { data: gifts } = await supabase
+        .from('customer_rewards')
+        .select('customer_id, issued_at, status')
+        .eq('source', 'all_stores')
+        .in('customer_id', result.map((r) => r.id));
+
+      const giftMap = new Map((gifts || []).map((g) => [g.customer_id, g]));
+      for (const item of result) {
+        const gift = giftMap.get(item.id);
+        item.allStoresCompletedAt = gift?.issued_at ?? null;
+        item.allStoresGiftUsed = gift?.status === 'used';
+      }
+      result.sort((a, b) => (b.allStoresCompletedAt || '').localeCompare(a.allStoresCompletedAt || ''));
+    }
+
+    if (filter === 'oneStoreLeft' && allStoresInfo) {
+      const { stores, visitedByCustomer } = allStoresInfo;
+      for (const item of result) {
+        const visited = visitedByCustomer.get(item.id);
+        item.missingStoreName = stores.find((st) => !visited?.has(st.id))?.name ?? '-';
+      }
+      result.sort((a, b) => (b.recentVisitDate || '').localeCompare(a.recentVisitDate || ''));
     }
 
     return { success: true, data: result };
@@ -1865,6 +1998,16 @@ export async function cancelVisit(visitId: string, reason: string): Promise<ApiR
       return { success: false, error: '이미 취소된 방문입니다.' };
     }
 
+    // 세 매장 완주 선물은 DB 트리거(sync_all_stores_coupon)가 취소 즉시 조건을 다시
+    // 확인해, 조건이 깨지면 미사용 선물을 회수합니다. 무엇이 회수됐는지 기록·안내하기
+    // 위해 취소 전 상태를 먼저 읽어 둡니다.
+    const { data: allStoresGiftBefore } = await supabase
+      .from('customer_rewards')
+      .select('id, status, amount')
+      .eq('customer_id', before.customer_id)
+      .eq('source', 'all_stores')
+      .maybeSingle();
+
     const { data: after, error: updateError } = await supabase
       .from('visits')
       .update({
@@ -1904,7 +2047,21 @@ export async function cancelVisit(visitId: string, reason: string): Promise<ApiR
     const revokedRewardIds = (overissuedRewards || [])
       .filter((r) => r.status === 'available')
       .map((r) => r.id);
-    const usedRewardsNowInvalid = (overissuedRewards || []).filter((r) => r.status === 'used');
+    const usedRewardsNowInvalid: { id: string; amount: number; threshold_visits: number | null }[] = (
+      overissuedRewards || []
+    ).filter((r) => r.status === 'used');
+
+    if (allStoresGiftBefore) {
+      const visitedStoreCount = await countVisitedAllStores(supabase, before.customer_id);
+      if (visitedStoreCount < ALL_STORES_CODES.length) {
+        if (allStoresGiftBefore.status === 'used') {
+          usedRewardsNowInvalid.push({ id: allStoresGiftBefore.id, amount: allStoresGiftBefore.amount ?? 0, threshold_visits: null });
+        } else {
+          // 트리거가 이미 삭제했습니다. 감사 기록에만 남깁니다.
+          revokedRewardIds.push(allStoresGiftBefore.id);
+        }
+      }
+    }
 
     if (revokedRewardIds.length > 0) {
       await supabase.from('customer_rewards').delete().in('id', revokedRewardIds);
@@ -2298,7 +2455,7 @@ export interface CustomerRewardItem {
   id: string;
   amount: number;
   thresholdVisits: number;
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   status: RewardStatus;
   issuedAt: string;
   requestedAt: string | null;
@@ -2380,7 +2537,7 @@ export async function getCustomerDetail(customerId: string): Promise<ApiResponse
           id: r.id,
           amount: r.amount ?? 0,
           thresholdVisits: r.threshold_visits ?? 0,
-          source: (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
+          source: (r.source as RewardSource) ?? 'visit',
           status: r.status,
           issuedAt: r.issued_at,
           requestedAt: r.requested_at,
@@ -3687,7 +3844,7 @@ export interface BackupRewardRow {
   phone: string;
   amount: number;
   thresholdVisits: number;
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   status: RewardStatus;
   issuedAt: string;
   expiresAt: string | null;
@@ -3759,7 +3916,7 @@ export async function getBackupData(): Promise<ApiResponse<BackupData>> {
           phone: c.phone,
           amount: r.amount ?? 0,
           thresholdVisits: r.threshold_visits ?? 0,
-          source: (r.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
+          source: (r.source as RewardSource) ?? 'visit',
           status: r.status,
           issuedAt: r.issued_at,
           expiresAt: r.expires_at,

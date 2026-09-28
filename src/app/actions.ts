@@ -10,6 +10,7 @@ import {
   toKSTDateString,
   addMonthsToDateString,
   daysBetweenDateStrings,
+  getTodayKSTRange,
 } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
@@ -23,10 +24,11 @@ import {
   LOCATION_ABUSE_WINDOW,
   LOCATION_ABUSE_THRESHOLD,
   SUSPICIOUS_ACTIVITY_TYPE,
+  MAX_REWARDS_PER_PAYMENT,
 } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
-import type { ApiResponse, Customer, RewardStatus, NoticeKind } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, RewardSource, NoticeKind } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
 const LOCATION_ABUSE_ERROR =
@@ -445,7 +447,8 @@ async function getRewardProgressMessage(
     .select('id, threshold_visits, amount, is_repeating, repeat_interval')
     .eq('is_active', true)
     .eq('is_birthday', false)
-    .eq('is_comeback', false);
+    .eq('is_comeback', false)
+    .eq('is_all_stores', false);
 
   const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
     id: r.id,
@@ -591,8 +594,10 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
 
 export interface VisitResult {
   visitCount: number;
-  /** 이번 방문으로 새로 발급된 할인권 금액 목록(원) */
+  /** 이번 방문으로 새로 발급된 방문 할인권 금액 목록(원) */
   newCouponAmounts: number[];
+  /** 이번 방문으로 세 매장을 모두 방문해 받은 완주 선물 금액(원). 없으면 null */
+  allStoresGiftAmount: number | null;
   tier: VisitTierInfo;
   /** 이번 방문으로 방문 등급이 올랐는지 여부 */
   tierUpgraded: boolean;
@@ -706,22 +711,32 @@ export async function registerVisit(
     const tierAfter = getVisitTierInfo(visitCount);
     const tierUpgraded = tierBefore.key !== tierAfter.key;
 
-    // 방금 이 방문으로 새로 발급된 할인권 확인 (DB 트리거가 방문 횟수 임계값 달성 시 자동 발급)
+    // 방금 이 방문으로 새로 발급된 할인권 확인 (DB 트리거가 방문 횟수 임계값 달성 시,
+    // 그리고 세 매장을 모두 방문했을 때 자동 발급)
     const recentThreshold = new Date(Date.now() - 10000).toISOString();
     const { data: justIssued } = await supabase
       .from('customer_rewards')
-      .select('amount')
+      .select('amount, source')
       .eq('customer_id', session.customerId)
       .not('reward_rule_id', 'is', null)
+      .in('source', ['visit', 'all_stores'])
       .gte('issued_at', recentThreshold);
 
     const newCouponAmounts = (justIssued || [])
+      .filter((j) => j.source === 'visit')
       .map((j) => j.amount ?? 0)
       .filter((amount) => amount > 0);
+    const allStoresGift = (justIssued || []).find((j) => j.source === 'all_stores');
 
     return {
       success: true,
-      data: { visitCount, newCouponAmounts, tier: tierAfter, tierUpgraded },
+      data: {
+        visitCount,
+        newCouponAmounts,
+        allStoresGiftAmount: allStoresGift?.amount ?? null,
+        tier: tierAfter,
+        tierUpgraded,
+      },
       message: '오늘도 자연의 흐름이 여권에 기록되었습니다.',
     };
   } catch (error) {
@@ -797,8 +812,7 @@ export interface RewardItem {
   amount: number;
   /** 이 할인권이 해당하는 방문 횟수 기준. 생일·컴백 쿠폰이면 의미 없음(0) */
   thresholdVisits: number;
-  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) | 'comeback'(컴백 쿠폰) */
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   status: RewardStatus;
   issuedAt: string;
   usedAt: string | null;
@@ -855,7 +869,7 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       id: cr.id,
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
-      source: (cr.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
+      source: (cr.source as RewardSource) ?? 'visit',
       status: cr.status,
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,
@@ -912,6 +926,25 @@ export async function confirmRewardUse(
 
     if (isRewardExpiredAt(cr.issued_at, cr.expires_at)) {
       return { success: false, error: '유효기간이 지난 할인권입니다.\n사용하실 수 없습니다.' };
+    }
+
+    // 한 번 결제에 최대 MAX_REWARDS_PER_PAYMENT장 (금액 무관). 결제 단위는 알 수 없으므로
+    // "같은 날 같은 매장"을 한 번 결제로 봅니다. 같은 날 다른 매장에서는 따로 쓸 수 있습니다.
+    const { start: todayStart, end: todayEnd } = getTodayKSTRange();
+    const { count: usedTodayHere } = await supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', session.customerId)
+      .eq('status', 'used')
+      .eq('used_store_id', storeId)
+      .gte('used_at', todayStart)
+      .lt('used_at', todayEnd);
+
+    if ((usedTodayHere ?? 0) >= MAX_REWARDS_PER_PAYMENT) {
+      return {
+        success: false,
+        error: `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`,
+      };
     }
 
     const { data: updated, error } = await supabase
@@ -1086,6 +1119,7 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
       .eq('is_active', true)
       .eq('is_birthday', false)
       .eq('is_comeback', false)
+      .eq('is_all_stores', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
@@ -1104,6 +1138,27 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
   } catch (error) {
     console.error('getRewardCatalog 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 세 매장 완주 선물 금액(원). 규칙이 꺼져 있으면 null — 가입 첫 화면 안내에 사용합니다.
+ */
+export async function getAllStoresGiftAmount(): Promise<number | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from('reward_rules')
+      .select('amount')
+      .eq('is_all_stores', true)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.amount ?? null;
+  } catch (error) {
+    console.error('getAllStoresGiftAmount 오류:', error);
+    return null;
   }
 }
 

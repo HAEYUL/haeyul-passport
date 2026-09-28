@@ -12,6 +12,8 @@ interface VisitLandingProps {
   storeName: string | null;
   /** 지금이 매장 운영시간(오전 10시~오후 9시) 이내인지 */
   isOpen: boolean;
+  /** 세 매장 완주 선물 금액(원). 행사를 멈춘 경우 null이면 안내를 숨깁니다 */
+  allStoresGiftAmount: number | null;
 }
 
 /**
@@ -19,7 +21,7 @@ interface VisitLandingProps {
  * - 처음 발급하기
  * - 기존 여권 열기
  */
-export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
+export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
   const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
   const geoRequestedRef = useRef(false);
@@ -97,6 +99,12 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
               );
             })}
           </ul>
+          {allStoresGiftAmount && (
+            <p className="text-[15px] font-bold text-[#8A5800]">
+              🏅 세 매장을 모두 방문하시면<br />
+              {allStoresGiftAmount.toLocaleString()}원 완주 선물을 드려요
+            </p>
+          )}
         </section>
 
         {!isOpen ? (

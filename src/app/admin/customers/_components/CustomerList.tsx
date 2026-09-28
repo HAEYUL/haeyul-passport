@@ -141,6 +141,14 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
     title: '이번달 등급 승급 고객',
     description: '이번 달에 등급이 올라(5·10·20·30회) 등급 업그레이드 축하 선물을 받은 고객 목록입니다.',
   },
+  allStoresCompleted: {
+    title: '세 매장 완주 고객',
+    description: '해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕을 모두 방문해 세 매장 완주 선물을 받은 고객 목록입니다. 완주일과 선물 사용 여부를 확인할 수 있습니다.',
+  },
+  oneStoreLeft: {
+    title: '한 곳만 남은 고객',
+    description: '세 매장 중 두 곳을 방문해, 한 곳만 더 가면 완주 선물을 받는 고객 목록입니다. 위에서 매장을 고르면 그 매장만 남은 고객으로 좁혀집니다. ("○○만 방문하시면 완주 선물" 문자 발송에 활용)',
+  },
 };
 
 const LONG_ABSENT_DAY_OPTIONS = [30, 60, 90] as const;
@@ -158,7 +166,9 @@ function isCustomerListFilter(value: string | null): value is CustomerListFilter
     value === 'birthdayThisMonth' ||
     value === 'visitedStore' ||
     value === 'missingBirthDate' ||
-    value === 'tierUpThisMonth'
+    value === 'tierUpThisMonth' ||
+    value === 'allStoresCompleted' ||
+    value === 'oneStoreLeft'
   );
 }
 
@@ -173,10 +183,15 @@ function csvCell(value: string): string {
 // CSV를 엑셀에서 열 때 한글이 깨지지 않도록 붙이는 UTF-8 BOM
 const BOM = String.fromCharCode(0xfeff);
 
-function exportCustomersCsv(customers: CustomerListItem[], isVip: boolean) {
+function exportCustomersCsv(customers: CustomerListItem[], filter: CustomerListFilter) {
+  const isVip = filter === 'vip';
   const headers = ['성함', '여권번호', '연락처', '방문 횟수', '등급', '가입일', '최근 방문일', '혜택·소식 수신동의'];
   if (isVip) {
     headers.push('VIP 달성일', '감사 할인권', '관리자 메모');
+  } else if (filter === 'allStoresCompleted') {
+    headers.push('완주일', '완주 선물');
+  } else if (filter === 'oneStoreLeft') {
+    headers.push('남은 매장');
   }
   const rows = customers.map((c) => {
     const row = [
@@ -195,6 +210,13 @@ function exportCustomersCsv(customers: CustomerListItem[], isVip: boolean) {
         c.giftUsed ? '사용 완료' : '미사용',
         c.adminNote || ''
       );
+    } else if (filter === 'allStoresCompleted') {
+      row.push(
+        c.allStoresCompletedAt ? formatDateKR(c.allStoresCompletedAt) : '-',
+        c.allStoresGiftUsed ? '사용 완료' : '미사용'
+      );
+    } else if (filter === 'oneStoreLeft') {
+      row.push(c.missingStoreName || '-');
     }
     return row;
   });
@@ -392,6 +414,26 @@ export default function CustomerList() {
               🎈 생일 미입력
             </Link>
             <Link
+              href="/admin/customers?filter=allStoresCompleted"
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
+                filter === 'allStoresCompleted'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
+              }`}
+            >
+              🏅 세 매장 완주
+            </Link>
+            <Link
+              href="/admin/customers?filter=oneStoreLeft"
+              className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
+                filter === 'oneStoreLeft'
+                  ? 'bg-[#2D5A3D] text-white shadow-md'
+                  : 'bg-white text-[#2D5A3D] border border-[#E8E4DA] hover:bg-[#F5F5EC] hover:border-[#D4D0C8]'
+              }`}
+            >
+              🧭 한 곳만 남은 고객
+            </Link>
+            <Link
               href="/admin/customers?filter=tierUpThisMonth"
               className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 inline-flex items-center gap-1 ${
                 filter === 'tierUpThisMonth'
@@ -476,7 +518,7 @@ export default function CustomerList() {
               </button>
               <button
                 type="button"
-                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter === 'vip')}
+                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter)}
                 disabled={!customers || customers.length === 0}
                 className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
                            hover:bg-[#F5F5EC] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-sm"
@@ -547,6 +589,13 @@ export default function CustomerList() {
                           <th className="px-4 py-3 font-medium">관리자 메모</th>
                         </>
                       )}
+                      {filter === 'allStoresCompleted' && (
+                        <>
+                          <th className="px-4 py-3 font-medium">완주일</th>
+                          <th className="px-4 py-3 font-medium">완주 선물</th>
+                        </>
+                      )}
+                      {filter === 'oneStoreLeft' && <th className="px-4 py-3 font-medium">남은 매장</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -606,6 +655,28 @@ export default function CustomerList() {
                                 <AdminNoteCell customerId={c.id} note={c.adminNote} onSaved={() => fetchCustomers(query)} />
                               </td>
                             </>
+                          )}
+                          {filter === 'allStoresCompleted' && (
+                            <>
+                              <td className="px-4 py-3 whitespace-nowrap text-[#333]">
+                                {c.allStoresCompletedAt ? formatDateKR(c.allStoresCompletedAt) : '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                {c.allStoresGiftUsed ? (
+                                  <span className="text-xs text-[#6B6B5E] font-semibold">사용 완료</span>
+                                ) : (
+                                  <span className="text-xs text-[#8A5800] font-semibold">미사용</span>
+                                )}
+                              </td>
+                            </>
+                          )}
+                          {filter === 'oneStoreLeft' && (
+                            <td
+                              className="px-4 py-3 whitespace-nowrap font-bold"
+                              style={{ color: getStoreAdminColor(c.missingStoreName || '').text }}
+                            >
+                              {c.missingStoreName}
+                            </td>
                           )}
                         </tr>
                       );

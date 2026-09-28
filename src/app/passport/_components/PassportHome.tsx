@@ -39,6 +39,7 @@ export default function PassportHome() {
   const [visitError, setVisitError] = useState('');
   const [newCouponAmounts, setNewCouponAmounts] = useState<number[]>([]);
   const [tierUpMessage, setTierUpMessage] = useState('');
+  const [allStoresGiftAmount, setAllStoresGiftAmount] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
@@ -143,7 +144,7 @@ export default function PassportHome() {
     setVisitLoading(false);
 
     if (result.success && result.data) {
-      const { visitCount, newCouponAmounts, tier, tierUpgraded } = result.data;
+      const { visitCount, newCouponAmounts, allStoresGiftAmount, tier, tierUpgraded } = result.data;
       const tierLine = tier.isMaxTier
         ? (visitCount === 30 ? VIP_MESSAGE : VIP_ONGOING_MESSAGE)
         : `다음 등급까지 ${tier.visitsUntilNext}회 남았습니다.`;
@@ -152,6 +153,9 @@ export default function PassportHome() {
       );
       if (newCouponAmounts.length > 0) {
         setNewCouponAmounts(newCouponAmounts);
+      }
+      if (allStoresGiftAmount) {
+        setAllStoresGiftAmount(allStoresGiftAmount);
       }
       if (tierUpgraded) {
         setTierUpMessage(`${tier.label}(으)로 자라나셨습니다. 자연의 흐름을 함께해 주셔서 감사합니다.`);
@@ -344,6 +348,18 @@ export default function PassportHome() {
             <p className="text-[17px] text-[#1F4A2E] leading-relaxed font-bold">
               {tierUpMessage}
             </p>
+          </div>
+        )}
+
+        {allStoresGiftAmount && (
+          <div className="bg-[#EEF5FB] border-2 border-[#A9C8E4] px-4 py-3 rounded-2xl text-center space-y-2">
+            <p className="text-xl font-extrabold text-[#204A6E]">🏅 세 매장 완주를 축하드려요!</p>
+            <p className="text-[17px] font-semibold text-[#204A6E] leading-relaxed">
+              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
+              세 매장을 모두 방문하셨어요.<br />
+              {allStoresGiftAmount.toLocaleString()}원 완주 선물이 도착했습니다.
+            </p>
+            <p className="text-[15px] font-medium text-[#204A6E]">내 할인권함에서 확인해 주세요.</p>
           </div>
         )}
 

@@ -21,6 +21,13 @@ export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기
 export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
 export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
 
+// 할인권 사용 한도 — 한 번 결제(같은 날 같은 매장)에 쓸 수 있는 최대 장수 (금액 무관)
+export const MAX_REWARDS_PER_PAYMENT = 2;
+
+// 세 매장 완주 선물 대상 매장 (stores.store_code). 발급·회수는 DB 트리거
+// (022_all_stores_coupon.sql)가 담당하며, 화면 표시·관리자 목록이 같은 기준을 씁니다.
+export const ALL_STORES_CODES = ['haeyul', 'gondre', 'jeongdam'] as const;
+
 // 위치 확인 반복 실패(GPS 미확인) 악용 방지
 // QR 사진 + 위치 권한 거부를 반복하는 패턴을 걸러내기 위한 기준입니다.
 // 최근 방문 LOCATION_ABUSE_WINDOW건 중 '확인 안 됨'이 LOCATION_ABUSE_THRESHOLD건 이상이면,
