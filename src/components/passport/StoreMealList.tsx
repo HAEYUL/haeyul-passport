@@ -33,7 +33,7 @@ export default function StoreMealList({ title, storeNames = STORE_NAMES, todaySt
                   <p className="text-base font-bold" style={{ color: accent.text }}>
                     {name}
                   </p>
-                  <p className="text-[13px] font-medium opacity-80" style={{ color: accent.text }}>
+                  <p className="text-sm font-medium" style={{ color: accent.text }}>
                     {STORE_MEAL_LABELS[name]}
                   </p>
                 </div>

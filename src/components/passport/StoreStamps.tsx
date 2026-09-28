@@ -36,14 +36,14 @@ export default function StoreStamps({ counts, todayStoreNames = [] }: StoreStamp
                   : { backgroundColor: '#FAFAF5', borderColor: '#C9C5B8' }
               }
             >
-              <p className="text-[13px] font-bold leading-tight" style={{ color: visited ? accent.text : '#8C8C80' }}>
+              <p className="text-sm font-bold leading-tight" style={{ color: visited ? accent.text : '#6B6B5E' }}>
                 {STORE_SHORT_NAMES[name] ?? name}
               </p>
               <p className="mt-1 text-lg font-extrabold leading-none" style={{ color: visited ? accent.text : '#9C988B' }}>
                 {visited ? `${count}회` : '미방문'}
               </p>
               {todayStoreNames.includes(name) && (
-                <p className="mt-1 text-[11px] font-bold" style={{ color: accent.text }}>
+                <p className="mt-1 text-[13px] font-bold" style={{ color: accent.text }}>
                   ✓ 오늘
                 </p>
               )}
