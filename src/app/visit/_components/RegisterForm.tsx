@@ -79,11 +79,11 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
         {/* 타이틀 */}
         <header>
           <h1 className="text-2xl font-bold text-[#2D5A3D]">
-            전자여권 발급
+            방문여권 발급
           </h1>
           <p className="mt-2 text-[15px] text-[#8C8C80]">
             아래 정보를 입력하시면<br />
-            해율 자연의 흐름 전자여권이 발급됩니다.
+            해율푸드 방문여권이 발급됩니다.
           </p>
         </header>
 
@@ -324,7 +324,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 처리 중...
               </span>
             ) : (
-              '전자여권 발급하기'
+              '방문여권 발급하기'
             )}
           </button>
         </form>

@@ -10,6 +10,7 @@ import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import NoticeDetail from './NoticeDetail';
 import BrandLogo from '@/components/BrandLogo';
+import { STORE_ACCENTS, DEFAULT_STORE_ACCENT } from '@/lib/storeAccents';
 
 // 매장 주소 (매장별 방문 횟수 카드의 매장명과 매칭)
 const STORE_ADDRESSES: Record<string, string> = {
@@ -24,14 +25,6 @@ const STORE_URLS: Record<string, string> = {
   '곤드레밥집': 'https://haeyul-homepage.vercel.app/gondre',
   '정담명가 남원추어탕': 'https://haeyul-homepage.vercel.app/chueotang',
 };
-
-// 매장별 강조색 (매장별 방문 카드의 좌측 강조선 + 배경 톤)
-const STORE_ACCENTS: Record<string, { border: string; bg: string; text: string }> = {
-  '해율만두전골': { border: '#2D5A3D', bg: '#F1F8F3', text: '#1F4A2E' },
-  '곤드레밥집': { border: '#2B5D8A', bg: '#EEF5FB', text: '#204A6E' },
-  '정담명가 남원추어탕': { border: '#A8551F', bg: '#FBF1E7', text: '#8A4517' },
-};
-const DEFAULT_STORE_ACCENT = { border: '#8C8C80', bg: '#F5F5EC', text: '#44443C' };
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;

@@ -1,7 +1,7 @@
 {
-  "name": "해율 자연의 흐름 전자여권",
+  "name": "해율푸드 방문여권",
   "short_name": "해율여권",
-  "description": "자연의 흐름을 맛으로 전합니다. 해율만두전골 전자여권 멤버십",
+  "description": "음식은 달라도, 정성은 같습니다. 해율만두전골·곤드레밥집·정담명가 남원추어탕 방문여권",
   "id": "/passport",
   "start_url": "/passport",
   "scope": "/",

@@ -10,14 +10,14 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "해율 자연의 흐름 전자여권",
+  title: "해율푸드 방문여권",
   description:
-    "자연의 흐름을 맛으로 전합니다. 해율만두전골 전자여권 멤버십입니다.",
+    "음식은 달라도, 정성은 같습니다. 해율만두전골·곤드레밥집·정담명가 남원추어탕 방문여권입니다.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "해율 전자여권",
+    title: "해율여권",
   },
 };
 
