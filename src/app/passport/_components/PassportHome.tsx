@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { getCurrentPositionWithRetry } from '@/lib/geolocation';
-import type { VisitTierInfo } from '@/lib/tiers';
+import { getTierUpDefinition, type VisitTierInfo } from '@/lib/tiers';
 import { STORE_NAMES, HOMEPAGE_URL } from '@/lib/storeAccents';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
@@ -13,11 +13,7 @@ import NoticeDetail from './NoticeDetail';
 import BrandLogo from '@/components/BrandLogo';
 import StoreStamps from '@/components/passport/StoreStamps';
 import StoreMealList from '@/components/passport/StoreMealList';
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-};
+import { useAddToHome } from '@/components/passport/useAddToHome';
 
 /** 방금 기록한 방문 결과 — 축하 카드 한 장으로 보여줍니다 */
 interface JustRecordedVisit {
@@ -68,19 +64,15 @@ function getCouponLine(data: PassportData, justRecorded: boolean): CouponLine {
   }
 
   if (data.nextCoupon) {
+    // 등급이 오르는 방문(5·10·20·30회)이면 할인권과 함께 새 등급도 알려줍니다.
+    const tierUp = getTierUpDefinition(data.nextCoupon.atVisit);
     return {
       title: `🎫 다음 할인권까지 ${data.nextCoupon.visitsRemaining}번 남았어요`,
-      sub: `${data.nextCoupon.atVisit}번째 방문에 ${data.nextCoupon.amount.toLocaleString()}원`,
+      sub: `${data.nextCoupon.atVisit}번째 방문에 ${data.nextCoupon.amount.toLocaleString()}원${tierUp ? ` + ${tierUp.label} 등급` : ''}`,
     };
   }
 
   return { title: '🎫 방문할수록 할인권이 쌓여요' };
-}
-
-function isRunningAsInstalledApp(): boolean {
-  if (typeof window === 'undefined') return false;
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 }
 
 export default function PassportHome() {
@@ -92,10 +84,8 @@ export default function PassportHome() {
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installMessage, setInstallMessage] = useState('');
   // 이미 홈 화면 앱으로 열었으면 "홈 화면에 추가"를 숨깁니다.
-  const [isInstalledApp] = useState(isRunningAsInstalledApp);
+  const { isInstalledApp, installMessage, addToHome } = useAddToHome();
   const [showScrollHint, setShowScrollHint] = useState(false);
 
   // 화면이 한 번에 안 보이고 스크롤이 필요할 때만, 하단에 "더 있음" 표시를 보여줍니다.
@@ -118,32 +108,6 @@ export default function PassportHome() {
       window.removeEventListener('resize', checkScrollable);
     };
   }, [data]);
-
-  useEffect(() => {
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    }
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-    }
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  async function handleAddToHome() {
-    setInstallMessage('');
-
-    if (installPrompt) {
-      await installPrompt.prompt();
-      await installPrompt.userChoice;
-      setInstallPrompt(null);
-      return;
-    }
-
-    setInstallMessage('아이폰은 브라우저 하단의 공유 버튼을 누른 뒤, “홈 화면에 추가”를 선택해 주세요.');
-  }
 
   // 내 정보/방문기록 화면은 라우트 이동 없이 상태로만 전환되므로, 브라우저/기기의
   // 뒤로가기가 앱을 그냥 벗어나 버리지 않도록 히스토리 항목을 쌓고 popstate로 닫습니다.
@@ -332,6 +296,20 @@ export default function PassportHome() {
                 🎫 {justRecorded.newCouponAmounts.map((a) => `${a.toLocaleString()}원`).join(' · ')} 할인권이 도착했어요
               </p>
             )}
+            {(justRecorded.newCouponAmounts.length > 0 || justRecorded.allStoresGiftAmount) && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[15px] font-bold text-[#1F4A2E]">계산하실 때 바로 쓰실 수 있어요</p>
+                <button
+                  onClick={() => {
+                    window.location.href = '/passport/rewards';
+                  }}
+                  className="w-full min-h-[52px] rounded-xl bg-[#2D5A3D] text-white text-base font-bold shadow-sm
+                             hover:bg-[#245032] active:scale-[0.98] transition-all duration-200"
+                >
+                  할인권 보기
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -438,7 +416,7 @@ export default function PassportHome() {
             {!isInstalledApp && (
               <>
                 <span aria-hidden="true">·</span>
-                <button type="button" onClick={handleAddToHome} className="min-h-[44px] px-3 inline-flex items-center">
+                <button type="button" onClick={addToHome} className="min-h-[44px] px-3 inline-flex items-center">
                   홈 화면에 추가
                 </button>
               </>

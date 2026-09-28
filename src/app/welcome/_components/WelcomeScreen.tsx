@@ -5,8 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { getPassportData, type PassportData } from '@/app/actions';
 import { STORE_NAMES } from '@/lib/storeAccents';
+import { getTierUpDefinition } from '@/lib/tiers';
 import StoreStamps from '@/components/passport/StoreStamps';
 import StoreMealList from '@/components/passport/StoreMealList';
+import { useAddToHome } from '@/components/passport/useAddToHome';
 
 /**
  * 가입 직후 한 번 보이는 환영 화면
@@ -14,6 +16,7 @@ import StoreMealList from '@/components/passport/StoreMealList';
  */
 export default function WelcomeScreen() {
   const [data, setData] = useState<PassportData | null>(null);
+  const { isInstalledApp, installMessage, addToHome } = useAddToHome();
 
   useEffect(() => {
     getPassportData().then((result) => {
@@ -36,6 +39,7 @@ export default function WelcomeScreen() {
   const visitCounts = Object.fromEntries(data.storeVisitBreakdown.map((s) => [s.storeName, s.count]));
   const firstStoreName = data.todayVisitedStoreNames[0] ?? data.storeName;
   const otherStores = STORE_NAMES.filter((name) => (visitCounts[name] ?? 0) === 0);
+  const nextTierUp = nextCoupon ? getTierUpDefinition(nextCoupon.atVisit) : null;
 
   return (
     <main className="flex flex-col min-h-screen px-5 py-8">
@@ -75,6 +79,7 @@ export default function WelcomeScreen() {
           {nextCoupon && (
             <p className="text-[17px] font-bold text-[#8A5800]">
               🎫 {nextCoupon.visitsRemaining}번 더 오시면 {nextCoupon.amount.toLocaleString()}원 할인권
+              {nextTierUp && ` + ${nextTierUp.label} 등급`}
             </p>
           )}
           {allStoresGiftAmount && !data.allStoresGiftReceived && (
@@ -98,6 +103,26 @@ export default function WelcomeScreen() {
         >
           내 여권 보기
         </button>
+
+        {/* 다음에 QR 없이도 쉽게 열 수 있도록 — 가입 직후가 권하기 가장 좋은 때 */}
+        {!isInstalledApp && (
+          <div className="bg-white rounded-2xl border-2 border-[#E0DCD0] p-4 space-y-2 text-center">
+            <p className="text-[15px] font-semibold text-[#44443C]">
+              다음에 더 쉽게 여권을 여시려면
+            </p>
+            <button
+              type="button"
+              onClick={addToHome}
+              className="w-full min-h-[52px] rounded-xl border-2 border-[#2D5A3D] bg-white text-[#2D5A3D] text-base font-bold
+                         hover:bg-[#F0F7F2] active:scale-[0.98] transition-all duration-200"
+            >
+              홈 화면에 추가하기
+            </button>
+            {installMessage && (
+              <p className="text-[15px] leading-relaxed text-[#55534A]">{installMessage}</p>
+            )}
+          </div>
+        )}
 
         <div className="text-center">
           <Link href="/guide" className="inline-flex items-center min-h-[48px] px-4 text-base font-bold text-[#2D5A3D] underline">
