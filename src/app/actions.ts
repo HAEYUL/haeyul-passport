@@ -68,7 +68,7 @@ function isRewardExpired(issuedAt: string): boolean {
 
 /**
  * 할인권 만료 여부를 판정합니다. expires_at이 명시적으로 지정된 할인권
- * (예: 생일축하 쿠폰의 30일 유효기간)은 그 값을 그대로 쓰고, 지정되지
+ * (예: 생일축하 쿠폰의 발급일로부터 1개월)은 그 값을 그대로 쓰고, 지정되지
  * 않은 기존 방식(방문 기준 할인권)은 issued_at + 6개월로 계산합니다.
  */
 function isRewardExpiredAt(issuedAt: string, expiresAt: string | null): boolean {
@@ -845,7 +845,7 @@ export interface RewardItem {
   issuedStoreName: string | null;
   /** 사용된 매장 이름. 아직 미사용이면 null */
   usedStoreName: string | null;
-  /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 30일) */
+  /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 1개월) */
   isExpired: boolean;
   /** 유효기간 만료일('YYYY-MM-DD', KST) */
   expiresAt: string;

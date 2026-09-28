@@ -119,7 +119,7 @@ export async function GET(request: Request) {
     }
 
     const receivers = toIssue.map((c) => (c.phone as string).replace(/\D/g, ''));
-    const message = `[해율푸드] 그동안 뜸하셨네요! 다시 뵙고 싶은 마음을 담아 ${COMEBACK_COUPON_AMOUNT.toLocaleString()}원 컴백 쿠폰을 보내드렸어요. 전자여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${COMEBACK_COUPON_VALID_DAYS}일)`;
+    const message = `[해율푸드] 그동안 뜸하셨네요! 다시 뵙고 싶은 마음을 담아 ${COMEBACK_COUPON_AMOUNT.toLocaleString()}원 컴백 쿠폰을 보내드렸어요. 방문여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${COMEBACK_COUPON_VALID_DAYS}일)`;
 
     let smsSuccessCount: number | null = null;
     try {

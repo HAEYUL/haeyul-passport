@@ -139,7 +139,7 @@ export interface CustomerReward {
   amount: number | null;
   status: RewardStatus;
   source: RewardSource;
-  /** 명시적으로 지정된 만료 시각(예: 생일축하 쿠폰의 30일). 없으면 issued_at + 6개월로 계산 */
+  /** 명시적으로 지정된 만료 시각(예: 생일축하 쿠폰의 발급일로부터 1개월). 없으면 issued_at + 6개월로 계산 */
   expires_at: string | null;
   /** 생일축하 쿠폰의 중복 발급 방지용 발급 연도. source가 'birthday'일 때만 값이 있음 */
   birthday_year: number | null;

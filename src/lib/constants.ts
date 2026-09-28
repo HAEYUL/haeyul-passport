@@ -14,7 +14,7 @@ export const REWARD_EXPIRY_MONTHS = 6;
 
 // 생일축하 쿠폰
 export const BIRTHDAY_COUPON_AMOUNT = 5000;      // 할인 금액(원)
-export const BIRTHDAY_COUPON_VALID_DAYS = 30;    // 유효기간(발급일로부터, 일)
+export const BIRTHDAY_COUPON_VALID_MONTHS = 1;   // 유효기간(발급일로부터, 개월 — 예: 3월 5일 발급 → 4월 5일까지)
 
 // 컴백(장기 미방문 복귀 유도) 쿠폰
 export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기간(일)이 지나면 발급 대상
