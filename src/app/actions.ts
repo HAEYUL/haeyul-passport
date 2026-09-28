@@ -10,6 +10,7 @@ import {
   toKSTDateString,
   addMonthsToDateString,
   daysBetweenDateStrings,
+  getTodayKSTRange,
 } from '@/lib/utils';
 import { setSession, getSession, clearSession } from '@/lib/session';
 import { getVerifiedStoreId } from '@/lib/qrVerification';
@@ -23,10 +24,11 @@ import {
   LOCATION_ABUSE_WINDOW,
   LOCATION_ABUSE_THRESHOLD,
   SUSPICIOUS_ACTIVITY_TYPE,
+  MAX_REWARDS_PER_PAYMENT,
 } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
-import type { ApiResponse, Customer, RewardStatus, NoticeKind } from '@/types/database';
+import type { ApiResponse, Customer, RewardStatus, RewardSource, NoticeKind } from '@/types/database';
 
 const LOCATION_REJECTED_ERROR = '매장에서만 방문 등록이 가능합니다.';
 const LOCATION_ABUSE_ERROR =
@@ -66,7 +68,7 @@ function isRewardExpired(issuedAt: string): boolean {
 
 /**
  * 할인권 만료 여부를 판정합니다. expires_at이 명시적으로 지정된 할인권
- * (예: 생일축하 쿠폰의 30일 유효기간)은 그 값을 그대로 쓰고, 지정되지
+ * (예: 생일축하 쿠폰의 발급일로부터 1개월)은 그 값을 그대로 쓰고, 지정되지
  * 않은 기존 방식(방문 기준 할인권)은 issued_at + 6개월로 계산합니다.
  */
 function isRewardExpiredAt(issuedAt: string, expiresAt: string | null): boolean {
@@ -148,7 +150,7 @@ export async function registerCustomer(
     const locationResult = await checkStoreLocation(supabase, storeId, clientLat, clientLng);
 
     if (locationResult.status === 'failed') {
-      return { success: false, error: LOCATION_REJECTED_ERROR };
+      return { success: false, error: LOCATION_REJECTED_ERROR, code: 'LOCATION' };
     }
 
     // ─── 중복 전화번호 확인 ─────────────────────────
@@ -376,6 +378,15 @@ export interface ActiveNotice {
   body: string;
 }
 
+export interface NextCoupon {
+  /** 다음 할인권까지 남은 방문 횟수 */
+  visitsRemaining: number;
+  /** 다음 할인권을 받는 누적 방문 횟수 (예: 5번째 방문) */
+  atVisit: number;
+  /** 다음 할인권 금액(원) */
+  amount: number;
+}
+
 export interface PassportData {
   customer: Customer;
   todayVisited: boolean;
@@ -386,9 +397,16 @@ export interface PassportData {
   qrVerified: boolean;
   /** QR로 확인된 현재 매장 이름. 확인 안 됐으면 null */
   storeName: string | null;
-  rewardProgressMessage: string;
+  /** 다음 방문 할인권 안내. 더 받을 할인권이 없으면 null */
+  nextCoupon: NextCoupon | null;
   /** 매장별 누적 방문 횟수 (한 번도 안 간 매장도 0회로 포함) */
   storeVisitBreakdown: StoreVisitCount[];
+  /** 오늘(KST) 방문이 기록된 매장 이름 목록 */
+  todayVisitedStoreNames: string[];
+  /** 세 매장 완주 선물 금액(원). 행사가 꺼져 있으면 null */
+  allStoresGiftAmount: number | null;
+  /** 이미 세 매장 완주 선물을 받았는지 (사용 여부 무관) */
+  allStoresGiftReceived: boolean;
   /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
   soonExpiringReward: { amount: number; daysLeft: number } | null;
   /** 지금 게시기간 안에 있는 알림/이벤트(3개 매장 공통, 최대 1건). 없으면 null */
@@ -428,24 +446,20 @@ function computeExpiryDateKST(issuedAt: string, expiresAt: string | null): strin
 }
 
 /**
- * 다음 할인권까지 남은 방문 횟수와 예정 금액 안내 문구를 계산합니다.
+ * 다음 방문 할인권 안내(몇 번 더 오면, 몇 번째 방문에, 얼마). 더 받을 할인권이 없으면 null.
  * (실물 선물 대신 reward_rules 기반 금액형 할인권 — 008_coupon_rewards.sql 참고)
  */
-async function getRewardProgressMessage(
+async function getNextCouponForCustomer(
   supabase: ReturnType<typeof createAdminClient>,
-  visitCount: number,
-  tier: VisitTierInfo
-): Promise<string> {
-  if (tier.isMaxTier) {
-    return '가장 오랜 시간 자연을 함께한 해율푸드 VIP 입니다.';
-  }
-
+  visitCount: number
+): Promise<NextCoupon | null> {
   const { data: rules } = await supabase
     .from('reward_rules')
     .select('id, threshold_visits, amount, is_repeating, repeat_interval')
     .eq('is_active', true)
     .eq('is_birthday', false)
-    .eq('is_comeback', false);
+    .eq('is_comeback', false)
+    .eq('is_all_stores', false);
 
   const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
     id: r.id,
@@ -456,9 +470,8 @@ async function getRewardProgressMessage(
   }));
 
   const next = getNextCouponInfo(visitCount, ruleInputs);
-  if (!next) return '';
-
-  return `다음 할인권까지 ${next.visitsRemaining}회 남았습니다. (${next.amount.toLocaleString()}원)`;
+  if (!next) return null;
+  return { visitsRemaining: next.visitsRemaining, atVisit: visitCount + next.visitsRemaining, amount: next.amount };
 }
 
 export async function getPassportData(): Promise<ApiResponse<PassportData>> {
@@ -547,20 +560,32 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
       .order('created_at', { ascending: true });
     const { data: visitRows } = await supabase
       .from('visits')
-      .select('store_id')
+      .select('store_id, visit_date')
       .eq('customer_id', customer.id)
       .eq('is_cancelled', false);
 
     const visitCountMap = new Map<string, number>();
+    const todayStoreIds = new Set<string>();
     for (const v of visitRows || []) {
       visitCountMap.set(v.store_id, (visitCountMap.get(v.store_id) || 0) + 1);
+      if (v.visit_date === todayKST) todayStoreIds.add(v.store_id);
     }
-    const storeVisitBreakdown: StoreVisitCount[] = (allStores || [])
-      .map((s) => ({
-        storeName: s.name,
-        count: visitCountMap.get(s.id) || 0,
-      }))
-      .sort((a, b) => b.count - a.count);
+    const storeVisitBreakdown: StoreVisitCount[] = (allStores || []).map((s) => ({
+      storeName: s.name,
+      count: visitCountMap.get(s.id) || 0,
+    }));
+    const todayVisitedStoreNames = (allStores || []).filter((s) => todayStoreIds.has(s.id)).map((s) => s.name);
+
+    const [allStoresGiftAmount, { count: allStoresGiftCount }, nextCoupon, activeNotice] = await Promise.all([
+      getAllStoresGiftAmount(),
+      supabase
+        .from('customer_rewards')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', customer.id)
+        .eq('source', 'all_stores'),
+      getNextCouponForCustomer(supabase, customer.visit_count),
+      getActiveNotice(supabase),
+    ]);
 
     return {
       success: true,
@@ -573,10 +598,13 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         tier,
         qrVerified: storeId !== null,
         storeName,
-        rewardProgressMessage: await getRewardProgressMessage(supabase, customer.visit_count, tier),
+        nextCoupon,
         storeVisitBreakdown,
+        todayVisitedStoreNames,
+        allStoresGiftAmount,
+        allStoresGiftReceived: (allStoresGiftCount ?? 0) > 0,
         soonExpiringReward,
-        activeNotice: await getActiveNotice(supabase),
+        activeNotice,
       },
     };
   } catch (error) {
@@ -591,8 +619,10 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
 
 export interface VisitResult {
   visitCount: number;
-  /** 이번 방문으로 새로 발급된 할인권 금액 목록(원) */
+  /** 이번 방문으로 새로 발급된 방문 할인권 금액 목록(원) */
   newCouponAmounts: number[];
+  /** 이번 방문으로 세 매장을 모두 방문해 받은 완주 선물 금액(원). 없으면 null */
+  allStoresGiftAmount: number | null;
   tier: VisitTierInfo;
   /** 이번 방문으로 방문 등급이 올랐는지 여부 */
   tierUpgraded: boolean;
@@ -629,7 +659,7 @@ export async function registerVisit(
     // ─── 위치 확인 (QR 부정 스캔 방지) ─────────────────
     const locationResult = await checkStoreLocation(supabase, storeId, latitude ?? null, longitude ?? null);
     if (locationResult.status === 'failed') {
-      return { success: false, error: LOCATION_REJECTED_ERROR };
+      return { success: false, error: LOCATION_REJECTED_ERROR, code: 'LOCATION' };
     }
 
     // 위치 확인이 안 된 경우, 최근 방문 중 같은 상황이 반복되고 있으면
@@ -651,7 +681,7 @@ export async function registerVisit(
           description: `최근 ${LOCATION_ABUSE_WINDOW}건 중 ${unavailableCount}건 위치 확인 안 됨 — 방문 등록 차단`,
           customer_id: session.customerId,
         });
-        return { success: false, error: LOCATION_ABUSE_ERROR };
+        return { success: false, error: LOCATION_ABUSE_ERROR, code: 'LOCATION' };
       }
     }
 
@@ -706,22 +736,32 @@ export async function registerVisit(
     const tierAfter = getVisitTierInfo(visitCount);
     const tierUpgraded = tierBefore.key !== tierAfter.key;
 
-    // 방금 이 방문으로 새로 발급된 할인권 확인 (DB 트리거가 방문 횟수 임계값 달성 시 자동 발급)
+    // 방금 이 방문으로 새로 발급된 할인권 확인 (DB 트리거가 방문 횟수 임계값 달성 시,
+    // 그리고 세 매장을 모두 방문했을 때 자동 발급)
     const recentThreshold = new Date(Date.now() - 10000).toISOString();
     const { data: justIssued } = await supabase
       .from('customer_rewards')
-      .select('amount')
+      .select('amount, source')
       .eq('customer_id', session.customerId)
       .not('reward_rule_id', 'is', null)
+      .in('source', ['visit', 'all_stores'])
       .gte('issued_at', recentThreshold);
 
     const newCouponAmounts = (justIssued || [])
+      .filter((j) => j.source === 'visit')
       .map((j) => j.amount ?? 0)
       .filter((amount) => amount > 0);
+    const allStoresGift = (justIssued || []).find((j) => j.source === 'all_stores');
 
     return {
       success: true,
-      data: { visitCount, newCouponAmounts, tier: tierAfter, tierUpgraded },
+      data: {
+        visitCount,
+        newCouponAmounts,
+        allStoresGiftAmount: allStoresGift?.amount ?? null,
+        tier: tierAfter,
+        tierUpgraded,
+      },
       message: '오늘도 자연의 흐름이 여권에 기록되었습니다.',
     };
   } catch (error) {
@@ -797,8 +837,7 @@ export interface RewardItem {
   amount: number;
   /** 이 할인권이 해당하는 방문 횟수 기준. 생일·컴백 쿠폰이면 의미 없음(0) */
   thresholdVisits: number;
-  /** 'visit'(방문 기준 할인권) | 'birthday'(생일축하 쿠폰) | 'comeback'(컴백 쿠폰) */
-  source: 'visit' | 'birthday' | 'comeback';
+  source: RewardSource;
   status: RewardStatus;
   issuedAt: string;
   usedAt: string | null;
@@ -806,7 +845,7 @@ export interface RewardItem {
   issuedStoreName: string | null;
   /** 사용된 매장 이름. 아직 미사용이면 null */
   usedStoreName: string | null;
-  /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 30일) */
+  /** 더 이상 사용할 수 없는 할인권인지 여부 (방문 할인권은 6개월, 생일 쿠폰은 1개월) */
   isExpired: boolean;
   /** 유효기간 만료일('YYYY-MM-DD', KST) */
   expiresAt: string;
@@ -855,7 +894,7 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
       id: cr.id,
       amount: cr.amount ?? 0,
       thresholdVisits: cr.threshold_visits ?? 0,
-      source: (cr.source as 'visit' | 'birthday' | 'comeback') ?? 'visit',
+      source: (cr.source as RewardSource) ?? 'visit',
       status: cr.status,
       issuedAt: cr.issued_at,
       usedAt: cr.used_at,
@@ -873,17 +912,25 @@ export async function getRewards(): Promise<ApiResponse<RewardItem[]>> {
 }
 
 /**
- * 할인권 사용 확인 — '사용 완료'로 즉시 처리합니다.
+ * 할인권 사용 확인 — 고른 할인권(1~2장)을 한 번에 '사용 완료'로 처리합니다.
  * 별도의 직원 인증 없이, 매장에서 직원이 확인 버튼을 눌러주면 바로 처리됩니다.
  * 지금 QR로 확인된 매장을 used_store_id로 함께 기록합니다.
  */
-export async function confirmRewardUse(
-  customerRewardId: string
+export async function confirmRewardsUse(
+  customerRewardIds: string[]
 ): Promise<ApiResponse<null>> {
   try {
     const session = await requireSession();
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
+    }
+
+    const ids = [...new Set(customerRewardIds)];
+    if (ids.length === 0) {
+      return { success: false, error: '사용할 할인권을 골라 주세요.' };
+    }
+    if (ids.length > MAX_REWARDS_PER_PAYMENT) {
+      return { success: false, error: `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.` };
     }
 
     const storeId = await getVerifiedStoreId();
@@ -896,22 +943,45 @@ export async function confirmRewardUse(
 
     const supabase = createAdminClient();
 
-    const { data: cr } = await supabase
+    const { data: crs } = await supabase
       .from('customer_rewards')
       .select('id, status, customer_id, issued_at, expires_at')
-      .eq('id', customerRewardId)
-      .single();
+      .in('id', ids);
 
-    if (!cr || cr.customer_id !== session.customerId) {
+    const mine = (crs || []).filter((cr) => cr.customer_id === session.customerId);
+    if (mine.length !== ids.length) {
       return { success: false, error: '할인권 정보를 찾을 수 없습니다.' };
     }
 
-    if (cr.status === 'used') {
-      return { success: false, error: '이미 사용된 할인권입니다.' };
+    if (mine.some((cr) => cr.status === 'used')) {
+      return { success: false, error: '이미 사용된 할인권이 있습니다.' };
     }
 
-    if (isRewardExpiredAt(cr.issued_at, cr.expires_at)) {
-      return { success: false, error: '유효기간이 지난 할인권입니다.\n사용하실 수 없습니다.' };
+    if (mine.some((cr) => isRewardExpiredAt(cr.issued_at, cr.expires_at))) {
+      return { success: false, error: '유효기간이 지난 할인권이 있습니다.\n사용하실 수 없습니다.' };
+    }
+
+    // 한 번 결제에 최대 MAX_REWARDS_PER_PAYMENT장 (금액 무관). 결제 단위는 알 수 없으므로
+    // "같은 날 같은 매장"을 한 번 결제로 봅니다. 같은 날 다른 매장에서는 따로 쓸 수 있습니다.
+    const { start: todayStart, end: todayEnd } = getTodayKSTRange();
+    const { count: usedTodayHere } = await supabase
+      .from('customer_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', session.customerId)
+      .eq('status', 'used')
+      .eq('used_store_id', storeId)
+      .gte('used_at', todayStart)
+      .lt('used_at', todayEnd);
+
+    const remaining = MAX_REWARDS_PER_PAYMENT - (usedTodayHere ?? 0);
+    if (ids.length > remaining) {
+      return {
+        success: false,
+        error:
+          remaining <= 0
+            ? `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`
+            : `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서는 ${remaining}장만 더 사용하실 수 있습니다.`,
+      };
     }
 
     const { data: updated, error } = await supabase
@@ -921,7 +991,7 @@ export async function confirmRewardUse(
         used_at: new Date().toISOString(),
         used_store_id: storeId,
       })
-      .eq('id', customerRewardId)
+      .in('id', ids)
       .neq('status', 'used')
       .select('id');
 
@@ -934,9 +1004,16 @@ export async function confirmRewardUse(
       return { success: false, error: '이미 사용된 할인권입니다.' };
     }
 
+    if (updated.length < ids.length) {
+      return {
+        success: true,
+        message: `${updated.length}장만 사용 처리되었습니다. 나머지는 이미 사용된 할인권입니다.`,
+      };
+    }
+
     return { success: true };
   } catch (error) {
-    console.error('confirmRewardUse 오류:', error);
+    console.error('confirmRewardsUse 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
@@ -944,6 +1021,43 @@ export async function confirmRewardUse(
 // ============================================================
 // 내 정보
 // ============================================================
+
+/**
+ * 해율을 알게 된 경로 저장 (선택). 가입 입력을 줄이기 위해 가입 직후 환영 화면에서 묻습니다.
+ * 이미 저장된 값이 있으면 덮어쓰지 않습니다.
+ */
+export async function updateReferralSource(
+  source: string,
+  detail?: string | null
+): Promise<ApiResponse<null>> {
+  try {
+    const session = await requireSession();
+    if (!session) {
+      return { success: false, error: '로그인이 필요합니다.' };
+    }
+    if (!isReferralSourceKey(source)) {
+      return { success: false, error: '선택 항목을 확인해 주세요.' };
+    }
+
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        referral_source: source,
+        referral_source_detail: source === 'other' ? detail?.trim().slice(0, 100) || null : null,
+      })
+      .eq('id', session.customerId)
+      .is('referral_source', null);
+
+    if (error) {
+      return { success: false, error: '저장 중 오류가 발생했습니다.' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('updateReferralSource 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
 
 /**
  * 마케팅 수신 동의 변경
@@ -1086,6 +1200,7 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
       .eq('is_active', true)
       .eq('is_birthday', false)
       .eq('is_comeback', false)
+      .eq('is_all_stores', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
@@ -1104,6 +1219,27 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
   } catch (error) {
     console.error('getRewardCatalog 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/**
+ * 세 매장 완주 선물 금액(원). 규칙이 꺼져 있으면 null — 가입 첫 화면 안내에 사용합니다.
+ */
+export async function getAllStoresGiftAmount(): Promise<number | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from('reward_rules')
+      .select('amount')
+      .eq('is_all_stores', true)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.amount ?? null;
+  } catch (error) {
+    console.error('getAllStoresGiftAmount 오류:', error);
+    return null;
   }
 }
 

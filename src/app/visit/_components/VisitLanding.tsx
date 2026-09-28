@@ -1,34 +1,42 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import RegisterForm from './RegisterForm';
 import LoginForm from './LoginForm';
 import BrandLogo from '@/components/BrandLogo';
 import { getCurrentPositionWithRetry, type GeoCoords } from '@/lib/geolocation';
+import { STORE_NAMES, STORE_ACCENTS, DEFAULT_STORE_ACCENT } from '@/lib/storeAccents';
 
 interface VisitLandingProps {
   /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
   storeName: string | null;
   /** 지금이 매장 운영시간(오전 10시~오후 9시) 이내인지 */
   isOpen: boolean;
+  /** 세 매장 완주 선물 금액(원). 행사를 멈춘 경우 null이면 안내를 숨깁니다 */
+  allStoresGiftAmount: number | null;
 }
 
 /**
  * QR 접속 후 첫 화면
  * - 처음 발급하기
- * - 기존 전자여권 열기
+ * - 기존 여권 열기
  */
-export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
+export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
   const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
+  const geoRequestedRef = useRef(false);
 
-  // 접속하자마자 위치 정보 권한을 요청합니다 (QR 부정 스캔 방지용).
-  // 거부/미지원이어도 이 화면 자체는 그대로 진행됩니다 — 실제 등록 차단 여부는
-  // 서버에서 좌표 유무에 따라 판단합니다.
-  useEffect(() => {
-    if (!isOpen) return;
-    getCurrentPositionWithRetry().then((result) => setGeoCoords(result.coords));
-  }, [isOpen]);
+  // 위치 정보 권한은 "처음 발급하기"를 누른 뒤에 요청합니다 (QR 부정 스캔 방지용).
+  // 화면이 뜨자마자 이유 없이 팝업이 뜨면 거부하기 쉽고, 기존 여권 열기(로그인)에는
+  // 위치가 필요 없기 때문입니다. 가입 정보를 입력하는 동안 좌표를 받아 둡니다.
+  // 거부/미지원이어도 가입은 그대로 진행되며, 차단 여부는 서버에서 판단합니다.
+  function startRegister() {
+    if (!geoRequestedRef.current) {
+      geoRequestedRef.current = true;
+      getCurrentPositionWithRetry().then((result) => setGeoCoords(result.coords));
+    }
+    setMode('register');
+  }
 
   if (mode === 'register') {
     return <RegisterForm onBack={() => setMode('landing')} geoCoords={geoCoords} />;
@@ -39,26 +47,65 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen px-6 py-12">
-      <div className="w-full max-w-sm text-center space-y-8">
+    <main className="flex flex-col items-center justify-center min-h-screen px-6 py-10">
+      <div className="w-full max-w-sm text-center space-y-6">
         {/* 상단: 로고 + 타이틀 */}
-        <header className="space-y-4">
-          <BrandLogo height={72} textClassName="text-3xl" />
+        <header className="space-y-3">
+          <BrandLogo height={64} textClassName="text-3xl" />
           <div>
             <h1 className="text-2xl font-bold text-[#2D5A3D] leading-tight">
-              해율 자연의 흐름 전자여권
+              해율푸드 방문여권
             </h1>
-            <p className="mt-2 text-base text-[#7A7A6E]">
-              자연의 흐름을 맛으로 전합니다.
+            <p className="mt-2 text-base font-medium text-[#6B6B5E]">
+              음식은 달라도, 정성은 같습니다.
             </p>
           </div>
         </header>
 
         {storeName && (
-          <p className="text-[15px] font-semibold text-[#2D5A3D]">
-            {storeName} 방문이 확인되었습니다.
+          <p className="text-[17px] font-bold text-[#2D5A3D]">
+            ✓ {storeName} 방문이 확인되었어요
           </p>
         )}
+
+        {/* 세 매장 안내 — 여권 하나로 세 매장 방문이 함께 쌓인다는 사실만 짧게 보여줍니다 */}
+        <section className="bg-white rounded-2xl border-2 border-[#E0DCD0] px-4 py-4 space-y-3">
+          <p className="text-[17px] font-bold text-[#2C2C2C] leading-snug">
+            여권 하나로<br />
+            세 매장 방문이 함께 쌓여요
+          </p>
+          <ul className="space-y-2">
+            {STORE_NAMES.map((name) => {
+              const accent = STORE_ACCENTS[name] ?? DEFAULT_STORE_ACCENT;
+              const isCurrent = name === storeName;
+              return (
+                <li
+                  key={name}
+                  className="flex items-center justify-between rounded-xl py-2.5 px-4 border-l-[6px]"
+                  style={{ backgroundColor: accent.bg, borderLeftColor: accent.border }}
+                >
+                  <span className="text-base font-bold" style={{ color: accent.text }}>
+                    {name}
+                  </span>
+                  {isCurrent && (
+                    <span
+                      className="flex-shrink-0 rounded-full px-2.5 py-1 text-[13px] font-bold text-white"
+                      style={{ backgroundColor: accent.border }}
+                    >
+                      지금 여기
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {allStoresGiftAmount && (
+            <p className="text-[15px] font-bold text-[#8A5800]">
+              🏅 세 매장을 모두 방문하시면<br />
+              {allStoresGiftAmount.toLocaleString()}원 완주 선물을 드려요
+            </p>
+          )}
+        </section>
 
         {!isOpen ? (
           <div className="bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl p-6 space-y-2">
@@ -73,10 +120,10 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
         ) : (
           <>
             {/* 버튼 */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <button
-                onClick={() => setMode('register')}
-                className="w-full py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
+                onClick={startRegister}
+                className="w-full min-h-[56px] py-4 px-6 bg-[#2D5A3D] text-white text-lg font-semibold rounded-2xl
                            shadow-md hover:bg-[#245032] active:scale-[0.98]
                            transition-all duration-200"
                 id="btn-register"
@@ -86,36 +133,30 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
 
               <button
                 onClick={() => setMode('login')}
-                className="w-full py-4 px-6 bg-white text-[#2D5A3D] text-lg font-semibold rounded-2xl
+                className="w-full min-h-[56px] py-4 px-6 bg-white text-[#2D5A3D] text-lg font-semibold rounded-2xl
                            border-2 border-[#2D5A3D] shadow-sm
                            hover:bg-[#F5F5EC] active:scale-[0.98]
                            transition-all duration-200"
                 id="btn-login"
               >
-                기존 전자여권 열기
+                기존 여권 열기
               </button>
             </div>
 
             {/* 안내 문구 */}
-            <div className="pt-4 px-2">
-              <p className="text-[15px] text-[#8C8C80] leading-relaxed">
-                앱 설치 없이 간편하게 이용할 수 있습니다.
+            <div className="px-2 space-y-2">
+              <p className="text-[15px] font-medium text-[#55534A] leading-relaxed">
+                방문할수록 할인권이 쌓이고,<br />
+                생일에도 할인권을 드려요.
               </p>
-              <p className="mt-2 text-[15px] text-[#8C8C80] leading-relaxed">
-                오늘의 방문이 기록되고, 방문할수록<br />
-                해율이 준비한 할인권을 받으실 수 있습니다.
+              <p className="text-sm text-[#8C8C80] leading-relaxed">
+                앱 설치 없이 바로 쓸 수 있어요.<br />
+                발급할 때 방문 확인을 위해<br />
+                위치 확인을 요청해요.
               </p>
             </div>
           </>
         )}
-
-        {/* 하단 핵심 문구 */}
-        <footer className="pt-6 border-t border-[#E8E4DA]">
-          <p className="text-sm text-[#A0A090] leading-relaxed">
-            자연을 만난 오늘의 시간이<br />
-            해율 전자여권에 기록됩니다.
-          </p>
-        </footer>
       </div>
     </main>
   );

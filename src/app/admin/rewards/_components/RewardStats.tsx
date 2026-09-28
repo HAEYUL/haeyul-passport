@@ -23,6 +23,7 @@ import { formatDateKR, getTodayKST, getMonthRange } from '@/lib/utils';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
 import RewardReconciliation from './RewardReconciliation';
+import { getRewardSourceShortLabel } from '@/lib/rewardSource';
 
 type Section = 'stats' | 'amountByStore' | 'reconciliation' | 'available' | 'used' | 'catalog';
 
@@ -403,7 +404,7 @@ function RewardUsageSection({ statusFilter, storeId }: { statusFilter: 'availabl
               <td className="px-4 py-3 whitespace-nowrap font-medium text-[#2D5A3D]">{it.customerName}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#555]">{it.customerNumber}</td>
               <td className="px-4 py-3 whitespace-nowrap text-[#333]">
-                {it.amount.toLocaleString()}원 <span className="text-xs text-[#6B6B5E]">({it.thresholdVisits}회)</span>
+                {it.amount.toLocaleString()}원 <span className="text-xs text-[#6B6B5E]">({getRewardSourceShortLabel(it.source, it.thresholdVisits)})</span>
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-[#6B6B5E]">
                 {formatDateKR(it.issuedAt)} · {it.issuedStoreName}
@@ -819,7 +820,7 @@ function AmountByStoreSection() {
                                       <td className="py-1.5 text-[#333]">
                                         {b.amount.toLocaleString()}원
                                         <span className="ml-1 text-xs text-[#8C8C80]">
-                                          {b.source === 'birthday' ? '(생일)' : b.source === 'comeback' ? '(컴백)' : '(방문)'}
+                                          ({getRewardSourceShortLabel(b.source)})
                                         </span>
                                       </td>
                                       <td className="py-1.5 text-right text-[#6B6B5E]">{b.count}건</td>

@@ -11,9 +11,14 @@ export interface GeoCoords {
 
 export interface GeoAttemptResult {
   coords: GeoCoords | null;
+  /** 위치 권한 팝업 응답을 기다리다 상한 시간이 지나 포기했는지 */
+  gaveUp?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 8000;
+// 브라우저의 timeout은 손님이 위치 권한 팝업에 답한 뒤부터 세기 시작합니다.
+// 팝업에 답하지 않고 두면 영원히 기다리게 되므로, 전체 대기 시간에 상한을 둡니다.
+const PERMISSION_WAIT_LIMIT_MS = 30000;
 
 export function getCurrentPosition(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoAttemptResult> {
   return new Promise((resolve) => {
@@ -22,9 +27,18 @@ export function getCurrentPosition(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoA
       return;
     }
 
+    let settled = false;
+    const finish = (result: GeoAttemptResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(limitTimer);
+      resolve(result);
+    };
+    const limitTimer = setTimeout(() => finish({ coords: null, gaveUp: true }), PERMISSION_WAIT_LIMIT_MS);
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        resolve({
+        finish({
           coords: {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -33,7 +47,7 @@ export function getCurrentPosition(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoA
       },
       () => {
         // 권한 거부, 위치 정보 사용 불가, 타임아웃 등 — 모두 "확인 안 됨"으로 처리
-        resolve({ coords: null });
+        finish({ coords: null });
       },
       { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
     );
@@ -47,6 +61,7 @@ export function getCurrentPosition(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoA
  */
 export async function getCurrentPositionWithRetry(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<GeoAttemptResult> {
   const first = await getCurrentPosition(timeoutMs);
-  if (first.coords) return first;
+  // 성공했거나, 팝업에 답이 없어 이미 오래 기다렸다면 다시 시도하지 않습니다.
+  if (first.coords || first.gaveUp) return first;
   return getCurrentPosition(timeoutMs);
 }

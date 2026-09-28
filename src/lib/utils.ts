@@ -75,6 +75,18 @@ export function addMonthsToDateString(dateStr: string, months: number): string {
 }
 
 /**
+ * 'YYYY-MM-DD'에 months개월을 더하되, 다음 달에 같은 날이 없으면 그 달 말일로 맞춥니다.
+ * (예: 1월 31일 + 1개월 → 2월 28일. addMonthsToDateString은 3월 3일이 됨)
+ */
+export function addMonthsClampedToDateString(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
+/**
  * `<input type="month">` 값('YYYY-MM')을 그 달의 시작일/종료일('YYYY-MM-DD')로 변환합니다.
  */
 export function getMonthRange(month: string): { start: string; end: string } {

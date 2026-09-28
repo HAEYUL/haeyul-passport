@@ -264,6 +264,19 @@ export default function AdminDashboard({ username }: AdminDashboardProps) {
                 href="/admin/customers?filter=longAbsent&days=30"
                 accent="text-[#D4442A]"
               />
+              <StatCard
+                label="세 매장 완주"
+                value={stats.allStoresCompletedCount}
+                unit="명"
+                href="/admin/customers?filter=allStoresCompleted"
+                accent="text-[#204A6E]"
+              />
+              <StatCard
+                label="한 곳만 남은 고객"
+                value={stats.oneStoreLeftCount}
+                unit="명"
+                href="/admin/customers?filter=oneStoreLeft"
+              />
             </div>
           </div>
         )}

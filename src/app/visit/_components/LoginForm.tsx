@@ -55,7 +55,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
         {/* 타이틀 */}
         <header>
           <h1 className="text-2xl font-bold text-[#2D5A3D]">
-            기존 전자여권 열기
+            기존 여권 열기
           </h1>
           <p className="mt-2 text-[15px] text-[#8C8C80]">
             가입하신 성함, 휴대전화 번호, 생년월일을<br />
@@ -137,7 +137,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
                 확인 중...
               </span>
             ) : (
-              '전자여권 열기'
+              '여권 열기'
             )}
           </button>
         </form>
@@ -145,7 +145,7 @@ export default function LoginForm({ onBack }: LoginFormProps) {
         {/* 안내 */}
         <div className="text-center space-y-2 pt-4">
           <p className="text-[15px] text-[#AAA]">
-            아직 전자여권이 없으신가요?
+            아직 여권이 없으신가요?
           </p>
           <button
             onClick={onBack}

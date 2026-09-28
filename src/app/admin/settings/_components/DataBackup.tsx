@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getBackupData, type BackupCustomerRow, type BackupRewardRow } from '../../actions';
 import { getTodayKST } from '@/lib/utils';
+import { REWARD_SOURCE_LABEL } from '@/lib/rewardSource';
 
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -23,12 +24,6 @@ function downloadCsv(filename: string, headers: string[], rows: string[][]) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
-const SOURCE_LABEL: Record<BackupRewardRow['source'], string> = {
-  visit: '방문 할인권',
-  birthday: '생일 쿠폰',
-  comeback: '컴백 쿠폰',
-};
 
 const STATUS_LABEL: Record<BackupRewardRow['status'], string> = {
   available: '사용가능',
@@ -58,7 +53,7 @@ function rewardsToCsvRows(rewards: BackupRewardRow[]): string[][] {
     r.phone,
     `${r.amount.toLocaleString()}원`,
     r.thresholdVisits ? `${r.thresholdVisits}회` : '-',
-    SOURCE_LABEL[r.source],
+    REWARD_SOURCE_LABEL[r.source],
     STATUS_LABEL[r.status],
     r.issuedAt.slice(0, 10),
     r.expiresAt ? r.expiresAt.slice(0, 10) : '-',

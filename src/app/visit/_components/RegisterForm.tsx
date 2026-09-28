@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { registerCustomer } from '@/app/actions';
 import type { GeoCoords } from '@/lib/geolocation';
-import { REFERRAL_SOURCE_OPTIONS } from '@/lib/referralSource';
 import BirthDateKeypad from '@/components/BirthDateKeypad';
 
 interface RegisterFormProps {
@@ -30,7 +29,6 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [showPrivacyDetail, setShowPrivacyDetail] = useState(false);
-  const [referralSource, setReferralSource] = useState('');
   const allConsent = privacyConsent && marketingConsent;
 
   function handleAllConsentChange(checked: boolean) {
@@ -79,11 +77,11 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
         {/* 타이틀 */}
         <header>
           <h1 className="text-2xl font-bold text-[#2D5A3D]">
-            전자여권 발급
+            방문여권 발급
           </h1>
           <p className="mt-2 text-[15px] text-[#8C8C80]">
             아래 정보를 입력하시면<br />
-            해율 자연의 흐름 전자여권이 발급됩니다.
+            해율푸드 방문여권이 발급됩니다.
           </p>
         </header>
 
@@ -140,45 +138,6 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
           {/* 생년월일 (필수, 6자리 숫자) */}
           <BirthDateKeypad value={birthDigits} onChange={setBirthDigits} required />
 
-          {/* 해율을 알게 된 경로 (선택) */}
-          <div>
-            <label className="block text-base font-medium text-[#333] mb-2">
-              해율을 알게 되신 경로 <span className="text-sm text-[#AAA]">(선택)</span>
-            </label>
-            <div className="space-y-2.5">
-              {REFERRAL_SOURCE_OPTIONS.map((option) => (
-                <label
-                  key={option.key}
-                  htmlFor={`referral-${option.key}`}
-                  className="flex items-center gap-3 text-[15px] text-[#333] cursor-pointer"
-                >
-                  <input
-                    id={`referral-${option.key}`}
-                    type="radio"
-                    name="referral_source"
-                    value={option.key}
-                    checked={referralSource === option.key}
-                    onChange={() => setReferralSource(option.key)}
-                    className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-            {referralSource === 'other' && (
-              <input
-                type="text"
-                name="referral_source_detail"
-                placeholder="어떤 경로였는지 알려주세요"
-                maxLength={100}
-                className="mt-2.5 w-full px-4 py-3 text-[15px] border-2 border-[#D4D0C8] rounded-xl
-                           bg-white placeholder-[#B0B0A0]
-                           focus:border-[#2D5A3D] focus:outline-none
-                           transition-colors duration-200"
-              />
-            )}
-          </div>
-
           {/* 구분선 */}
           <hr className="border-[#E8E4DA]" />
 
@@ -190,7 +149,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={allConsent}
                 onChange={(e) => handleAllConsentChange(e.target.checked)}
-                className="w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <label htmlFor="check-all" className="text-[16px] font-semibold text-[#333] cursor-pointer">
                 모두 동의합니다
@@ -204,7 +163,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={privacyConsent}
                 onChange={(e) => setPrivacyConsent(e.target.checked)}
-                className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <div className="flex-1">
                 <label htmlFor="check-privacy" className="text-[15px] text-[#333] leading-snug cursor-pointer">
@@ -223,7 +182,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                   <li>수집 목적: 방문 기록 관리 및 할인권·생일 혜택 제공</li>
                   <li>보유 기간: 회원 탈퇴 시까지</li>
                   <li>해율만두전골·곤드레밥집·정담명가 남원추어탕에서 함께 이용됩니다.</li>
-                  <li>동의를 거부할 수 있으며, 거부 시 전자여권 서비스 이용이 제한됩니다.</li>
+                  <li>동의를 거부할 수 있으며, 거부 시 방문여권 서비스 이용이 제한됩니다.</li>
                 </ul>
               </div>
             </div>
@@ -234,7 +193,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 <div>
                   <p className="font-semibold text-[#333] mb-1">1. 수집하는 개인정보</p>
                   <p className="mb-1">
-                    해율 전자여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
+                    해율푸드 방문여권은 해율만두전골·곤드레밥집·정담명가 남원추어탕이 공동으로 운영하는
                     통합 회원 서비스이며, 다음의 개인정보를 수집합니다.
                   </p>
                   <ul className="space-y-1 list-disc list-inside">
@@ -287,7 +246,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 type="checkbox"
                 checked={marketingConsent}
                 onChange={(e) => setMarketingConsent(e.target.checked)}
-                className="mt-1 w-5 h-5 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
+                className="!w-7 !h-7 accent-[#2D5A3D] flex-shrink-0 cursor-pointer"
               />
               <div className="flex-1">
                 <label htmlFor="check-marketing" className="text-[15px] text-[#333] leading-snug cursor-pointer">
@@ -324,7 +283,7 @@ export default function RegisterForm({ onBack, geoCoords }: RegisterFormProps) {
                 처리 중...
               </span>
             ) : (
-              '전자여권 발급하기'
+              '방문여권 발급하기'
             )}
           </button>
         </form>

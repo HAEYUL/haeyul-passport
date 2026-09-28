@@ -9,12 +9,14 @@ import type { Customer } from '@/types/database';
 
 interface MyInfoProps {
   customer: Customer;
+  /** 최근 방문일 (방문 기록이 없으면 null) */
+  recentVisitDate: string | null;
   onBack: () => void;
   onUpdated: () => void;
   onLogout: () => void;
 }
 
-export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfoProps) {
+export default function MyInfo({ customer, recentVisitDate, onBack, onUpdated, onLogout }: MyInfoProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -111,8 +113,14 @@ export default function MyInfo({ customer, onBack, onUpdated, onLogout }: MyInfo
             <span className="text-[15px] font-medium text-[#333]">{customer.name}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[15px] text-[#8C8C80]">회원번호</span>
+            <span className="text-[15px] text-[#8C8C80]">여권번호</span>
             <span className="text-[15px] font-medium text-[#333]">{customer.customer_number}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[15px] text-[#8C8C80]">최근 방문일</span>
+            <span className="text-[15px] font-medium text-[#333]">
+              {recentVisitDate ? formatDateKR(recentVisitDate) : '-'}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-[15px] text-[#8C8C80]">휴대전화 번호</span>

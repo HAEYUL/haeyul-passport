@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendSms } from '@/lib/sms';
-import { getTodayKST } from '@/lib/utils';
-import { BIRTHDAY_COUPON_AMOUNT, BIRTHDAY_COUPON_VALID_DAYS, AUDIT_ACTION } from '@/lib/constants';
+import { getTodayKST, addMonthsClampedToDateString } from '@/lib/utils';
+import { BIRTHDAY_COUPON_AMOUNT, BIRTHDAY_COUPON_VALID_MONTHS, AUDIT_ACTION } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +78,11 @@ export async function GET(request: Request) {
     }
 
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + BIRTHDAY_COUPON_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    // 발급일(한국 날짜)로부터 1개월 되는 날의 밤 23:59:59(KST)까지 사용 가능
+    // 예: 3월 5일 발급 → 4월 5일까지. 다음 달에 같은 날이 없으면 그 달 말일까지.
+    const expiryDateKST = addMonthsClampedToDateString(getTodayKST(), BIRTHDAY_COUPON_VALID_MONTHS);
+    const expiresAt = new Date(`${expiryDateKST}T23:59:59+09:00`).toISOString();
+    const [, expiryMonth, expiryDay] = expiryDateKST.split('-').map(Number);
 
     const rows = toIssue.map((c) => ({
       customer_id: c.id,
@@ -97,7 +101,7 @@ export async function GET(request: Request) {
     }
 
     const receivers = toIssue.map((c) => (c.phone as string).replace(/\D/g, ''));
-    const message = `[해율푸드] 생일을 진심으로 축하드립니다! 🎂 저희 마음을 담아 ${BIRTHDAY_COUPON_AMOUNT.toLocaleString()}원 생일 축하 선물을 준비했어요. 전자여권 '내 할인권함'에서 확인해 주세요. (유효기간 ${BIRTHDAY_COUPON_VALID_DAYS}일)`;
+    const message = `[해율푸드] 생일을 진심으로 축하드립니다! 🎂 저희 마음을 담아 ${BIRTHDAY_COUPON_AMOUNT.toLocaleString()}원 생일 축하 선물을 준비했어요. 방문여권 '내 할인권함'에서 확인해 주세요. (${expiryMonth}월 ${expiryDay}일까지 사용 가능)`;
 
     let smsSuccessCount: number | null = null;
     try {
