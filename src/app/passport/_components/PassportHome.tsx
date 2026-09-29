@@ -176,7 +176,8 @@ export default function PassportHome() {
       });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      setVisitError(result.error || '방문 등록 중 오류가 발생했습니다.');
+      // 위치 확인 실패는 서버 문구 대신 위치 안내 문구(LocationHelp)만 보여줍니다.
+      setVisitError(result.code === 'LOCATION' ? '' : result.error || '방문 등록 중 오류가 발생했습니다.');
       setVisitErrorIsLocation(result.code === 'LOCATION' || !coords);
     }
     setVisitLoading(false);
@@ -280,12 +281,12 @@ export default function PassportHome() {
                 `${data.storeName ?? '매장'} 방문 기록하기`
               )}
             </button>
-            {visitError && (
+            {(visitError || visitErrorIsLocation) && (
               <div className="bg-[#FFF3E4] border-2 border-[#D9A257] text-[#7A4A16] px-4 py-3 rounded-xl text-[15px] font-medium leading-relaxed whitespace-pre-line text-left">
                 {visitError}
                 {visitErrorIsLocation ? (
-                  <div className="mt-2">
-                    <LocationHelp defaultOpen />
+                  <div className={visitError ? 'mt-2' : ''}>
+                    <LocationHelp />
                   </div>
                 ) : (
                   <p className="mt-1 text-sm">QR 인증은 방문 당일 매장 영업시간까지만 유효해요.</p>
@@ -337,7 +338,6 @@ export default function PassportHome() {
                   이번에는 위치 확인이 되지 않았어요. 위치 확인이 계속 안 되면 방문 기록이 어려울 수 있으니,
                   다음 방문부터는 위치를 허용해 주세요.
                 </p>
-                <LocationHelp />
               </div>
             )}
           </section>
