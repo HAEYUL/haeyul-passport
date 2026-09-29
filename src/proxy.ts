@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getStoreIdByActiveToken } from '@/lib/qrSettings';
 import { secondsUntilStoreClose } from '@/lib/utils';
+import { createSignedValue } from '@/lib/signedCookie';
 
 const COOKIE_NAME = 'haeyul_qr_store';
 
@@ -18,11 +19,12 @@ export async function proxy(request: NextRequest) {
   if (key) {
     const storeId = await getStoreIdByActiveToken(key);
     if (storeId) {
-      response.cookies.set(COOKIE_NAME, storeId, {
+      const maxAge = secondsUntilStoreClose();
+      response.cookies.set(COOKIE_NAME, createSignedValue(storeId, maxAge), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: secondsUntilStoreClose(),
+        maxAge,
         path: '/',
       });
     }

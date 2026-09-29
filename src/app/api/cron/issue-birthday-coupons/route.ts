@@ -21,12 +21,11 @@ export const dynamic = 'force-dynamic';
  * 변경 없이 바로 적용됩니다.)
  */
 export async function GET(request: Request) {
+  // CRON_SECRET이 설정돼 있고 일치할 때만 실행합니다. (설정이 없으면 누구도 실행할 수 없게 막습니다)
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const authHeader = request.headers.get('authorization');
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
