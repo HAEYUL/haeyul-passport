@@ -8,7 +8,7 @@ interface StoreStampsProps {
 }
 
 /**
- * 세 매장 도장 — 다녀간 매장은 매장 색으로 채우고, 아직 안 간 매장은 점선 칸으로 보여줍니다.
+ * 해율푸드 세 매장 도장 — 다녀간 매장은 매장 색으로 채우고, 아직 안 간 매장은 점선 칸으로 보여줍니다.
  * 보통은 세 칸을 나란히 두고, 휴대폰 글씨를 크게 설정해 칸이 좁아지면
  * 매장명이 중간에 끊기지 않도록 한 줄씩 세로 목록으로 바꿔 보여줍니다.
  */
@@ -17,11 +17,14 @@ export default function StoreStamps({ counts, todayStoreNames = [] }: StoreStamp
 
   return (
     <div className="@container text-sm space-y-2">
-      <div className="flex items-baseline justify-between">
-        <p className="text-[15px] font-bold text-[#44443C]">세 매장 도장</p>
-        <p className="text-[15px] font-extrabold text-[#2D5A3D]">
-          {visitedCount} / {STORE_NAMES.length}
-        </p>
+      <div>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[15px] font-bold text-[#44443C]">해율푸드 세 매장</p>
+          <p className="flex-shrink-0 text-[15px] font-extrabold text-[#2D5A3D]">
+            {visitedCount} / {STORE_NAMES.length}
+          </p>
+        </div>
+        <p className="text-[13px] font-medium text-[#6B6B5E]">세 매장 방문이 한 여권에 함께 쌓여요</p>
       </div>
       <ul className="grid grid-cols-1 gap-2 @min-[19em]:grid-cols-3">
         {STORE_NAMES.map((name) => {

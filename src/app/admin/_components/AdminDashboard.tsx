@@ -110,17 +110,46 @@ function MonthlySignupCard({ storeId }: { storeId: string | null }) {
     fetchCount();
   }, [fetchCount]);
 
+  const thisMonth = getTodayKST().slice(0, 7);
+  const [year, mon] = month.split('-').map(Number);
+  // 월을 앞뒤로 옮깁니다 (이번 달 이후로는 넘어가지 않음)
+  function shiftMonth(delta: number) {
+    const d = new Date(Date.UTC(year, mon - 1 + delta, 1));
+    const next = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (next <= thisMonth) setMonth(next);
+  }
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-md border border-[#E8E4DA]">
-      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase whitespace-nowrap">
-        월별 신규가입({count === null ? '···' : count.toLocaleString()}명)
+      <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase whitespace-nowrap">월별 신규가입</p>
+      <p className={`mt-3 whitespace-nowrap font-extrabold text-[#2D5A3D] ${(count ?? 0) >= 10000 ? 'text-2xl' : 'text-3xl'}`}>
+        {count === null ? '···' : count.toLocaleString()}
+        <span className="ml-2 text-sm font-bold text-[#6B6B5E]">명</span>
       </p>
-      <input
-        type="month"
-        value={month}
-        onChange={(e) => setMonth(e.target.value)}
-        className="mt-3 w-full rounded-lg border border-[#D4D0C8] px-2 py-1 text-xs text-[#333]"
-      />
+      {/* 좁은 카드에서도 잘리지 않도록 달력 입력 대신 "2026년 9월" + ◀ ▶ 버튼으로 월을 고릅니다 */}
+      <p className="mt-2 whitespace-nowrap text-sm font-bold text-[#333]">
+        {year}년 {mon}월
+      </p>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={() => shiftMonth(-1)}
+          aria-label="이전 달"
+          className="flex-1 !min-h-[36px] rounded-lg border border-[#D4D0C8] text-sm text-[#2D5A3D] hover:bg-[#F5F5EC]"
+        >
+          ◀
+        </button>
+        <button
+          type="button"
+          onClick={() => shiftMonth(1)}
+          disabled={month >= thisMonth}
+          aria-label="다음 달"
+          className="flex-1 !min-h-[36px] rounded-lg border border-[#D4D0C8] text-sm text-[#2D5A3D] hover:bg-[#F5F5EC]
+                     disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ▶
+        </button>
+      </div>
       {error && <p className="mt-1 text-xs text-[#D4442A]">{error}</p>}
     </div>
   );
