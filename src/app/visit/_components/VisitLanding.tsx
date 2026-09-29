@@ -12,16 +12,24 @@ interface VisitLandingProps {
   storeName: string | null;
   /** 지금이 매장 운영시간(오전 10시~오후 9시) 이내인지 */
   isOpen: boolean;
-  /** 세 매장 완주 선물 금액(원). 행사를 멈춘 경우 null이면 안내를 숨깁니다 */
-  allStoresGiftAmount: number | null;
 }
+
+/**
+ * 가입 첫 화면 세 매장 안내 문구 — 어떤 음식을 파는 곳인지 한 줄로.
+ * 앞부분(음식 소개)은 보통 굵기, 상호는 더 굵고 크게 보여줍니다.
+ */
+const LANDING_STORE_LABELS: Record<string, { lead: string; name: string }> = {
+  '해율만두전골': { lead: '자연보양전골은', name: '해율만두전골' },
+  '곤드레밥집': { lead: '건강한 밥상은 수지', name: '곤드레밥집' },
+  '정담명가 남원추어탕': { lead: '추어탕은 수지', name: '정담명가 남원추어탕' },
+};
 
 /**
  * QR 접속 후 첫 화면
  * - 처음 발급하기
  * - 기존 여권 열기
  */
-export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }: VisitLandingProps) {
+export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
   const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
   const geoRequestedRef = useRef(false);
@@ -50,16 +58,14 @@ export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }:
     <main className="flex flex-col items-center justify-center min-h-screen px-6 py-10">
       <div className="w-full max-w-sm text-center space-y-6">
         {/* 상단: 로고 + 타이틀 */}
-        <header className="space-y-3">
-          <BrandLogo height={64} textClassName="text-3xl" />
-          <div>
-            <h1 className="text-2xl font-bold text-[#2D5A3D] leading-tight">
-              해율푸드 방문여권
-            </h1>
-            <p className="mt-2 text-base font-medium text-[#6B6B5E]">
-              음식은 달라도, 정성은 같습니다.
-            </p>
-          </div>
+        <header className="space-y-2">
+          {/* 로고 글자("해율푸드여권")가 제목을 대신합니다 */}
+          <h1>
+            <BrandLogo height={64} textClassName="text-3xl" />
+          </h1>
+          <p className="text-lg font-bold text-[#44443C]">
+            해율푸드의 세 가지 건강한 한식
+          </p>
         </header>
 
         {storeName && (
@@ -78,14 +84,16 @@ export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }:
             {STORE_NAMES.map((name) => {
               const accent = STORE_ACCENTS[name] ?? DEFAULT_STORE_ACCENT;
               const isCurrent = name === storeName;
+              const label = LANDING_STORE_LABELS[name];
               return (
                 <li
                   key={name}
-                  className="flex items-center justify-between rounded-xl py-2.5 px-4 border-l-[6px]"
+                  className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-xl py-2.5 px-3 border-l-[6px] text-center"
                   style={{ backgroundColor: accent.bg, borderLeftColor: accent.border }}
                 >
-                  <span className="text-base font-bold" style={{ color: accent.text }}>
-                    {name}
+                  <span className="text-base font-medium" style={{ color: accent.text }}>
+                    {label && <>{label.lead} </>}
+                    <strong className="text-[17px] font-extrabold">{label?.name ?? name}</strong>
                   </span>
                   {isCurrent && (
                     <span
@@ -99,12 +107,9 @@ export default function VisitLanding({ storeName, isOpen, allStoresGiftAmount }:
               );
             })}
           </ul>
-          {allStoresGiftAmount && (
-            <p className="text-[15px] font-bold text-[#8A5800]">
-              🏅 세 매장을 모두 방문하시면<br />
-              {allStoresGiftAmount.toLocaleString()}원 완주 선물을 드려요
-            </p>
-          )}
+          <p className="text-lg font-extrabold text-[#2D5A3D]">
+            음식은 달라도, 정성은 같습니다.
+          </p>
         </section>
 
         {!isOpen ? (
