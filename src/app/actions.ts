@@ -930,7 +930,7 @@ export async function confirmRewardsUse(
       return { success: false, error: '사용할 할인권을 골라 주세요.' };
     }
     if (ids.length > MAX_REWARDS_PER_PAYMENT) {
-      return { success: false, error: `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.` };
+      return { success: false, error: `할인권은 1인 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.` };
     }
 
     const storeId = await getVerifiedStoreId();
@@ -979,8 +979,8 @@ export async function confirmRewardsUse(
         success: false,
         error:
           remaining <= 0
-            ? `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`
-            : `할인권은 한 번 결제에 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서는 ${remaining}장만 더 사용하실 수 있습니다.`,
+            ? `할인권은 1인 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서 이미 ${MAX_REWARDS_PER_PAYMENT}장을 사용하셨습니다.`
+            : `할인권은 1인 ${MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.\n오늘 이 매장에서는 ${remaining}장만 더 사용하실 수 있습니다.`,
       };
     }
 
