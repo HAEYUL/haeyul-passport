@@ -75,7 +75,7 @@ export default function PassportGuide() {
         <header className="text-center space-y-3">
           <BrandLogo height={48} textClassName="text-xl" />
           <div>
-            <h1 className="text-xl font-bold text-[#2D5A3D]">해율푸드 방문여권 안내</h1>
+            <h1 className="text-xl font-bold text-[#2D5A3D]">이용 안내</h1>
             <p className="mt-1 text-[15px] font-medium text-[#55534A]">
               해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
               세 매장에서 함께 쓰는 방문여권입니다.

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
-import { getCurrentStoreName, getAllStoresGiftAmount } from '@/app/actions';
+import { getCurrentStoreName } from '@/app/actions';
 import { isWithinStoreHours } from '@/lib/utils';
 import VisitLanding from './_components/VisitLanding';
 
@@ -17,8 +17,8 @@ export default async function VisitPage() {
     redirect('/passport');
   }
 
-  const [storeName, allStoresGiftAmount] = await Promise.all([getCurrentStoreName(), getAllStoresGiftAmount()]);
+  const storeName = await getCurrentStoreName();
   const isOpen = isWithinStoreHours();
 
-  return <VisitLanding storeName={storeName} isOpen={isOpen} allStoresGiftAmount={allStoresGiftAmount} />;
+  return <VisitLanding storeName={storeName} isOpen={isOpen} />;
 }

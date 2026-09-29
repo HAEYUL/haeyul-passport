@@ -250,10 +250,10 @@ export default function PassportHome() {
   return (
     <main className="flex flex-col min-h-screen px-5 py-6">
       <div className="w-full max-w-sm mx-auto space-y-3">
-        {/* 헤더 */}
-        <header className="text-center space-y-1">
-          <BrandLogo height={48} textClassName="text-2xl" />
-          <p className="text-[15px] font-medium text-[#6B6B5E]">음식은 달라도, 정성은 같습니다.</p>
+        {/* 헤더 — 가입 첫 화면과 같은 로고·문구 */}
+        <header className="text-center space-y-2">
+          <BrandLogo height={64} textClassName="text-3xl" />
+          <p className="text-lg font-bold text-[#44443C]">해율푸드의 세 가지 건강한 한식</p>
         </header>
 
         {/* A. 매장 QR 확인 → 방문 기록하기 (가장 먼저) */}
