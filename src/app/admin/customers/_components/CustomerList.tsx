@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  getCustomerList,
+  getCustomerListPage,
+  exportCustomerList,
   getTierBreakdown,
   updateCustomerAdminNote,
   type CustomerListItem,
@@ -252,20 +253,44 @@ export default function CustomerList() {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [marketingConsent, setMarketingConsent] = useState<boolean | null>(null);
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
   const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
   const [showManualRegisterModal, setShowManualRegisterModal] = useState(false);
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
-    const result = await getCustomerList(q, filter, longAbsentDays, tierKey, storeId, marketingConsent);
+    setTotalCount(null);
+    setExportMessage('');
+    const result = await getCustomerListPage(q, filter, longAbsentDays, tierKey, storeId, marketingConsent);
     if (result.success && result.data) {
-      setCustomers(result.data);
+      setCustomers(result.data.items);
+      setTotalCount(result.data.totalCount);
       setError('');
     } else if (!result.success) {
       setError(result.error || '고객 목록을 불러올 수 없습니다.');
     }
   }, [filter, longAbsentDays, tierKey, storeId, marketingConsent]);
+
+  // 엑셀 저장은 화면에 보이는 목록이 아니라, 지금 조건에 맞는 고객 전체를 받아 저장합니다.
+  async function handleExport() {
+    setExporting(true);
+    setExportMessage('');
+    const result = await exportCustomerList(query, filter, longAbsentDays, tierKey, storeId, marketingConsent);
+    setExporting(false);
+    if (result.success && result.data) {
+      if (result.data.length === 0) {
+        setExportMessage('저장할 고객이 없습니다.');
+        return;
+      }
+      exportCustomersCsv(result.data, filter);
+      setExportMessage(`총 ${result.data.length.toLocaleString()}명을 엑셀로 저장했습니다.`);
+    } else {
+      setExportMessage(result.error || '엑셀 저장 중 오류가 발생했습니다.');
+    }
+  }
 
   const fetchTierBreakdown = useCallback(async () => {
     setTierBreakdown(null);
@@ -480,7 +505,15 @@ export default function CustomerList() {
           )
         ) : (
           <>
-            <div className="flex justify-end gap-2.5">
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              {totalCount != null && (
+                <p className="mr-auto text-sm text-[#6B6B5E]">
+                  총 <b className="text-[#2D5A3D]">{totalCount.toLocaleString()}명</b>
+                  {customers && totalCount > customers.length && (
+                    <> · 화면에는 {customers.length.toLocaleString()}명만 표시 (엑셀 저장 시 전체 포함)</>
+                  )}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => setShowManualRegisterModal(true)}
@@ -491,12 +524,12 @@ export default function CustomerList() {
               </button>
               <button
                 type="button"
-                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter)}
-                disabled={!customers || customers.length === 0}
+                onClick={handleExport}
+                disabled={!customers || customers.length === 0 || exporting}
                 className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
                            hover:bg-[#F5F5EC] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-sm"
               >
-                📊 엑셀 저장
+                {exporting ? '명단 만드는 중...' : '📊 엑셀 저장'}
               </button>
               <button
                 type="button"
@@ -508,6 +541,7 @@ export default function CustomerList() {
                 💭 톡
               </button>
             </div>
+            {exportMessage && <p className="text-right text-sm font-semibold text-[#2D5A3D]">{exportMessage}</p>}
 
             {!customers ? (
               <div className="space-y-2">

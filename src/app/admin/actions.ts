@@ -25,23 +25,79 @@ import {
 import type { ApiResponse, Customer, RewardStatus, RewardSource, Store, LocationVerifiedStatus, NoticeKind } from '@/types/database';
 
 /**
- * 활성 고객의 "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
- * 대시보드의 장기 미방문 집계와 고객 목록 필터에서 함께 사용합니다.
+ * Supabase(PostgREST)는 한 번 요청에 최대 1,000행까지만 돌려줍니다.
+ * 행이 많아도 빠짐없이 읽도록 1,000행씩 나눠 끝까지 조회합니다.
+ * makeQuery는 매번 새 쿼리를 만들어야 하며, 페이지가 어긋나지 않도록 고유한 정렬(order)을 포함해야 합니다.
+ */
+const DB_PAGE_SIZE = 1000;
+async function fetchAllRows<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += DB_PAGE_SIZE) {
+    const { data, error } = await makeQuery(from, from + DB_PAGE_SIZE - 1);
+    if (error) throw error;
+    all.push(...(data || []));
+    if (!data || data.length < DB_PAGE_SIZE) break;
+  }
+  return all;
+}
+
+/**
+ * id 목록으로 in() 조회할 때 한 번에 넣는 개수.
+ * 수천 개를 한 번에 넣으면 요청 주소가 너무 길어져 실패하므로 나눠서 조회합니다.
+ */
+const ID_CHUNK_SIZE = 200;
+function chunkIds(ids: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK_SIZE) {
+    chunks.push(ids.slice(i, i + ID_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+/**
+ * "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
+ * customerIds를 주면 그 고객들만, 없으면 전체 고객을 대상으로 합니다.
+ * 대시보드의 장기 미방문 집계와 고객 목록에서 함께 사용합니다.
  */
 async function getLatestVisitDateMap(
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
+  customerIds?: string[]
 ): Promise<Map<string, string>> {
-  const { data: visits } = await supabase
-    .from('visits')
-    .select('customer_id, visit_date')
-    .eq('is_cancelled', false)
-    .order('visit_date', { ascending: false });
-
   const map = new Map<string, string>();
-  for (const v of visits || []) {
-    if (!map.has(v.customer_id)) {
-      map.set(v.customer_id, v.visit_date);
+  const collect = (rows: { customer_id: string; visit_date: string }[]) => {
+    for (const v of rows) {
+      const prev = map.get(v.customer_id);
+      if (!prev || v.visit_date > prev) map.set(v.customer_id, v.visit_date);
     }
+  };
+
+  if (customerIds) {
+    for (const ids of chunkIds(customerIds)) {
+      collect(
+        await fetchAllRows<{ customer_id: string; visit_date: string }>((from, to) =>
+          supabase
+            .from('visits')
+            .select('customer_id, visit_date')
+            .eq('is_cancelled', false)
+            .in('customer_id', ids)
+            .order('id', { ascending: true })
+            .range(from, to)
+        )
+      );
+    }
+  } else {
+    collect(
+      await fetchAllRows<{ customer_id: string; visit_date: string }>((from, to) =>
+        supabase
+          .from('visits')
+          .select('customer_id, visit_date')
+          .eq('is_cancelled', false)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    );
   }
   return map;
 }
@@ -274,7 +330,6 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       .select('id', { count: 'exact', head: true })
       .eq('is_active', true)
       .gte('visit_count', vipMinVisits);
-    let activeCustomersBase = supabase.from('customers').select('id').eq('is_active', true);
     let monthlyIssuedBase = supabase
       .from('customer_rewards')
       .select('id', { count: 'exact', head: true })
@@ -294,7 +349,6 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       newCustomersBase = newCustomersBase.eq('signup_store_id', storeId);
       todayRewardsUsedBase = todayRewardsUsedBase.eq('used_store_id', storeId);
       vipCountBase = vipCountBase.eq('signup_store_id', storeId);
-      activeCustomersBase = activeCustomersBase.eq('signup_store_id', storeId);
       monthlyIssuedBase = monthlyIssuedBase.eq('issued_store_id', storeId);
       monthlyUsedBase = monthlyUsedBase.eq('used_store_id', storeId);
     }
@@ -306,7 +360,7 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       { count: newCustomersThisMonth },
       { count: todayRewardsUsed },
       { count: vipCount },
-      { data: activeCustomers },
+      activeCustomers,
       latestVisitMap,
       { count: monthlyIssuedRewards },
       { count: monthlyUsedRewards },
@@ -318,7 +372,11 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       newCustomersBase,
       todayRewardsUsedBase,
       vipCountBase,
-      activeCustomersBase,
+      fetchAllRows<{ id: string }>((from, to) => {
+        let q = supabase.from('customers').select('id').eq('is_active', true);
+        if (storeId) q = q.eq('signup_store_id', storeId);
+        return q.order('id', { ascending: true }).range(from, to);
+      }),
       getLatestVisitDateMap(supabase),
       monthlyIssuedBase,
       monthlyUsedBase,
@@ -1279,7 +1337,367 @@ export type CustomerListFilter =
   | 'allStoresCompleted'
   | 'oneStoreLeft';
 
+interface CustomerListParams {
+  query: string;
+  filter: CustomerListFilter;
+  longAbsentDays: number;
+  tierKey?: VisitTierKey;
+  storeId?: string | null;
+  marketingConsent?: boolean | null;
+}
+
+type CustomerRow = {
+  id: string;
+  customer_number: string;
+  name: string;
+  phone: string;
+  visit_count: number;
+  created_at: string;
+  marketing_consent: boolean;
+  signup_store_id: string;
+  admin_note: string | null;
+};
+
+const CUSTOMER_LIST_COLUMNS =
+  'id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id, admin_note';
+
+/**
+ * 고객 목록 조건에 맞는 고객을 모읍니다.
+ * limit을 주면 화면 표시용으로 그 수만큼만, null이면(엑셀 저장) 조건에 맞는 전체를 돌려줍니다.
+ * totalCount는 항상 조건에 맞는 전체 인원입니다.
+ */
+async function buildCustomerList(
+  supabase: ReturnType<typeof createAdminClient>,
+  { query, filter, longAbsentDays, tierKey, storeId, marketingConsent }: CustomerListParams,
+  limit: number | null
+): Promise<{ items: CustomerListItem[]; totalCount: number }> {
+  // 장기 미방문 필터는 전체 고객의 최근 방문일이 필요하므로 먼저 구합니다.
+  let latestVisitMap: Map<string, string> | null = null;
+
+  // 방문/선물/생일 기준 필터는 대상 고객 ID를 먼저 구한 뒤 customers 테이블에 적용합니다.
+  let idFilter: string[] | null = null;
+  // 세 매장 완주 관련 필터에서 목록 표시에 다시 쓰기 위해 보관합니다.
+  let allStoresInfo: AllStoresVisitInfo | null = null;
+  const uniqueIds = (rows: { customer_id: string }[]) => [...new Set(rows.map((r) => r.customer_id))];
+
+  if (filter === 'todayVisits') {
+    const today = getTodayKST();
+    idFilter = uniqueIds(
+      await fetchAllRows<{ customer_id: string }>((from, to) =>
+        supabase
+          .from('visits')
+          .select('customer_id')
+          .eq('visit_date', today)
+          .eq('is_cancelled', false)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    );
+  } else if (filter === 'unclaimedRewards') {
+    idFilter = uniqueIds(
+      await fetchAllRows<{ customer_id: string }>((from, to) =>
+        supabase
+          .from('customer_rewards')
+          .select('customer_id')
+          .neq('status', 'used')
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    );
+  } else if (filter === 'todayRewardsUsed') {
+    const { start, end } = getTodayKSTRange();
+    idFilter = uniqueIds(
+      await fetchAllRows<{ customer_id: string }>((from, to) =>
+        supabase
+          .from('customer_rewards')
+          .select('customer_id')
+          .eq('status', 'used')
+          .gte('used_at', start)
+          .lt('used_at', end)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    );
+  } else if (filter === 'longAbsent') {
+    latestVisitMap = await getLatestVisitDateMap(supabase);
+    const cutoff = subtractDaysFromDateString(getTodayKST(), longAbsentDays);
+    idFilter = [...latestVisitMap.entries()]
+      .filter(([, lastDate]) => lastDate < cutoff)
+      .map(([customerId]) => customerId);
+  } else if (filter === 'birthdayThisMonth') {
+    const currentMonth = getTodayKST().slice(5, 7);
+    const customers = await fetchAllRows<{ id: string; birth_date: string | null }>((from, to) =>
+      supabase
+        .from('customers')
+        .select('id, birth_date')
+        .eq('is_active', true)
+        .not('birth_date', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, to)
+    );
+    idFilter = customers
+      .filter((c) => c.birth_date && c.birth_date.slice(5, 7) === currentMonth)
+      .map((c) => c.id);
+  } else if (filter === 'visitedStore') {
+    if (!storeId) {
+      idFilter = [];
+    } else {
+      idFilter = uniqueIds(
+        await fetchAllRows<{ customer_id: string }>((from, to) =>
+          supabase
+            .from('visits')
+            .select('customer_id')
+            .eq('store_id', storeId)
+            .eq('is_cancelled', false)
+            .order('id', { ascending: true })
+            .range(from, to)
+        )
+      );
+    }
+  } else if (filter === 'tierUpThisMonth') {
+    const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
+    const tierUpThresholds = getAllTiers()
+      .filter((t) => t.minVisits > 1)
+      .map((t) => t.minVisits);
+    idFilter = uniqueIds(
+      await fetchAllRows<{ customer_id: string }>((from, to) =>
+        supabase
+          .from('customer_rewards')
+          .select('customer_id')
+          .in('threshold_visits', tierUpThresholds)
+          .not('reward_rule_id', 'is', null)
+          .gte('issued_at', monthStart)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    );
+  } else if (filter === 'allStoresCompleted' || filter === 'oneStoreLeft') {
+    const info = await getAllStoresVisitInfo(supabase);
+    allStoresInfo = info;
+    const totalStores = info.stores.length;
+    idFilter = [...info.visitedByCustomer.entries()]
+      .filter(([, visited]) => {
+        if (filter === 'allStoresCompleted') {
+          return totalStores > 0 && visited.size >= totalStores;
+        }
+        if (visited.size !== totalStores - 1) return false;
+        // "한 곳만 남은 고객"에서 매장을 고르면, 그 매장만 남은 고객으로 좁힙니다.
+        return !storeId || !visited.has(storeId);
+      })
+      .map(([customerId]) => customerId);
+  }
+
+  if (idFilter && idFilter.length === 0) {
+    return { items: [], totalCount: 0 };
+  }
+
+  // 등급 필터의 방문 횟수 범위 (알 수 없는 등급이면 빈 목록)
+  let tierRange: { min: number; max: number | null } | null = null;
+  if (filter === 'tier' && tierKey) {
+    const tiers = getAllTiers();
+    const index = tiers.findIndex((t) => t.key === tierKey);
+    if (index === -1) return { items: [], totalCount: 0 };
+    tierRange = { min: tiers[index].minVisits, max: tiers[index + 1]?.minVisits ?? null };
+  }
+
+  // idFilter 외의 공통 조건(매장·수신동의·신규·등급·검색어)을 붙인 customers 조회를 만듭니다.
+  function customersQuery(withCount = false) {
+    let r = supabase
+      .from('customers')
+      .select(CUSTOMER_LIST_COLUMNS, withCount ? { count: 'exact' } : undefined)
+      .eq('is_active', true);
+    if (storeId && filter !== 'visitedStore' && filter !== 'oneStoreLeft') {
+      r = r.eq('signup_store_id', storeId);
+    }
+    if (marketingConsent != null) {
+      r = r.eq('marketing_consent', marketingConsent);
+    }
+    if (filter === 'newThisMonth') {
+      r = r.gte('created_at', `${getTodayKST().slice(0, 7)}-01`);
+    } else if (filter === 'missingBirthDate') {
+      r = r.is('birth_date', null);
+    } else if (filter === 'vip') {
+      r = r.gte('visit_count', getAllTiers().at(-1)?.minVisits ?? 30);
+    } else if (tierRange) {
+      r = r.gte('visit_count', tierRange.min);
+      if (tierRange.max != null) r = r.lt('visit_count', tierRange.max);
+    }
+    const trimmed = query.trim();
+    if (trimmed) {
+      // or() 필터 문법에서 구분자로 쓰이는 문자는 제거해 필터 인젝션을 방지합니다.
+      const safe = trimmed.replace(/[,()]/g, '');
+      r = r.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
+    }
+    return r;
+  }
+
+  let rows: CustomerRow[] = [];
+  let totalCount = 0;
+
+  if (idFilter) {
+    // 대상 ID를 200개씩 나눠 조건에 맞는 고객을 모두 모은 뒤 가입일 최신순으로 정렬합니다.
+    for (const ids of chunkIds(idFilter)) {
+      const { data, error } = await customersQuery().in('id', ids);
+      if (error) throw error;
+      rows.push(...((data || []) as CustomerRow[]));
+    }
+    rows.sort((x, y) => y.created_at.localeCompare(x.created_at));
+    totalCount = rows.length;
+  } else {
+    const orderColumn = filter === 'vip' ? 'visit_count' : 'created_at';
+    if (limit != null) {
+      const { data, error, count } = await customersQuery(true)
+        .order(orderColumn, { ascending: false })
+        .order('id', { ascending: true })
+        .limit(limit);
+      if (error) throw error;
+      rows = (data || []) as CustomerRow[];
+      totalCount = count ?? rows.length;
+    } else {
+      rows = await fetchAllRows<CustomerRow>((from, to) =>
+        customersQuery()
+          .order(orderColumn, { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+      totalCount = rows.length;
+    }
+  }
+
+  const { data: storeRows } = await supabase.from('stores').select('id, name');
+  const storeMap = new Map((storeRows || []).map((s) => [s.id, s.name]));
+
+  const visitMap = latestVisitMap ?? (await getLatestVisitDateMap(supabase, rows.map((c) => c.id)));
+
+  let result: CustomerListItem[] = rows.map((c) => ({
+    id: c.id,
+    customerNumber: c.customer_number,
+    name: c.name,
+    phone: c.phone,
+    visitCount: c.visit_count,
+    createdAt: c.created_at,
+    recentVisitDate: visitMap.get(c.id) ?? null,
+    marketingConsent: c.marketing_consent,
+    signupStoreName: storeMap.get(c.signup_store_id) || '-',
+    adminNote: c.admin_note,
+  }));
+
+  if (filter === 'longAbsent') {
+    result.sort((x, y) => (x.recentVisitDate || '').localeCompare(y.recentVisitDate || ''));
+  }
+
+  if (filter === 'vip' && result.length > 0) {
+    // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
+    // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
+    const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
+    const rewardMap = new Map<string, { issuedAt: string; status: string }>();
+    for (const ids of chunkIds(result.map((r) => r.id))) {
+      const { data: crs } = await supabase
+        .from('customer_rewards')
+        .select('customer_id, issued_at, status')
+        .eq('threshold_visits', vipMinVisits)
+        .not('reward_rule_id', 'is', null)
+        .in('customer_id', ids);
+      for (const cr of crs || []) {
+        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
+      }
+    }
+    for (const item of result) {
+      const rewardInfo = rewardMap.get(item.id);
+      item.vipAchievedAt = rewardInfo?.issuedAt || null;
+      item.giftUsed = rewardInfo?.status === 'used';
+    }
+    result.sort((x, y) => y.visitCount - x.visitCount);
+  }
+
+  if (filter === 'allStoresCompleted' && result.length > 0) {
+    const giftMap = new Map<string, { issued_at: string; status: string }>();
+    for (const ids of chunkIds(result.map((r) => r.id))) {
+      const { data: gifts } = await supabase
+        .from('customer_rewards')
+        .select('customer_id, issued_at, status')
+        .eq('source', 'all_stores')
+        .in('customer_id', ids);
+      for (const g of gifts || []) giftMap.set(g.customer_id, g);
+    }
+    for (const item of result) {
+      const gift = giftMap.get(item.id);
+      item.allStoresCompletedAt = gift?.issued_at ?? null;
+      item.allStoresGiftUsed = gift?.status === 'used';
+    }
+    result.sort((x, y) => (y.allStoresCompletedAt || '').localeCompare(x.allStoresCompletedAt || ''));
+  }
+
+  if (filter === 'oneStoreLeft' && allStoresInfo) {
+    const { stores, visitedByCustomer } = allStoresInfo;
+    for (const item of result) {
+      const visited = visitedByCustomer.get(item.id);
+      item.missingStoreName = stores.find((st) => !visited?.has(st.id))?.name ?? '-';
+    }
+    result.sort((x, y) => (y.recentVisitDate || '').localeCompare(x.recentVisitDate || ''));
+  }
+
+  if (limit != null) {
+    result = result.slice(0, limit);
+  }
+  return { items: result, totalCount };
+}
+
+/** 고객 목록 화면에 한 번에 보여주는 최대 인원 (엑셀 저장은 인원 제한 없이 전체) */
+const CUSTOMER_LIST_DISPLAY_LIMIT = 100;
+
+export interface CustomerListPage {
+  items: CustomerListItem[];
+  /** 조건에 맞는 전체 인원 (화면에는 최대 CUSTOMER_LIST_DISPLAY_LIMIT명만 표시) */
+  totalCount: number;
+}
+
+export async function getCustomerListPage(
+  query: string,
+  filter: CustomerListFilter = 'all',
+  longAbsentDays: number = DEFAULT_LONG_ABSENT_DAYS,
+  tierKey?: VisitTierKey,
+  storeId?: string | null,
+  marketingConsent?: boolean | null
+): Promise<ApiResponse<CustomerListPage>> {
+  try {
+    const admin = await getAdminSession();
+    if (!admin) {
+      return { success: false, error: '관리자 로그인이 필요합니다.' };
+    }
+    const supabase = createAdminClient();
+    const data = await buildCustomerList(
+      supabase,
+      { query, filter, longAbsentDays, tierKey, storeId, marketingConsent },
+      CUSTOMER_LIST_DISPLAY_LIMIT
+    );
+    return { success: true, data };
+  } catch (error) {
+    console.error('getCustomerListPage 오류:', error);
+    return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
+  }
+}
+
+/** 고객 검색 등 간단한 목록용 — 최대 100명 */
 export async function getCustomerList(
+  query: string,
+  filter: CustomerListFilter = 'all',
+  longAbsentDays: number = DEFAULT_LONG_ABSENT_DAYS,
+  tierKey?: VisitTierKey,
+  storeId?: string | null,
+  marketingConsent?: boolean | null
+): Promise<ApiResponse<CustomerListItem[]>> {
+  const result = await getCustomerListPage(query, filter, longAbsentDays, tierKey, storeId, marketingConsent);
+  return result.success && result.data
+    ? { success: true, data: result.data.items }
+    : { success: false, error: result.error };
+}
+
+/**
+ * 엑셀 저장용 — 조건에 맞는 고객 전체 (인원 제한 없음).
+ * 문자는 이 명단을 내려받아 알리고에서 직접 발송합니다.
+ */
+export async function exportCustomerList(
   query: string,
   filter: CustomerListFilter = 'all',
   longAbsentDays: number = DEFAULT_LONG_ABSENT_DAYS,
@@ -1292,230 +1710,16 @@ export async function getCustomerList(
     if (!admin) {
       return { success: false, error: '관리자 로그인이 필요합니다.' };
     }
-
     const supabase = createAdminClient();
-
-    // 최근 방문일은 모든 목록에서 공통으로 보여주므로 항상 먼저 구해둡니다.
-    const latestVisitMap = await getLatestVisitDateMap(supabase);
-
-    // 방문/선물/생일 기준 필터는 대상 고객 ID를 먼저 구한 뒤 customers 테이블에 적용합니다.
-    let idFilter: string[] | null = null;
-    // 세 매장 완주 관련 필터에서 목록 표시에 다시 쓰기 위해 보관합니다.
-    let allStoresInfo: AllStoresVisitInfo | null = null;
-
-    if (filter === 'todayVisits') {
-      const { data: visits } = await supabase
-        .from('visits')
-        .select('customer_id')
-        .eq('visit_date', getTodayKST())
-        .eq('is_cancelled', false);
-      idFilter = [...new Set((visits || []).map((v) => v.customer_id))];
-    } else if (filter === 'unclaimedRewards') {
-      const { data: rewards } = await supabase
-        .from('customer_rewards')
-        .select('customer_id')
-        .neq('status', 'used');
-      idFilter = [...new Set((rewards || []).map((r) => r.customer_id))];
-    } else if (filter === 'todayRewardsUsed') {
-      const { start, end } = getTodayKSTRange();
-      const { data: rewards } = await supabase
-        .from('customer_rewards')
-        .select('customer_id')
-        .eq('status', 'used')
-        .gte('used_at', start)
-        .lt('used_at', end);
-      idFilter = [...new Set((rewards || []).map((r) => r.customer_id))];
-    } else if (filter === 'longAbsent') {
-      const cutoff = subtractDaysFromDateString(getTodayKST(), longAbsentDays);
-      idFilter = [...latestVisitMap.entries()]
-        .filter(([, lastDate]) => lastDate < cutoff)
-        .map(([customerId]) => customerId);
-    } else if (filter === 'birthdayThisMonth') {
-      const currentMonth = getTodayKST().slice(5, 7);
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, birth_date')
-        .eq('is_active', true)
-        .not('birth_date', 'is', null);
-      idFilter = (customers || [])
-        .filter((c) => c.birth_date && c.birth_date.slice(5, 7) === currentMonth)
-        .map((c) => c.id);
-    } else if (filter === 'visitedStore') {
-      if (!storeId) {
-        idFilter = [];
-      } else {
-        const { data: visits } = await supabase
-          .from('visits')
-          .select('customer_id')
-          .eq('store_id', storeId)
-          .eq('is_cancelled', false);
-        idFilter = [...new Set((visits || []).map((v) => v.customer_id))];
-      }
-    } else if (filter === 'missingBirthDate') {
-      const { data: customersWithoutBirthDate } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('is_active', true)
-        .is('birth_date', null);
-      idFilter = (customersWithoutBirthDate || []).map((c) => c.id);
-    } else if (filter === 'tierUpThisMonth') {
-      const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
-      const tierUpThresholds = getAllTiers()
-        .filter((t) => t.minVisits > 1)
-        .map((t) => t.minVisits);
-      const { data: tierUpRewards } = await supabase
-        .from('customer_rewards')
-        .select('customer_id')
-        .in('threshold_visits', tierUpThresholds)
-        .not('reward_rule_id', 'is', null)
-        .gte('issued_at', monthStart);
-      idFilter = [...new Set((tierUpRewards || []).map((r) => r.customer_id))];
-    } else if (filter === 'allStoresCompleted' || filter === 'oneStoreLeft') {
-      const info = await getAllStoresVisitInfo(supabase);
-      allStoresInfo = info;
-      const totalStores = info.stores.length;
-      idFilter = [...info.visitedByCustomer.entries()]
-        .filter(([, visited]) => {
-          if (filter === 'allStoresCompleted') {
-            return totalStores > 0 && visited.size >= totalStores;
-          }
-          if (visited.size !== totalStores - 1) return false;
-          // "한 곳만 남은 고객"에서 매장을 고르면, 그 매장만 남은 고객으로 좁힙니다.
-          return !storeId || !visited.has(storeId);
-        })
-        .map(([customerId]) => customerId);
-    }
-
-    if (idFilter && idFilter.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    let request = supabase
-      .from('customers')
-      .select('id, customer_number, name, phone, visit_count, created_at, marketing_consent, signup_store_id, admin_note')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(idFilter ? 1000 : 100);
-
-    if (idFilter) {
-      request = request.in('id', idFilter);
-    }
-
-    if (storeId && filter !== 'visitedStore' && filter !== 'oneStoreLeft') {
-      request = request.eq('signup_store_id', storeId);
-    }
-
-    if (marketingConsent != null) {
-      request = request.eq('marketing_consent', marketingConsent);
-    }
-
-    if (filter === 'newThisMonth') {
-      const todayKST = getTodayKST();
-      const monthStart = `${todayKST.slice(0, 7)}-01`;
-      request = request.gte('created_at', monthStart);
-    } else if (filter === 'vip') {
-      const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
-      request = request.gte('visit_count', vipMinVisits);
-    } else if (filter === 'tier' && tierKey) {
-      const tiers = getAllTiers();
-      const index = tiers.findIndex((t) => t.key === tierKey);
-      if (index === -1) {
-        return { success: true, data: [] };
-      }
-      request = request.gte('visit_count', tiers[index].minVisits);
-      const next = tiers[index + 1];
-      if (next) {
-        request = request.lt('visit_count', next.minVisits);
-      }
-    }
-
-    const trimmed = query.trim();
-    if (trimmed) {
-      // or() 필터 문법에서 구분자로 쓰이는 문자는 제거해 필터 인젝션을 방지합니다.
-      const safe = trimmed.replace(/[,()]/g, '');
-      request = request.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
-    }
-
-    const { data, error } = await request;
-
-    if (error) {
-      return { success: false, error: '고객 목록 조회 중 오류가 발생했습니다.' };
-    }
-
-    const { data: storeRows } = await supabase.from('stores').select('id, name');
-    const storeMap = new Map((storeRows || []).map((s) => [s.id, s.name]));
-
-    const result: CustomerListItem[] = (data || []).map((c) => ({
-      id: c.id,
-      customerNumber: c.customer_number,
-      name: c.name,
-      phone: c.phone,
-      visitCount: c.visit_count,
-      createdAt: c.created_at,
-      recentVisitDate: latestVisitMap.get(c.id) ?? null,
-      marketingConsent: c.marketing_consent,
-      signupStoreName: storeMap.get(c.signup_store_id) || '-',
-      adminNote: c.admin_note,
-    }));
-
-    if (filter === 'longAbsent') {
-      result.sort((a, b) => (a.recentVisitDate || '').localeCompare(b.recentVisitDate || ''));
-    }
-
-    if (filter === 'vip' && result.length > 0) {
-      // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
-      // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
-      const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
-      const { data: crs } = await supabase
-        .from('customer_rewards')
-        .select('customer_id, issued_at, status')
-        .eq('threshold_visits', vipMinVisits)
-        .not('reward_rule_id', 'is', null)
-        .in('customer_id', result.map((r) => r.id));
-
-      const rewardMap = new Map<string, { issuedAt: string; status: string }>();
-      for (const cr of crs || []) {
-        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
-      }
-
-      for (const item of result) {
-        const rewardInfo = rewardMap.get(item.id);
-        item.vipAchievedAt = rewardInfo?.issuedAt || null;
-        item.giftUsed = rewardInfo?.status === 'used';
-      }
-
-      result.sort((a, b) => b.visitCount - a.visitCount);
-    }
-
-    if (filter === 'allStoresCompleted' && result.length > 0) {
-      const { data: gifts } = await supabase
-        .from('customer_rewards')
-        .select('customer_id, issued_at, status')
-        .eq('source', 'all_stores')
-        .in('customer_id', result.map((r) => r.id));
-
-      const giftMap = new Map((gifts || []).map((g) => [g.customer_id, g]));
-      for (const item of result) {
-        const gift = giftMap.get(item.id);
-        item.allStoresCompletedAt = gift?.issued_at ?? null;
-        item.allStoresGiftUsed = gift?.status === 'used';
-      }
-      result.sort((a, b) => (b.allStoresCompletedAt || '').localeCompare(a.allStoresCompletedAt || ''));
-    }
-
-    if (filter === 'oneStoreLeft' && allStoresInfo) {
-      const { stores, visitedByCustomer } = allStoresInfo;
-      for (const item of result) {
-        const visited = visitedByCustomer.get(item.id);
-        item.missingStoreName = stores.find((st) => !visited?.has(st.id))?.name ?? '-';
-      }
-      result.sort((a, b) => (b.recentVisitDate || '').localeCompare(a.recentVisitDate || ''));
-    }
-
-    return { success: true, data: result };
+    const { items } = await buildCustomerList(
+      supabase,
+      { query, filter, longAbsentDays, tierKey, storeId, marketingConsent },
+      null
+    );
+    return { success: true, data: items };
   } catch (error) {
-    console.error('getCustomerList 오류:', error);
-    return { success: false, error: '서버 오류가 발생했습니다.' };
+    console.error('exportCustomerList 오류:', error);
+    return { success: false, error: '엑셀 명단을 만드는 중 오류가 발생했습니다.' };
   }
 }
 
@@ -3191,11 +3395,11 @@ export async function getLongAbsentBuckets(storeId?: string | null): Promise<Api
     }
 
     const supabase = createAdminClient();
-    let activeCustomersQuery = supabase.from('customers').select('id').eq('is_active', true);
-    if (storeId) {
-      activeCustomersQuery = activeCustomersQuery.eq('signup_store_id', storeId);
-    }
-    const { data: activeCustomers } = await activeCustomersQuery;
+    const activeCustomers = await fetchAllRows<{ id: string }>((from, to) => {
+      let q = supabase.from('customers').select('id').eq('is_active', true);
+      if (storeId) q = q.eq('signup_store_id', storeId);
+      return q.order('id', { ascending: true }).range(from, to);
+    });
     const activeIds = new Set((activeCustomers || []).map((c) => c.id));
     const latestVisitMap = await getLatestVisitDateMap(supabase);
 
@@ -3269,19 +3473,24 @@ export async function getLongAbsentCustomers(
       return { success: true, data: [] };
     }
 
-    let customersQuery = supabase
-      .from('customers')
-      .select('id, name, visit_count')
-      .eq('is_active', true)
-      .in('id', matchingIds);
-    if (storeId) {
-      customersQuery = customersQuery.eq('signup_store_id', storeId);
+    const customers: { id: string; name: string; visit_count: number }[] = [];
+    const rewards: { customer_id: string; status: string }[] = [];
+    for (const ids of chunkIds(matchingIds)) {
+      let customersQuery = supabase
+        .from('customers')
+        .select('id, name, visit_count')
+        .eq('is_active', true)
+        .in('id', ids);
+      if (storeId) {
+        customersQuery = customersQuery.eq('signup_store_id', storeId);
+      }
+      const [{ data: customerRows }, { data: rewardRows }] = await Promise.all([
+        customersQuery,
+        supabase.from('customer_rewards').select('customer_id, status').in('customer_id', ids).neq('status', 'used'),
+      ]);
+      customers.push(...(customerRows || []));
+      rewards.push(...(rewardRows || []));
     }
-
-    const [{ data: customers }, { data: rewards }] = await Promise.all([
-      customersQuery,
-      supabase.from('customer_rewards').select('customer_id, status').in('customer_id', matchingIds).neq('status', 'used'),
-    ]);
 
     const availableRewardsMap = new Map<string, number>();
     for (const r of rewards || []) {
@@ -3708,25 +3917,56 @@ export async function getBackupData(): Promise<ApiResponse<BackupData>> {
 
     const supabase = createAdminClient();
 
-    const [{ data: customers, error: custError }, { data: rewards, error: rewardError }, { data: stores }] =
-      await Promise.all([
-        supabase
-          .from('customers')
-          .select(
-            'id, customer_number, name, phone, birth_date, visit_count, marketing_consent, signup_store_id, referral_source, is_active, created_at'
-          )
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('customer_rewards')
-          .select('customer_id, amount, threshold_visits, source, status, issued_at, expires_at, used_at')
-          .not('reward_rule_id', 'is', null)
-          .order('issued_at', { ascending: true }),
-        supabase.from('stores').select('id, name'),
+    // 고객·할인권이 1,000건을 넘어도 백업에서 빠지지 않도록 끝까지 나눠 읽습니다.
+    let customers;
+    let rewards;
+    try {
+      [customers, rewards] = await Promise.all([
+        fetchAllRows<{
+          id: string;
+          customer_number: string;
+          name: string;
+          phone: string;
+          birth_date: string | null;
+          visit_count: number;
+          marketing_consent: boolean;
+          signup_store_id: string | null;
+          referral_source: string | null;
+          is_active: boolean;
+          created_at: string;
+        }>((from, to) =>
+          supabase
+            .from('customers')
+            .select(
+              'id, customer_number, name, phone, birth_date, visit_count, marketing_consent, signup_store_id, referral_source, is_active, created_at'
+            )
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllRows<{
+          customer_id: string;
+          amount: number;
+          threshold_visits: number | null;
+          source: string;
+          status: RewardStatus;
+          issued_at: string;
+          expires_at: string | null;
+          used_at: string | null;
+        }>((from, to) =>
+          supabase
+            .from('customer_rewards')
+            .select('customer_id, amount, threshold_visits, source, status, issued_at, expires_at, used_at')
+            .not('reward_rule_id', 'is', null)
+            .order('issued_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
       ]);
-
-    if (custError || rewardError) {
+    } catch {
       return { success: false, error: '백업 데이터 조회 중 오류가 발생했습니다.' };
     }
+    const { data: stores } = await supabase.from('stores').select('id, name');
 
     const storeMap = new Map((stores || []).map((s) => [s.id, s.name]));
     const customerMap = new Map((customers || []).map((c) => [c.id, c]));
