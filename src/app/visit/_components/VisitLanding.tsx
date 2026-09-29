@@ -74,11 +74,10 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
           </p>
         )}
 
-        {/* 세 매장 안내 — 여권 하나로 세 매장 방문이 함께 쌓인다는 사실만 짧게 보여줍니다 */}
+        {/* 세 매장 안내 — 세 매장 방문기록이 한 여권에 함께 쌓인다는 사실만 짧게 보여줍니다 */}
         <section className="bg-white rounded-2xl border-2 border-[#E0DCD0] px-4 py-4 space-y-3">
           <p className="text-[17px] font-bold text-[#2C2C2C] leading-snug">
-            여권 하나로<br />
-            세 매장 방문이 함께 쌓여요
+            세 매장 방문기록이 함께 쌓여요
           </p>
           <ul className="space-y-2">
             {STORE_NAMES.map((name) => {
