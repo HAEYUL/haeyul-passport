@@ -44,7 +44,7 @@ export default function PrivacyPolicyPage() {
             <p className="mb-1">수집한 개인정보는 다음의 목적으로 이용합니다.</p>
             <ul className="space-y-1 list-disc list-inside">
               <li>방문 기록 및 회원 등급 관리</li>
-              <li>방문 할인권 및 생일 혜택 제공</li>
+              <li>본인 확인 및 방문 할인권 제공</li>
               <li>고객 서비스 운영</li>
             </ul>
           </div>
