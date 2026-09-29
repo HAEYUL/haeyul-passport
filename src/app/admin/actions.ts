@@ -5,7 +5,6 @@ import {
   getTodayKST,
   getTodayKSTRange,
   subtractDaysFromDateString,
-  toKSTDateString,
   getDateBuckets,
   daysBetweenDateStrings,
   normalizePhone,
@@ -30,17 +29,25 @@ import type { ApiResponse, Customer, RewardStatus, RewardSource, Store, Location
  * makeQuery는 매번 새 쿼리를 만들어야 하며, 페이지가 어긋나지 않도록 고유한 정렬(order)을 포함해야 합니다.
  */
 const DB_PAGE_SIZE = 1000;
+/** 동시에 보내는 요청 수 (너무 많으면 DB에 부담, 너무 적으면 느림) */
+const PARALLEL_REQUESTS = 6;
 async function fetchAllRows<T>(
   makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
 ): Promise<T[]> {
   const all: T[] = [];
-  for (let from = 0; ; from += DB_PAGE_SIZE) {
-    const { data, error } = await makeQuery(from, from + DB_PAGE_SIZE - 1);
-    if (error) throw error;
-    all.push(...(data || []));
-    if (!data || data.length < DB_PAGE_SIZE) break;
+  for (let batchStart = 0; ; batchStart += DB_PAGE_SIZE * PARALLEL_REQUESTS) {
+    const pages = await Promise.all(
+      Array.from({ length: PARALLEL_REQUESTS }, (_, i) => {
+        const from = batchStart + i * DB_PAGE_SIZE;
+        return makeQuery(from, from + DB_PAGE_SIZE - 1);
+      })
+    );
+    for (const { data, error } of pages) {
+      if (error) throw error;
+      all.push(...(data || []));
+      if (!data || data.length < DB_PAGE_SIZE) return all;
+    }
   }
-  return all;
 }
 
 /**
@@ -48,58 +55,55 @@ async function fetchAllRows<T>(
  * 수천 개를 한 번에 넣으면 요청 주소가 너무 길어져 실패하므로 나눠서 조회합니다.
  */
 const ID_CHUNK_SIZE = 200;
-function chunkIds(ids: string[]): string[][] {
+function chunkIds(ids: string[], size: number = ID_CHUNK_SIZE): string[][] {
   const chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += ID_CHUNK_SIZE) {
-    chunks.push(ids.slice(i, i + ID_CHUNK_SIZE));
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
   }
   return chunks;
 }
 
 /**
- * "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다.
- * customerIds를 주면 그 고객들만, 없으면 전체 고객을 대상으로 합니다.
+ * id 목록을 나눠(기본 200개씩) 조회한 결과를 합칩니다. (id가 많아 요청 주소가 길어지는 문제 방지)
+ * 한 id당 여러 행이 나올 수 있는 조회는 chunkSize를 줄여 한 번에 1,000행을 넘지 않게 합니다.
+ */
+async function fetchByIdChunks<T>(
+  ids: string[],
+  makeQuery: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  chunkSize: number = ID_CHUNK_SIZE
+): Promise<T[]> {
+  const all: T[] = [];
+  const chunks = chunkIds([...new Set(ids)], chunkSize);
+  for (let i = 0; i < chunks.length; i += PARALLEL_REQUESTS) {
+    const results = await Promise.all(chunks.slice(i, i + PARALLEL_REQUESTS).map((chunk) => makeQuery(chunk)));
+    for (const { data, error } of results) {
+      if (error) throw error;
+      all.push(...(data || []));
+    }
+  }
+  return all;
+}
+
+/**
+ * "customer_id -> 최근 방문일(visit_date)" 맵을 만듭니다. (DB 함수 admin_customer_last_visits에서 계산)
+ * - customerIds: 이 고객들만 (없으면 전체)
+ * - before / onOrAfter: 최근 방문일이 이 범위에 드는 고객만
  * 대시보드의 장기 미방문 집계와 고객 목록에서 함께 사용합니다.
  */
 async function getLatestVisitDateMap(
   supabase: ReturnType<typeof createAdminClient>,
-  customerIds?: string[]
+  customerIds?: string[],
+  range: { before?: string; onOrAfter?: string } = {}
 ): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  const collect = (rows: { customer_id: string; visit_date: string }[]) => {
-    for (const v of rows) {
-      const prev = map.get(v.customer_id);
-      if (!prev || v.visit_date > prev) map.set(v.customer_id, v.visit_date);
-    }
-  };
-
-  if (customerIds) {
-    for (const ids of chunkIds(customerIds)) {
-      collect(
-        await fetchAllRows<{ customer_id: string; visit_date: string }>((from, to) =>
-          supabase
-            .from('visits')
-            .select('customer_id, visit_date')
-            .eq('is_cancelled', false)
-            .in('customer_id', ids)
-            .order('id', { ascending: true })
-            .range(from, to)
-        )
-      );
-    }
-  } else {
-    collect(
-      await fetchAllRows<{ customer_id: string; visit_date: string }>((from, to) =>
-        supabase
-          .from('visits')
-          .select('customer_id, visit_date')
-          .eq('is_cancelled', false)
-          .order('id', { ascending: true })
-          .range(from, to)
-      )
-    );
-  }
-  return map;
+  if (customerIds && customerIds.length === 0) return new Map();
+  // 결과를 JSON 하나로 받아 1,000행 제한 없이 한 번에 가져옵니다.
+  const { data, error } = await supabase.rpc('admin_customer_last_visits', {
+    p_customer_ids: customerIds ?? null,
+    p_before: range.before ?? null,
+    p_on_or_after: range.onOrAfter ?? null,
+  });
+  if (error) throw error;
+  return new Map(Object.entries((data as Record<string, string> | null) ?? {}));
 }
 
 interface AllStoresVisitInfo {
@@ -109,48 +113,42 @@ interface AllStoresVisitInfo {
   visitedByCustomer: Map<string, Set<string>>;
 }
 
+/** 세 매장 완주 대상 매장 (ALL_STORES_CODES 순서) */
+async function getAllStoresTargets(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<{ id: string; name: string }[]> {
+  const { data: storeRows } = await supabase
+    .from('stores')
+    .select('id, name, store_code')
+    .in('store_code', [...ALL_STORES_CODES]);
+  return ALL_STORES_CODES.flatMap((code) => {
+    const row = (storeRows || []).find((st) => st.store_code === code);
+    return row ? [{ id: row.id, name: row.name }] : [];
+  });
+}
+
 /**
- * 세 매장 완주 여부 판단용 — 고객별로 다녀간 대상 매장을 모읍니다.
+ * 세 매장 완주 여부 판단용 — 고객별로 다녀간 대상 매장을 모읍니다. (DB 함수 admin_customer_store_sets)
  * 발급·회수 기준(DB 트리거 sync_all_stores_coupon)과 같은 조건(취소되지 않은 방문)을 씁니다.
- * 방문 기록이 많아도 빠짐없이 읽도록 1,000건씩 나눠 조회합니다.
  */
 async function getAllStoresVisitInfo(
   supabase: ReturnType<typeof createAdminClient>,
   customerIds?: string[]
 ): Promise<AllStoresVisitInfo> {
-  const { data: storeRows } = await supabase
-    .from('stores')
-    .select('id, name, store_code')
-    .in('store_code', [...ALL_STORES_CODES]);
-  const stores = ALL_STORES_CODES.flatMap((code) => {
-    const row = (storeRows || []).find((st) => st.store_code === code);
-    return row ? [{ id: row.id, name: row.name }] : [];
-  });
-
+  const stores = await getAllStoresTargets(supabase);
   const visitedByCustomer = new Map<string, Set<string>>();
   if (stores.length === 0 || (customerIds && customerIds.length === 0)) {
     return { stores, visitedByCustomer };
   }
 
-  const PAGE_SIZE = 1000;
-  for (let from = 0; ; from += PAGE_SIZE) {
-    let q = supabase
-      .from('visits')
-      .select('customer_id, store_id')
-      .eq('is_cancelled', false)
-      .in('store_id', stores.map((st) => st.id))
-      .order('id', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-    if (customerIds) {
-      q = q.in('customer_id', customerIds);
-    }
-    const { data: rows } = await q;
-    for (const v of rows || []) {
-      const set = visitedByCustomer.get(v.customer_id) || new Set<string>();
-      set.add(v.store_id);
-      visitedByCustomer.set(v.customer_id, set);
-    }
-    if (!rows || rows.length < PAGE_SIZE) break;
+  // {고객ID: [매장 번호(1부터)]} JSON 하나로 받아 1,000행 제한 없이 한 번에 가져옵니다.
+  const { data, error } = await supabase.rpc('admin_customer_store_sets', {
+    p_store_ids: stores.map((st) => st.id),
+    p_customer_ids: customerIds ?? null,
+  });
+  if (error) throw error;
+  for (const [customerId, positions] of Object.entries((data as Record<string, number[]> | null) ?? {})) {
+    visitedByCustomer.set(customerId, new Set(positions.map((pos) => stores[pos - 1].id)));
   }
 
   return { stores, visitedByCustomer };
@@ -296,7 +294,8 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
 
     const supabase = createAdminClient();
     const todayKST = getTodayKST();
-    const monthStart = `${todayKST.slice(0, 7)}-01`;
+    // 이번 달 1일 0시(한국시간). 날짜만 쓰면 UTC 0시(한국 오전 9시)로 해석돼 1일 새벽 기록이 빠집니다.
+    const monthStart = `${todayKST.slice(0, 7)}-01T00:00:00+09:00`;
     const { start: todayStart, end: todayEnd } = getTodayKSTRange();
     const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
 
@@ -360,11 +359,10 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       { count: newCustomersThisMonth },
       { count: todayRewardsUsed },
       { count: vipCount },
-      activeCustomers,
-      latestVisitMap,
+      { data: absentRows, error: absentError },
       { count: monthlyIssuedRewards },
       { count: monthlyUsedRewards },
-      allStoresInfo,
+      allStoresTargets,
     ] = await Promise.all([
       customersBase,
       visitsBase,
@@ -372,34 +370,27 @@ export async function getDashboardStats(storeId?: string | null): Promise<ApiRes
       newCustomersBase,
       todayRewardsUsedBase,
       vipCountBase,
-      fetchAllRows<{ id: string }>((from, to) => {
-        let q = supabase.from('customers').select('id').eq('is_active', true);
-        if (storeId) q = q.eq('signup_store_id', storeId);
-        return q.order('id', { ascending: true }).range(from, to);
-      }),
-      getLatestVisitDateMap(supabase),
+      // 장기 미방문(기본 30일 이상) = 30~59 + 60~89 + 90일 이상 구간 합계
+      supabase.rpc('admin_long_absent_counts', { p_today: todayKST, p_store_id: storeId ?? null }),
       monthlyIssuedBase,
       monthlyUsedBase,
-      getAllStoresVisitInfo(supabase),
+      getAllStoresTargets(supabase),
     ]);
+    if (absentError) throw absentError;
+    const absent = (absentRows as { from30to59: number; from60to89: number; from90plus: number }[] | null)?.[0];
+    // 구간이 30일부터 시작하므로 DEFAULT_LONG_ABSENT_DAYS(30일) 이상 미방문 인원과 같습니다.
+    const longAbsentCount = absent
+      ? Number(absent.from30to59) + Number(absent.from60to89) + Number(absent.from90plus)
+      : 0;
 
-    const activeIds = new Set((activeCustomers || []).map((c) => c.id));
-    const cutoff = subtractDaysFromDateString(todayKST, DEFAULT_LONG_ABSENT_DAYS);
-    let longAbsentCount = 0;
-    for (const [customerId, lastVisitDate] of latestVisitMap) {
-      if (activeIds.has(customerId) && lastVisitDate < cutoff) {
-        longAbsentCount += 1;
-      }
-    }
-
-    let allStoresCompletedCount = 0;
-    let oneStoreLeftCount = 0;
-    const totalStores = allStoresInfo.stores.length;
-    for (const [customerId, visited] of allStoresInfo.visitedByCustomer) {
-      if (!activeIds.has(customerId) || totalStores === 0) continue;
-      if (visited.size >= totalStores) allStoresCompletedCount += 1;
-      else if (visited.size === totalStores - 1) oneStoreLeftCount += 1;
-    }
+    const { data: allStoresRows, error: allStoresError } = await supabase.rpc('admin_all_stores_counts', {
+      p_store_ids: allStoresTargets.map((st) => st.id),
+      p_store_id: storeId ?? null,
+    });
+    if (allStoresError) throw allStoresError;
+    const allStoresCounts = (allStoresRows as { completed: number; one_left: number }[] | null)?.[0];
+    const allStoresCompletedCount = Number(allStoresCounts?.completed ?? 0);
+    const oneStoreLeftCount = Number(allStoresCounts?.one_left ?? 0);
 
     return {
       success: true,
@@ -468,15 +459,10 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       return { success: false, error: '할인권 규칙 조회 중 오류가 발생했습니다.' };
     }
 
-    let crQuery = supabase
-      .from('customer_rewards')
-      .select('threshold_visits, status')
-      .eq('source', 'visit')
-      .not('reward_rule_id', 'is', null);
-    if (storeId) {
-      crQuery = crQuery.eq('issued_store_id', storeId);
-    }
-    const { data: customerRewards, error: crError } = await crQuery;
+    // 달성 횟수·상태별 건수만 DB에서 받아옵니다 (admin_reward_threshold_counts)
+    const { data: customerRewards, error: crError } = await supabase.rpc('admin_reward_threshold_counts', {
+      p_store_id: storeId ?? null,
+    });
 
     if (crError) {
       return { success: false, error: '할인권 발급 현황 조회 중 오류가 발생했습니다.' };
@@ -514,15 +500,16 @@ export async function getRewardStats(storeId?: string | null): Promise<ApiRespon
       );
     }
 
-    for (const cr of customerRewards || []) {
+    for (const cr of (customerRewards || []) as { threshold_visits: number | null; status: string; cnt: number }[]) {
       const rule = findMatchingRule(cr.threshold_visits);
       const stat = rule ? statsMap.get(rule.id) : undefined;
       if (!stat) continue;
-      stat.totalIssued += 1;
+      const cnt = Number(cr.cnt);
+      stat.totalIssued += cnt;
       if (cr.status === 'used') {
-        stat.totalUsed += 1;
+        stat.totalUsed += cnt;
       } else {
-        stat.totalUnused += 1;
+        stat.totalUnused += cnt;
       }
     }
 
@@ -580,19 +567,9 @@ export async function getRewardAmountByStore(
     const fromISO = `${dateFrom}T00:00:00+09:00`;
     const toISO = `${dateTo}T23:59:59+09:00`;
 
-    const issuedQuery = supabase
-      .from('customer_rewards')
-      .select('amount, source, issued_store_id')
-      .not('reward_rule_id', 'is', null)
-      .gte('issued_at', fromISO)
-      .lte('issued_at', toISO);
-    const usedQuery = supabase
-      .from('customer_rewards')
-      .select('amount, source, used_store_id')
-      .eq('status', 'used')
-      .not('reward_rule_id', 'is', null)
-      .gte('used_at', fromISO)
-      .lte('used_at', toISO);
+    // 매장·종류(·금액)별 합계만 DB에서 받아옵니다
+    const issuedQuery = supabase.rpc('admin_reward_issued_summary', { p_from: fromISO, p_to: toISO });
+    const usedQuery = supabase.rpc('admin_reward_used_summary', { p_from: fromISO, p_to: toISO, p_store_id: null });
 
     const [{ data: issuedRows, error: issuedError }, { data: usedRows, error: usedError }] = await Promise.all([
       issuedQuery,
@@ -606,36 +583,32 @@ export async function getRewardAmountByStore(
     const issuedMap = new Map<string, { amount: number; count: number }>();
     // 생일·컴백 쿠폰은 특정 매장 없이 발급되므로 source별로 따로 집계합니다.
     const noStoreIssuedMap = new Map<string, { amount: number; count: number }>();
-    for (const r of issuedRows || []) {
-      if (!r.issued_store_id) {
-        const key = r.source ?? 'birthday';
-        const cur = noStoreIssuedMap.get(key) || { amount: 0, count: 0 };
-        cur.amount += r.amount ?? 0;
-        cur.count += 1;
-        noStoreIssuedMap.set(key, cur);
-        continue;
-      }
-      const cur = issuedMap.get(r.issued_store_id) || { amount: 0, count: 0 };
-      cur.amount += r.amount ?? 0;
-      cur.count += 1;
-      issuedMap.set(r.issued_store_id, cur);
+    type IssuedRow = { issued_store_id: string | null; source: string | null; amount_sum: number; cnt: number };
+    for (const r of (issuedRows || []) as IssuedRow[]) {
+      const target = r.issued_store_id ? issuedMap : noStoreIssuedMap;
+      const key = r.issued_store_id ?? r.source ?? 'birthday';
+      const cur = target.get(key) || { amount: 0, count: 0 };
+      cur.amount += Number(r.amount_sum);
+      cur.count += Number(r.cnt);
+      target.set(key, cur);
     }
 
     const usedMap = new Map<string, { amount: number; count: number }>();
     const usedBreakdownMap = new Map<string, Map<string, RewardAmountBreakdownItem>>();
-    for (const r of usedRows || []) {
-      if (!r.used_store_id) continue;
+    type UsedRow = { used_store_id: string; amount: number; source: string | null; cnt: number };
+    for (const r of (usedRows || []) as UsedRow[]) {
+      const amount = Number(r.amount);
+      const cnt = Number(r.cnt);
       const cur = usedMap.get(r.used_store_id) || { amount: 0, count: 0 };
-      cur.amount += r.amount ?? 0;
-      cur.count += 1;
+      cur.amount += amount * cnt;
+      cur.count += cnt;
       usedMap.set(r.used_store_id, cur);
 
-      const amount = r.amount ?? 0;
       const source = (r.source as RewardSource) ?? 'visit';
       const breakdownKey = `${amount}_${source}`;
       const storeBreakdown = usedBreakdownMap.get(r.used_store_id) || new Map();
       const item = storeBreakdown.get(breakdownKey) || { amount, source, count: 0 };
-      item.count += 1;
+      item.count += cnt;
       storeBreakdown.set(breakdownKey, item);
       usedBreakdownMap.set(r.used_store_id, storeBreakdown);
     }
@@ -724,20 +697,12 @@ export async function getRewardUsageByPeriod(
     const fromISO = `${dateFrom}T00:00:00+09:00`;
     const toISO = `${dateTo}T23:59:59.999+09:00`;
 
-    let query = supabase
-      .from('customer_rewards')
-      .select('amount, used_store_id')
-      .eq('status', 'used')
-      .not('reward_rule_id', 'is', null)
-      .not('used_store_id', 'is', null)
-      .gte('used_at', fromISO)
-      .lte('used_at', toISO);
-
-    if (storeId) {
-      query = query.eq('used_store_id', storeId);
-    }
-
-    const { data: usedRows, error: usedError } = await query;
+    // 매장·금액별 사용 건수만 DB에서 받아옵니다 (종류 구분 없이 금액 기준으로 합산)
+    const { data: usedRows, error: usedError } = await supabase.rpc('admin_reward_used_summary', {
+      p_from: fromISO,
+      p_to: toISO,
+      p_store_id: storeId ?? null,
+    });
 
     if (usedError) {
       return { success: false, error: '집계 중 오류가 발생했습니다.' };
@@ -745,12 +710,11 @@ export async function getRewardUsageByPeriod(
 
     const byStoreAmount = new Map<string, Map<number, number>>();
     const amountSet = new Set<number>();
-    for (const r of usedRows || []) {
-      if (!r.used_store_id) continue;
-      const amount = r.amount ?? 0;
+    for (const r of (usedRows || []) as { used_store_id: string; amount: number; cnt: number }[]) {
+      const amount = Number(r.amount);
       amountSet.add(amount);
       const storeMap = byStoreAmount.get(r.used_store_id) || new Map<number, number>();
-      storeMap.set(amount, (storeMap.get(amount) || 0) + 1);
+      storeMap.set(amount, (storeMap.get(amount) || 0) + Number(r.cnt));
       byStoreAmount.set(r.used_store_id, storeMap);
     }
 
@@ -865,8 +829,10 @@ export async function getRewardCustomerList({
       ]),
     ];
 
-    const [{ data: customers }, { data: stores }] = await Promise.all([
-      supabase.from('customers').select('id, name, customer_number, phone').in('id', customerIds),
+    const [customers, { data: stores }] = await Promise.all([
+      fetchByIdChunks<{ id: string; name: string; customer_number: string; phone: string }>(customerIds, (ids) =>
+        supabase.from('customers').select('id, name, customer_number, phone').in('id', ids)
+      ),
       supabase.from('stores').select('id, name').in('id', storeIds),
     ]);
 
@@ -929,8 +895,10 @@ async function fetchRewardUsage(
     ]),
   ];
 
-  const [{ data: customers }, { data: stores }] = await Promise.all([
-    supabase.from('customers').select('id, name, customer_number').in('id', customerIds),
+  const [customers, { data: stores }] = await Promise.all([
+    fetchByIdChunks<{ id: string; name: string; customer_number: string }>(customerIds, (ids) =>
+      supabase.from('customers').select('id, name, customer_number').in('id', ids)
+    ),
     supabase.from('stores').select('id, name').in('id', storeIds),
   ]);
 
@@ -1394,16 +1362,9 @@ async function buildCustomerList(
       )
     );
   } else if (filter === 'unclaimedRewards') {
-    idFilter = uniqueIds(
-      await fetchAllRows<{ customer_id: string }>((from, to) =>
-        supabase
-          .from('customer_rewards')
-          .select('customer_id')
-          .neq('status', 'used')
-          .order('id', { ascending: true })
-          .range(from, to)
-      )
-    );
+    const { data, error } = await supabase.rpc('admin_customers_with_unused_rewards');
+    if (error) throw error;
+    idFilter = (data as string[] | null) ?? [];
   } else if (filter === 'todayRewardsUsed') {
     const { start, end } = getTodayKSTRange();
     idFilter = uniqueIds(
@@ -1419,11 +1380,9 @@ async function buildCustomerList(
       )
     );
   } else if (filter === 'longAbsent') {
-    latestVisitMap = await getLatestVisitDateMap(supabase);
     const cutoff = subtractDaysFromDateString(getTodayKST(), longAbsentDays);
-    idFilter = [...latestVisitMap.entries()]
-      .filter(([, lastDate]) => lastDate < cutoff)
-      .map(([customerId]) => customerId);
+    latestVisitMap = await getLatestVisitDateMap(supabase, undefined, { before: cutoff });
+    idFilter = [...latestVisitMap.keys()];
   } else if (filter === 'birthdayThisMonth') {
     const currentMonth = getTodayKST().slice(5, 7);
     const customers = await fetchAllRows<{ id: string; birth_date: string | null }>((from, to) =>
@@ -1442,17 +1401,13 @@ async function buildCustomerList(
     if (!storeId) {
       idFilter = [];
     } else {
-      idFilter = uniqueIds(
-        await fetchAllRows<{ customer_id: string }>((from, to) =>
-          supabase
-            .from('visits')
-            .select('customer_id')
-            .eq('store_id', storeId)
-            .eq('is_cancelled', false)
-            .order('id', { ascending: true })
-            .range(from, to)
-        )
-      );
+      // 그 매장을 한 번이라도 방문한 고객 (DB에서 고객별로 묶어서 받아옵니다)
+      const { data, error } = await supabase.rpc('admin_customer_store_sets', {
+        p_store_ids: [storeId],
+        p_customer_ids: null,
+      });
+      if (error) throw error;
+      idFilter = Object.keys((data as Record<string, number[]> | null) ?? {});
     }
   } else if (filter === 'tierUpThisMonth') {
     const monthStart = `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`;
@@ -1513,7 +1468,7 @@ async function buildCustomerList(
       r = r.eq('marketing_consent', marketingConsent);
     }
     if (filter === 'newThisMonth') {
-      r = r.gte('created_at', `${getTodayKST().slice(0, 7)}-01`);
+      r = r.gte('created_at', `${getTodayKST().slice(0, 7)}-01T00:00:00+09:00`);
     } else if (filter === 'missingBirthDate') {
       r = r.is('birth_date', null);
     } else if (filter === 'vip') {
@@ -1536,11 +1491,7 @@ async function buildCustomerList(
 
   if (idFilter) {
     // 대상 ID를 200개씩 나눠 조건에 맞는 고객을 모두 모은 뒤 가입일 최신순으로 정렬합니다.
-    for (const ids of chunkIds(idFilter)) {
-      const { data, error } = await customersQuery().in('id', ids);
-      if (error) throw error;
-      rows.push(...((data || []) as CustomerRow[]));
-    }
+    rows = (await fetchByIdChunks(idFilter, (ids) => customersQuery().in('id', ids))) as CustomerRow[];
     rows.sort((x, y) => y.created_at.localeCompare(x.created_at));
     totalCount = rows.length;
   } else {
@@ -1567,7 +1518,10 @@ async function buildCustomerList(
   const { data: storeRows } = await supabase.from('stores').select('id, name');
   const storeMap = new Map((storeRows || []).map((s) => [s.id, s.name]));
 
-  const visitMap = latestVisitMap ?? (await getLatestVisitDateMap(supabase, rows.map((c) => c.id)));
+  // 고객이 많을 때는 id 목록을 보내는 대신(요청이 너무 커짐) 전체 최근 방문일을 한 번에 받습니다.
+  const visitMap =
+    latestVisitMap ??
+    (await getLatestVisitDateMap(supabase, rows.length <= 1000 ? rows.map((c) => c.id) : undefined));
 
   let result: CustomerListItem[] = rows.map((c) => ({
     id: c.id,
@@ -1591,16 +1545,18 @@ async function buildCustomerList(
     // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
     const vipMinVisits = getAllTiers().at(-1)?.minVisits ?? 30;
     const rewardMap = new Map<string, { issuedAt: string; status: string }>();
-    for (const ids of chunkIds(result.map((r) => r.id))) {
-      const { data: crs } = await supabase
-        .from('customer_rewards')
-        .select('customer_id, issued_at, status')
-        .eq('threshold_visits', vipMinVisits)
-        .not('reward_rule_id', 'is', null)
-        .in('customer_id', ids);
-      for (const cr of crs || []) {
-        rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
-      }
+    const crs = await fetchByIdChunks<{ customer_id: string; issued_at: string; status: string }>(
+      result.map((r) => r.id),
+      (ids) =>
+        supabase
+          .from('customer_rewards')
+          .select('customer_id, issued_at, status')
+          .eq('threshold_visits', vipMinVisits)
+          .not('reward_rule_id', 'is', null)
+          .in('customer_id', ids)
+    );
+    for (const cr of crs) {
+      rewardMap.set(cr.customer_id, { issuedAt: cr.issued_at, status: cr.status });
     }
     for (const item of result) {
       const rewardInfo = rewardMap.get(item.id);
@@ -1611,15 +1567,16 @@ async function buildCustomerList(
   }
 
   if (filter === 'allStoresCompleted' && result.length > 0) {
-    const giftMap = new Map<string, { issued_at: string; status: string }>();
-    for (const ids of chunkIds(result.map((r) => r.id))) {
-      const { data: gifts } = await supabase
-        .from('customer_rewards')
-        .select('customer_id, issued_at, status')
-        .eq('source', 'all_stores')
-        .in('customer_id', ids);
-      for (const g of gifts || []) giftMap.set(g.customer_id, g);
-    }
+    const gifts = await fetchByIdChunks<{ customer_id: string; issued_at: string; status: string }>(
+      result.map((r) => r.id),
+      (ids) =>
+        supabase
+          .from('customer_rewards')
+          .select('customer_id, issued_at, status')
+          .eq('source', 'all_stores')
+          .in('customer_id', ids)
+    );
+    const giftMap = new Map(gifts.map((g) => [g.customer_id, g]));
     for (const item of result) {
       const gift = giftMap.get(item.id);
       item.allStoresCompletedAt = gift?.issued_at ?? null;
@@ -1864,10 +1821,13 @@ async function fetchVisitRecords(
   const trimmed = (opts.query || '').trim();
   if (trimmed) {
     const safe = trimmed.replace(/[,()]/g, '');
+    // 검색어에 맞는 고객이 아주 많으면(예: "010") 앞 200명까지만 방문 기록을 찾습니다.
     const { data: matches } = await supabase
       .from('customers')
       .select('id')
-      .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`);
+      .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`)
+      .order('created_at', { ascending: false })
+      .limit(ID_CHUNK_SIZE);
     idFilter = (matches || []).map((m) => m.id);
     if (idFilter.length === 0) return [];
   }
@@ -1901,8 +1861,11 @@ async function fetchVisitRecords(
   }
 
   const customerIds = [...new Set(visits.map((v) => v.customer_id))];
-  const [{ data: customers }, { data: stores }] = await Promise.all([
-    supabase.from('customers').select('id, name, customer_number, phone, visit_count').in('id', customerIds),
+  const [customers, { data: stores }] = await Promise.all([
+    fetchByIdChunks<{ id: string; name: string; customer_number: string; phone: string; visit_count: number }>(
+      customerIds,
+      (ids) => supabase.from('customers').select('id, name, customer_number, phone, visit_count').in('id', ids)
+    ),
     supabase.from('stores').select('id, name'),
   ]);
 
@@ -1998,8 +1961,9 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
     }
     const supabase = createAdminClient();
 
+    // 중복 묶음에 속한 방문 기록만 DB에서 받아옵니다 (admin_duplicate_visits)
     const [{ data: visits, error }, { data: stores }] = await Promise.all([
-      supabase.from('visits').select('id, customer_id, store_id, visit_date, visit_time').eq('is_cancelled', false),
+      supabase.rpc('admin_duplicate_visits'),
       supabase.from('stores').select('id, name'),
     ]);
 
@@ -2013,7 +1977,8 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
       string,
       { customerId: string; visitDate: string; storeId: string; visits: { id: string; visitTime: string }[] }
     >();
-    for (const v of visits || []) {
+    type DuplicateRow = { id: string; customer_id: string; store_id: string; visit_date: string; visit_time: string };
+    for (const v of (visits || []) as DuplicateRow[]) {
       const key = `${v.customer_id}_${v.visit_date}_${v.store_id}`;
       if (!groups.has(key)) {
         groups.set(key, { customerId: v.customer_id, visitDate: v.visit_date, storeId: v.store_id, visits: [] });
@@ -2026,12 +1991,11 @@ export async function getDuplicateVisits(): Promise<ApiResponse<DuplicateVisitGr
       return { success: true, data: [] };
     }
 
-    const customerIds = [...new Set(duplicates.map((d) => d.customerId))];
-    const { data: customers } = await supabase
-      .from('customers')
-      .select('id, name, customer_number, phone')
-      .in('id', customerIds);
-    const customerMap = new Map((customers || []).map((c) => [c.id, c]));
+    const customers = await fetchByIdChunks<{ id: string; name: string; customer_number: string; phone: string }>(
+      duplicates.map((d) => d.customerId),
+      (ids) => supabase.from('customers').select('id, name, customer_number, phone').in('id', ids)
+    );
+    const customerMap = new Map(customers.map((c) => [c.id, c]));
 
     const result: DuplicateVisitGroup[] = duplicates
       .map((d) => {
@@ -2076,30 +2040,29 @@ export async function getVisitCountMismatches(): Promise<ApiResponse<VisitCountM
     }
     const supabase = createAdminClient();
 
-    const [{ data: customers, error: custError }, { data: visits, error: visitError }] = await Promise.all([
-      supabase.from('customers').select('id, name, customer_number, phone, visit_count').eq('is_active', true),
-      supabase.from('visits').select('customer_id').eq('is_cancelled', false),
-    ]);
-
-    if (custError || visitError) {
+    // 기록 수와 방문 횟수가 다른 고객만 DB에서 받아옵니다 (admin_visit_count_mismatches)
+    const { data: rows, error } = await supabase.rpc('admin_visit_count_mismatches');
+    if (error) {
       return { success: false, error: '데이터 조회 중 오류가 발생했습니다.' };
     }
+    const mismatchRows = (rows || []) as { customer_id: string; recorded_count: number; actual_count: number }[];
+    const customers = await fetchByIdChunks<{ id: string; name: string; customer_number: string; phone: string }>(
+      mismatchRows.map((r) => r.customer_id),
+      (ids) => supabase.from('customers').select('id, name, customer_number, phone').in('id', ids)
+    );
+    const customerMap = new Map(customers.map((c) => [c.id, c]));
 
-    const actualCounts = new Map<string, number>();
-    for (const v of visits || []) {
-      actualCounts.set(v.customer_id, (actualCounts.get(v.customer_id) || 0) + 1);
-    }
-
-    const mismatches: VisitCountMismatchItem[] = (customers || [])
-      .filter((c) => c.visit_count !== (actualCounts.get(c.id) || 0))
-      .map((c) => ({
-        customerId: c.id,
-        customerName: c.name,
-        customerNumber: c.customer_number,
-        phone: c.phone,
-        recordedVisitCount: c.visit_count,
-        actualVisitCount: actualCounts.get(c.id) || 0,
-      }));
+    const mismatches: VisitCountMismatchItem[] = mismatchRows.map((r) => {
+      const c = customerMap.get(r.customer_id);
+      return {
+        customerId: r.customer_id,
+        customerName: c?.name || '알 수 없음',
+        customerNumber: c?.customer_number || '-',
+        phone: c?.phone || '-',
+        recordedVisitCount: Number(r.recorded_count),
+        actualVisitCount: Number(r.actual_count),
+      };
+    });
 
     return { success: true, data: mismatches };
   } catch (error) {
@@ -3072,12 +3035,18 @@ function getPreviousRange(buckets: DateBucket[]): { start: string; end: string }
   return { start: prevStart, end: prevEnd };
 }
 
-function bucketizeDates(buckets: DateBucket[], dates: string[]): TrendPoint[] {
-  return buckets.map((b) => ({
+/** DB에서 받은 날짜별 건수(day, cnt)를 일/주/월 구간으로 합칩니다. */
+function bucketizeDailyCounts(
+  buckets: DateBucket[],
+  rows: { day: string; cnt: number }[] | null
+): { points: TrendPoint[]; total: number } {
+  const daily = (rows || []).map((r) => ({ day: r.day, cnt: Number(r.cnt) }));
+  const points = buckets.map((b) => ({
     label: b.label,
     date: b.start,
-    count: dates.filter((d) => d >= b.start && d <= b.end).length,
+    count: daily.filter((d) => d.day >= b.start && d.day <= b.end).reduce((sum, d) => sum + d.cnt, 0),
   }));
+  return { points, total: points.reduce((sum, p) => sum + p.count, 0) };
 }
 
 /**
@@ -3101,12 +3070,11 @@ export async function getVisitTrend(
     const overallEnd = buckets[buckets.length - 1].end;
     const prevRange = getPreviousRange(buckets);
 
-    let currentQuery = supabase
-      .from('visits')
-      .select('visit_date')
-      .eq('is_cancelled', false)
-      .gte('visit_date', overallStart)
-      .lte('visit_date', overallEnd);
+    const currentQuery = supabase.rpc('admin_daily_visit_counts', {
+      p_from: overallStart,
+      p_to: overallEnd,
+      p_store_id: storeId ?? null,
+    });
     let previousQuery = supabase
       .from('visits')
       .select('id', { count: 'exact', head: true })
@@ -3114,15 +3082,16 @@ export async function getVisitTrend(
       .gte('visit_date', prevRange.start)
       .lte('visit_date', prevRange.end);
     if (storeId) {
-      currentQuery = currentQuery.eq('store_id', storeId);
       previousQuery = previousQuery.eq('store_id', storeId);
     }
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
+    const [{ data: current, error: currentError }, { count: previousTotal }] = await Promise.all([
+      currentQuery,
+      previousQuery,
+    ]);
+    if (currentError) throw currentError;
 
-    const dates = (current || []).map((v) => v.visit_date);
-    const points = bucketizeDates(buckets, dates);
-    const total = dates.length;
+    const { points, total } = bucketizeDailyCounts(buckets, current as { day: string; cnt: number }[] | null);
 
     return {
       success: true,
@@ -3160,17 +3129,14 @@ export async function getSignupTrend(
     const overallEnd = buckets[buckets.length - 1].end;
     const prevRange = getPreviousRange(buckets);
 
-    const overallStartTs = `${overallStart}T00:00:00+09:00`;
-    const overallEndTs = `${overallEnd}T23:59:59.999+09:00`;
     const prevStartTs = `${prevRange.start}T00:00:00+09:00`;
     const prevEndTs = `${prevRange.end}T23:59:59.999+09:00`;
 
-    let currentQuery = supabase
-      .from('customers')
-      .select('created_at')
-      .eq('is_active', true)
-      .gte('created_at', overallStartTs)
-      .lte('created_at', overallEndTs);
+    const currentQuery = supabase.rpc('admin_daily_signup_counts', {
+      p_from: overallStart,
+      p_to: overallEnd,
+      p_store_id: storeId ?? null,
+    });
     let previousQuery = supabase
       .from('customers')
       .select('id', { count: 'exact', head: true })
@@ -3178,15 +3144,16 @@ export async function getSignupTrend(
       .gte('created_at', prevStartTs)
       .lte('created_at', prevEndTs);
     if (storeId) {
-      currentQuery = currentQuery.eq('signup_store_id', storeId);
       previousQuery = previousQuery.eq('signup_store_id', storeId);
     }
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
+    const [{ data: current, error: currentError }, { count: previousTotal }] = await Promise.all([
+      currentQuery,
+      previousQuery,
+    ]);
+    if (currentError) throw currentError;
 
-    const dates = (current || []).map((c) => toKSTDateString(c.created_at));
-    const points = bucketizeDates(buckets, dates);
-    const total = dates.length;
+    const { points, total } = bucketizeDailyCounts(buckets, current as { day: string; cnt: number }[] | null);
 
     return {
       success: true,
@@ -3228,62 +3195,32 @@ export async function getNewVsReturningTrend(
 
     const supabase = createAdminClient();
     const buckets = getDateBuckets(period, dateFrom, dateTo);
-    const overallStart = buckets[0].start;
-    const overallEnd = buckets[buckets.length - 1].end;
 
-    let rangeVisitsQuery = supabase
-      .from('visits')
-      .select('customer_id, visit_date')
-      .eq('is_cancelled', false)
-      .gte('visit_date', overallStart)
-      .lte('visit_date', overallEnd);
-    if (storeId) {
-      rangeVisitsQuery = rangeVisitsQuery.eq('store_id', storeId);
-    }
-    const { data: rangeVisits, error } = await rangeVisitsQuery;
+    // 구간별 신규/재방문 인원을 DB에서 바로 셉니다 (admin_new_returning_counts)
+    const { data: rows, error } = await supabase.rpc('admin_new_returning_counts', {
+      p_starts: buckets.map((b) => b.start),
+      p_ends: buckets.map((b) => b.end),
+      p_store_id: storeId ?? null,
+    });
 
     if (error) {
       return { success: false, error: '방문 기록 조회 중 오류가 발생했습니다.' };
     }
 
-    const visits = rangeVisits || [];
-    if (visits.length === 0) {
+    const byIndex = new Map(
+      ((rows || []) as { bucket_index: number; new_count: number; returning_count: number }[]).map((r) => [
+        Number(r.bucket_index),
+        r,
+      ])
+    );
+    const result: NewReturningPoint[] = buckets.map((b, i) => {
+      const r = byIndex.get(i + 1);
       return {
-        success: true,
-        data: buckets.map((b) => ({ label: b.label, date: b.start, newCount: 0, returningCount: 0 })),
+        label: b.label,
+        date: b.start,
+        newCount: Number(r?.new_count ?? 0),
+        returningCount: Number(r?.returning_count ?? 0),
       };
-    }
-
-    const customerIds = [...new Set(visits.map((v) => v.customer_id))];
-    const { data: allVisits } = await supabase
-      .from('visits')
-      .select('customer_id, visit_date')
-      .eq('is_cancelled', false)
-      .in('customer_id', customerIds);
-
-    const firstVisitMap = new Map<string, string>();
-    for (const v of allVisits || []) {
-      const cur = firstVisitMap.get(v.customer_id);
-      if (!cur || v.visit_date < cur) {
-        firstVisitMap.set(v.customer_id, v.visit_date);
-      }
-    }
-
-    const result: NewReturningPoint[] = buckets.map((b) => {
-      const customersInBucket = new Set(
-        visits.filter((v) => v.visit_date >= b.start && v.visit_date <= b.end).map((v) => v.customer_id)
-      );
-      let newCount = 0;
-      let returningCount = 0;
-      for (const cid of customersInBucket) {
-        const firstVisit = firstVisitMap.get(cid);
-        if (firstVisit && firstVisit >= b.start && firstVisit <= b.end) {
-          newCount += 1;
-        } else {
-          returningCount += 1;
-        }
-      }
-      return { label: b.label, date: b.start, newCount, returningCount };
     });
 
     return { success: true, data: result };
@@ -3330,20 +3267,17 @@ export async function getVipConversionTrend(
     const overallStart = buckets[0].start;
     const overallEnd = buckets[buckets.length - 1].end;
     const prevRange = getPreviousRange(buckets);
-    const overallStartTs = `${overallStart}T00:00:00+09:00`;
-    const overallEndTs = `${overallEnd}T23:59:59.999+09:00`;
     const prevStartTs = `${prevRange.start}T00:00:00+09:00`;
     const prevEndTs = `${prevRange.end}T23:59:59.999+09:00`;
 
     // 20회부터 5회마다 반복 발급되는 규칙이라 reward_rules에는 threshold_visits=30인
     // 행이 따로 없습니다. customer_rewards에 실제 발급된 회차(threshold_visits) 기준으로 찾습니다.
-    let currentQuery = supabase
-      .from('customer_rewards')
-      .select('issued_at')
-      .eq('threshold_visits', vipMinVisits)
-      .not('reward_rule_id', 'is', null)
-      .gte('issued_at', overallStartTs)
-      .lte('issued_at', overallEndTs);
+    const currentQuery = supabase.rpc('admin_daily_vip_counts', {
+      p_from: overallStart,
+      p_to: overallEnd,
+      p_threshold: vipMinVisits,
+      p_store_id: storeId ?? null,
+    });
     let previousQuery = supabase
       .from('customer_rewards')
       .select('id', { count: 'exact', head: true })
@@ -3352,15 +3286,16 @@ export async function getVipConversionTrend(
       .gte('issued_at', prevStartTs)
       .lte('issued_at', prevEndTs);
     if (storeId) {
-      currentQuery = currentQuery.eq('issued_store_id', storeId);
       previousQuery = previousQuery.eq('issued_store_id', storeId);
     }
 
-    const [{ data: current }, { count: previousTotal }] = await Promise.all([currentQuery, previousQuery]);
+    const [{ data: current, error: currentError }, { count: previousTotal }] = await Promise.all([
+      currentQuery,
+      previousQuery,
+    ]);
+    if (currentError) throw currentError;
 
-    const dates = (current || []).map((r) => toKSTDateString(r.issued_at));
-    const points = bucketizeDates(buckets, dates);
-    const total = dates.length;
+    const { points, total } = bucketizeDailyCounts(buckets, current as { day: string; cnt: number }[] | null);
 
     return {
       success: true,
@@ -3395,31 +3330,17 @@ export async function getLongAbsentBuckets(storeId?: string | null): Promise<Api
     }
 
     const supabase = createAdminClient();
-    const activeCustomers = await fetchAllRows<{ id: string }>((from, to) => {
-      let q = supabase.from('customers').select('id').eq('is_active', true);
-      if (storeId) q = q.eq('signup_store_id', storeId);
-      return q.order('id', { ascending: true }).range(from, to);
+    const { data, error } = await supabase.rpc('admin_long_absent_counts', {
+      p_today: getTodayKST(),
+      p_store_id: storeId ?? null,
     });
-    const activeIds = new Set((activeCustomers || []).map((c) => c.id));
-    const latestVisitMap = await getLatestVisitDateMap(supabase);
-
-    const todayKST = getTodayKST();
-    const cutoff30 = subtractDaysFromDateString(todayKST, 30);
-    const cutoff60 = subtractDaysFromDateString(todayKST, 60);
-    const cutoff90 = subtractDaysFromDateString(todayKST, 90);
-
-    const result: LongAbsentBuckets = { from30to59: 0, from60to89: 0, from90plus: 0 };
-
-    for (const [customerId, lastVisitDate] of latestVisitMap) {
-      if (!activeIds.has(customerId)) continue;
-      if (lastVisitDate < cutoff90) {
-        result.from90plus += 1;
-      } else if (lastVisitDate < cutoff60) {
-        result.from60to89 += 1;
-      } else if (lastVisitDate < cutoff30) {
-        result.from30to59 += 1;
-      }
-    }
+    if (error) throw error;
+    const row = (data as LongAbsentBuckets[] | null)?.[0];
+    const result: LongAbsentBuckets = {
+      from30to59: Number(row?.from30to59 ?? 0),
+      from60to89: Number(row?.from60to89 ?? 0),
+      from90plus: Number(row?.from90plus ?? 0),
+    };
 
     return { success: true, data: result };
   } catch (error) {
@@ -3459,38 +3380,39 @@ export async function getLongAbsentCustomers(
     const cutoff60 = subtractDaysFromDateString(todayKST, 60);
     const cutoff90 = subtractDaysFromDateString(todayKST, 90);
 
-    const latestVisitMap = await getLatestVisitDateMap(supabase);
-
-    const matchingIds = [...latestVisitMap.entries()]
-      .filter(([, lastDate]) => {
-        if (bucket === 'from90plus') return lastDate < cutoff90;
-        if (bucket === 'from60to89') return lastDate < cutoff60 && lastDate >= cutoff90;
-        return lastDate < cutoff30 && lastDate >= cutoff60;
-      })
-      .map(([customerId]) => customerId);
+    const range =
+      bucket === 'from90plus'
+        ? { before: cutoff90 }
+        : bucket === 'from60to89'
+          ? { before: cutoff60, onOrAfter: cutoff90 }
+          : { before: cutoff30, onOrAfter: cutoff60 };
+    const latestVisitMap = await getLatestVisitDateMap(supabase, undefined, range);
+    const matchingIds = [...latestVisitMap.keys()];
 
     if (matchingIds.length === 0) {
       return { success: true, data: [] };
     }
 
-    const customers: { id: string; name: string; visit_count: number }[] = [];
-    const rewards: { customer_id: string; status: string }[] = [];
-    for (const ids of chunkIds(matchingIds)) {
-      let customersQuery = supabase
-        .from('customers')
-        .select('id, name, visit_count')
-        .eq('is_active', true)
-        .in('id', ids);
-      if (storeId) {
-        customersQuery = customersQuery.eq('signup_store_id', storeId);
-      }
-      const [{ data: customerRows }, { data: rewardRows }] = await Promise.all([
-        customersQuery,
-        supabase.from('customer_rewards').select('customer_id, status').in('customer_id', ids).neq('status', 'used'),
-      ]);
-      customers.push(...(customerRows || []));
-      rewards.push(...(rewardRows || []));
-    }
+    const [customers, rewards] = await Promise.all([
+      fetchByIdChunks<{ id: string; name: string; visit_count: number }>(matchingIds, (ids) => {
+        let customersQuery = supabase
+          .from('customers')
+          .select('id, name, visit_count')
+          .eq('is_active', true)
+          .in('id', ids);
+        if (storeId) {
+          customersQuery = customersQuery.eq('signup_store_id', storeId);
+        }
+        return customersQuery;
+      }),
+      // 고객 한 명이 할인권을 여러 장 가질 수 있어 50명씩 나눠 조회합니다.
+      fetchByIdChunks<{ customer_id: string; status: string }>(
+        matchingIds,
+        (ids) =>
+          supabase.from('customer_rewards').select('customer_id, status').in('customer_id', ids).neq('status', 'used'),
+        50
+      ),
+    ]);
 
     const availableRewardsMap = new Map<string, number>();
     for (const r of rewards || []) {

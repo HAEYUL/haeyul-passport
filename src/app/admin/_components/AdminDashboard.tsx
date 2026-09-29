@@ -37,7 +37,12 @@ function StatCard({
                  hover:shadow-lg hover:scale-105 transition-all duration-200"
     >
       <p className="text-xs font-semibold tracking-[0.08em] text-[#6B6B5E] uppercase">{label}</p>
-      <p className={`mt-3 text-3xl font-extrabold ${accent || 'text-[#2D5A3D]'}`}>
+      {/* 회원이 많아져 다섯 자리 이상이 되어도 숫자가 두 줄로 끊기지 않게 글자를 한 단계 줄입니다 */}
+      <p
+        className={`mt-3 whitespace-nowrap font-extrabold ${value >= 10000 ? 'text-2xl' : 'text-3xl'} ${
+          accent || 'text-[#2D5A3D]'
+        }`}
+      >
         {value.toLocaleString()}
         <span className="ml-2 text-sm font-bold text-[#6B6B5E]">{unit}</span>
       </p>
@@ -71,7 +76,11 @@ function HeroStatCard({
       }`}
     >
       <p className={`text-xs font-semibold tracking-[0.08em] uppercase ${isReward ? 'text-[#8A5800]' : 'text-[#6B6B5E]'}`}>{label}</p>
-      <p className={`mt-3 text-4xl font-extrabold leading-tight ${isReward ? 'text-[#8A5800]' : 'text-[#2D5A3D]'}`}>
+      <p
+        className={`mt-3 whitespace-nowrap font-extrabold leading-tight ${value >= 10000 ? 'text-3xl' : 'text-4xl'} ${
+          isReward ? 'text-[#8A5800]' : 'text-[#2D5A3D]'
+        }`}
+      >
         {value.toLocaleString()}
         <span className="ml-2 text-lg font-bold text-[#6B6B5E]">{unit}</span>
       </p>
