@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import Image from 'next/image';
 import { getRewards, confirmRewardsUse, type RewardItem } from '@/app/actions';
-import { formatDateKR } from '@/lib/utils';
+import { formatDateKR, isSignupCouponLocked } from '@/lib/utils';
 import { getTierUpDefinition } from '@/lib/tiers';
 import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE } from '@/lib/constants';
 
@@ -42,6 +42,12 @@ const REWARD_CARD_STYLES = {
     borderTop: 'border-[#A9C8E4]',
     subText: 'text-[#204A6E]',
   },
+  signup: {
+    usableBg: 'bg-[#F1EAFB] border-[#D2BFF0] shadow-sm',
+    accentText: 'text-[#5B3A96]',
+    borderTop: 'border-[#D2BFF0]',
+    subText: 'text-[#5B3A96]',
+  },
 } as const;
 
 function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; kind: keyof typeof REWARD_CARD_STYLES } {
@@ -50,6 +56,9 @@ function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; ki
   }
   if (reward.source === 'all_stores') {
     return { text: '세 매장 완주 선물', icon: <span className="text-2xl leading-none mt-0.5">🏅</span>, kind: 'allStores' };
+  }
+  if (reward.source === 'signup') {
+    return { text: '가입 축하 할인권', icon: <span className="text-2xl leading-none mt-0.5">🎁</span>, kind: 'signup' };
   }
   if (reward.source === 'comeback') {
     return { text: '다시 만나 반가워요 선물', icon: <span className="text-2xl leading-none mt-0.5">🧡</span>, kind: 'comeback' };
@@ -65,7 +74,16 @@ function getRewardLabel(reward: RewardItem): { text: string; icon: ReactNode; ki
   return { text: `${reward.thresholdVisits}회 방문 기념`, icon: <span className="text-2xl leading-none mt-0.5">🎫</span>, kind: 'visit' };
 }
 
-function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isExpired: boolean }) {
+function StatusBadge({
+  status,
+  isExpired,
+  isLocked = false,
+}: {
+  status: RewardItem['status'];
+  isExpired: boolean;
+  /** 가입 당일의 가입 축하 할인권 (다음 방문부터 사용) */
+  isLocked?: boolean;
+}) {
   if (status === 'used') {
     return (
       <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-white text-[#6B6B5E] border-2 border-[#D4D0C8]">
@@ -77,6 +95,13 @@ function StatusBadge({ status, isExpired }: { status: RewardItem['status']; isEx
     return (
       <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-white text-[#6B6B5E] border-2 border-[#D4D0C8]">
         유효기간경과
+      </span>
+    );
+  }
+  if (isLocked) {
+    return (
+      <span className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold bg-white text-[#5B3A96] border-2 border-[#D2BFF0]">
+        다음 방문부터
       </span>
     );
   }
@@ -210,6 +235,8 @@ export default function RewardsList() {
           <ul className="space-y-4">
             {rewards.map((reward) => {
               const isUsable = reward.status !== 'used' && !reward.isExpired;
+              // 가입 축하 할인권은 가입한 날에는 고를 수 없고, 다음 방문부터 사용합니다.
+              const isLocked = isUsable && isSignupCouponLocked(reward.source, reward.issuedAt);
               const isSelected = selectedIds.includes(reward.id);
               const selectionFull = !isSelected && selectedIds.length >= MAX_REWARDS_PER_PAYMENT;
               const { text: rewardLabel, icon: rewardIcon, kind } = getRewardLabel(reward);
@@ -233,7 +260,7 @@ export default function RewardsList() {
                         </p>
                       </div>
                     </div>
-                    <StatusBadge status={reward.status} isExpired={reward.isExpired} />
+                    <StatusBadge status={reward.status} isExpired={reward.isExpired} isLocked={isLocked} />
                   </div>
 
                   <p className={`text-sm font-semibold ${isUsable ? style.accentText : 'text-[#6B6B5E]'}`}>
@@ -254,7 +281,12 @@ export default function RewardsList() {
                     )}
                   </div>
 
-                  {isUsable && (
+                  {isLocked && (
+                    <p className="w-full rounded-xl bg-white/70 border-2 border-dashed border-[#D2BFF0] py-3 px-4 text-center text-base font-bold text-[#5B3A96]">
+                      다음 방문부터 사용하실 수 있어요
+                    </p>
+                  )}
+                  {isUsable && !isLocked && (
                     <button
                       type="button"
                       onClick={() => toggleSelect(reward.id)}
