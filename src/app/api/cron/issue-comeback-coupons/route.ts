@@ -7,8 +7,13 @@ import { COMEBACK_ABSENCE_DAYS, COMEBACK_COUPON_AMOUNT, COMEBACK_COUPON_VALID_DA
 export const dynamic = 'force-dynamic';
 
 /**
- * 매일 1회 실행되는 컴백(장기 미방문 복귀 유도) 쿠폰 자동 발급 배치.
- * vercel.json의 크론 설정이 매일 이 경로를 호출합니다.
+ * 컴백(장기 미방문 복귀 유도) 쿠폰 자동 발급 배치.
+ *
+ * ※ 현재 발급 보류 중 — vercel.json 크론에서 빼 두어 자동 실행되지 않습니다.
+ *   다시 시작할 때는 vercel.json crons에 아래 항목을 추가하세요 (01:00 UTC = 한국시간 10:00).
+ *     { "path": "/api/cron/issue-comeback-coupons", "schedule": "0 1 * * *" }
+ *   재개 전 확인할 것: 방문 기록 조회 1,000건 제한(페이지 나눠 읽기 필요),
+ *   마케팅 수신 동의 고객에게만 문자 발송·(광고) 표시, 문구의 '쿠폰' → '할인권'.
  *
  * 마지막 방문일로부터 COMEBACK_ABSENCE_DAYS일이 지난 고객에게 1회 발급합니다.
  * 다시 방문해서 새 방문 기록이 생기면, 그 뒤로 또 그만큼 지나야 재발급됩니다
