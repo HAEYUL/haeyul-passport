@@ -3,10 +3,10 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getRewardCatalog, getAllStoresGiftAmount, type RewardRuleCatalogItem } from '@/app/actions';
+import { getRewardCatalog, getAllStoresGiftAmount, getSignupGiftAmount, type RewardRuleCatalogItem } from '@/app/actions';
 import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
-import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE } from '@/lib/constants';
+import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE, SIGNUP_COUPON_VALID_MONTHS } from '@/lib/constants';
 
 const tiers = getAllTiers();
 
@@ -46,6 +46,7 @@ export default function PassportGuide() {
   const router = useRouter();
   const [rewards, setRewards] = useState<RewardRuleCatalogItem[] | null>(null);
   const [allStoresGiftAmount, setAllStoresGiftAmount] = useState<number | null>(null);
+  const [signupGiftAmount, setSignupGiftAmount] = useState<number | null>(null);
 
   useEffect(() => {
     getRewardCatalog().then((result) => {
@@ -54,6 +55,7 @@ export default function PassportGuide() {
       }
     });
     getAllStoresGiftAmount().then(setAllStoresGiftAmount);
+    getSignupGiftAmount().then(setSignupGiftAmount);
   }, []);
 
   return (
@@ -158,6 +160,24 @@ export default function PassportGuide() {
             사용하실 수 있습니다. 할인권의 유효기간은 발급일로부터 6개월입니다.
           </p>
         </section>
+
+        {/* 가입 축하 할인권 */}
+        {signupGiftAmount && (
+          <section className="space-y-3">
+            <h2 className="text-[17px] font-bold text-[#333331]">가입 축하 할인권</h2>
+            <div className="bg-[#F1EAFB] border-2 border-[#D2BFF0] rounded-xl px-4 py-3.5 flex items-center gap-3">
+              <span className="text-2xl leading-none">🎁</span>
+              <div className="flex-1">
+                <p className="text-2xl font-extrabold text-[#5B3A96]">{signupGiftAmount.toLocaleString()}원</p>
+                <p className="text-[13px] font-bold text-[#5B3A96]">방문여권을 만들면 바로 드려요</p>
+              </div>
+            </div>
+            <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
+              가입하는 날 할인권함에 담기며, 다음 방문부터 사용하실 수 있어요. 유효기간은 발급일로부터{' '}
+              {SIGNUP_COUPON_VALID_MONTHS}개월입니다.
+            </p>
+          </section>
+        )}
 
         {/* 세 매장 완주 선물 */}
         {allStoresGiftAmount && (

@@ -12,6 +12,8 @@ interface VisitLandingProps {
   storeName: string | null;
   /** 지금이 매장 운영시간(오전 10시~오후 9시) 이내인지 */
   isOpen: boolean;
+  /** 가입 축하 할인권 금액(원). 규칙이 꺼져 있으면 null */
+  signupGiftAmount: number | null;
 }
 
 /**
@@ -29,7 +31,7 @@ const LANDING_STORE_LABELS: Record<string, { lead: string; name: string }> = {
  * - 처음 발급하기
  * - 기존 여권 열기
  */
-export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
+export default function VisitLanding({ storeName, isOpen, signupGiftAmount }: VisitLandingProps) {
   const [mode, setMode] = useState<'landing' | 'register' | 'login'>('landing');
   const [geoCoords, setGeoCoords] = useState<GeoCoords | null>(null);
   const geoRequestedRef = useRef(false);
@@ -110,6 +112,16 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
             음식은 달라도, 정성은 같습니다.
           </p>
         </section>
+
+        {/* 가입 즉시 혜택 — 가입을 망설이는 손님에게 잘 보이도록 가입 버튼 바로 위에 둡니다 (운영시간 밖에도 안내) */}
+        {signupGiftAmount && (
+          <div className="rounded-2xl border-2 border-[#D2BFF0] bg-[#F1EAFB] px-4 py-3 space-y-0.5">
+            <p className="text-lg font-extrabold text-[#5B3A96]">
+              🎁 지금 가입하면 {signupGiftAmount.toLocaleString()}원 할인권을 드려요
+            </p>
+            <p className="text-sm font-semibold text-[#5B3A96]">다음 방문부터 1개월 동안 사용하실 수 있어요</p>
+          </div>
+        )}
 
         {!isOpen ? (
           <div className="bg-[#F5F5EC] border-2 border-[#E0E0D0] rounded-2xl p-6 space-y-2">

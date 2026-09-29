@@ -8,6 +8,7 @@ import {
   isWithinStoreHours,
   birthDigitsToISODate,
   toKSTDateString,
+  isSignupCouponLocked,
   addMonthsToDateString,
   daysBetweenDateStrings,
   getTodayKSTRange,
@@ -407,6 +408,8 @@ export interface PassportData {
   allStoresGiftAmount: number | null;
   /** 이미 세 매장 완주 선물을 받았는지 (사용 여부 무관) */
   allStoresGiftReceived: boolean;
+  /** 아직 쓰지 않은 가입 축하 할인권. locked면 가입 당일이라 다음 방문부터 사용 가능. 없으면 null */
+  signupGift: { amount: number; locked: boolean } | null;
   /** 7일 이내 만료되는 보유 할인권 중 가장 임박한 것. 없으면 null */
   soonExpiringReward: { amount: number; daysLeft: number } | null;
   /** 지금 게시기간 안에 있는 알림/이벤트(3개 매장 공통, 최대 1건). 없으면 null */
@@ -459,7 +462,8 @@ async function getNextCouponForCustomer(
     .eq('is_active', true)
     .eq('is_birthday', false)
     .eq('is_comeback', false)
-    .eq('is_all_stores', false);
+    .eq('is_all_stores', false)
+    .eq('is_signup', false);
 
   const ruleInputs: RewardRuleInput[] = (rules || []).map((r) => ({
     id: r.id,
@@ -531,13 +535,18 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
     // 사용 가능한 할인권 수 (아직 사용하지 않았고, 유효기간이 지나지 않은 할인권만 — 옛 실물 선물 기록은 제외)
     const { data: rewards } = await supabase
       .from('customer_rewards')
-      .select('id, status, amount, issued_at, expires_at')
+      .select('id, status, amount, issued_at, expires_at, source')
       .eq('customer_id', customer.id)
       .not('reward_rule_id', 'is', null)
       .neq('status', 'used');
 
     const unexpiredRewards = (rewards || []).filter((r) => !isRewardExpiredAt(r.issued_at, r.expires_at));
-    const availableRewards = unexpiredRewards.length;
+    // 가입 당일의 가입 축하 할인권은 아직 쓸 수 없으므로 "사용 가능" 수에서 뺍니다.
+    const availableRewards = unexpiredRewards.filter((r) => !isSignupCouponLocked(r.source, r.issued_at)).length;
+    const signupReward = unexpiredRewards.find((r) => r.source === 'signup');
+    const signupGift = signupReward
+      ? { amount: signupReward.amount ?? 0, locked: isSignupCouponLocked(signupReward.source, signupReward.issued_at) }
+      : null;
 
     // 만료까지 REWARD_EXPIRY_WARNING_DAYS일 이내로 남은 할인권 중 가장 임박한 것
     const todayForExpiry = getTodayKST();
@@ -595,6 +604,7 @@ export async function getPassportData(): Promise<ApiResponse<PassportData>> {
         recentVisitDate: recentVisit?.visit_date || null,
         availableRewards,
         hasRewardToUse: availableRewards > 0,
+        signupGift,
         tier,
         qrVerified: storeId !== null,
         storeName,
@@ -945,7 +955,7 @@ export async function confirmRewardsUse(
 
     const { data: crs } = await supabase
       .from('customer_rewards')
-      .select('id, status, customer_id, issued_at, expires_at')
+      .select('id, status, customer_id, issued_at, expires_at, source')
       .in('id', ids);
 
     const mine = (crs || []).filter((cr) => cr.customer_id === session.customerId);
@@ -959,6 +969,11 @@ export async function confirmRewardsUse(
 
     if (mine.some((cr) => isRewardExpiredAt(cr.issued_at, cr.expires_at))) {
       return { success: false, error: '유효기간이 지난 할인권이 있습니다.\n사용하실 수 없습니다.' };
+    }
+
+    // 가입 축하 할인권은 가입한 날에는 쓸 수 없고, 다음 방문(다음 날)부터 사용합니다.
+    if (mine.some((cr) => isSignupCouponLocked(cr.source, cr.issued_at))) {
+      return { success: false, error: '가입 축하 할인권은 다음 방문부터 사용하실 수 있어요.' };
     }
 
     // 한 번 결제에 최대 MAX_REWARDS_PER_PAYMENT장 (금액 무관). 결제 단위는 알 수 없으므로
@@ -1201,6 +1216,7 @@ export async function getRewardCatalog(): Promise<ApiResponse<RewardRuleCatalogI
       .eq('is_birthday', false)
       .eq('is_comeback', false)
       .eq('is_all_stores', false)
+      .eq('is_signup', false)
       .order('threshold_visits', { ascending: true });
 
     if (error) {
@@ -1239,6 +1255,27 @@ export async function getAllStoresGiftAmount(): Promise<number | null> {
     return data?.amount ?? null;
   } catch (error) {
     console.error('getAllStoresGiftAmount 오류:', error);
+    return null;
+  }
+}
+
+/**
+ * 가입 축하 할인권 금액(원). 규칙이 꺼져 있으면 null — 가입 첫 화면·이용 안내에 사용합니다.
+ */
+export async function getSignupGiftAmount(): Promise<number | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from('reward_rules')
+      .select('amount')
+      .eq('is_signup', true)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.amount ?? null;
+  } catch (error) {
+    console.error('getSignupGiftAmount 오류:', error);
     return null;
   }
 }

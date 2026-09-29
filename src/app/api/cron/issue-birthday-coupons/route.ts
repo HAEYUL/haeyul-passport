@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
  *   다시 시작할 때는 vercel.json crons에 아래 항목을 추가하세요 (00:00 UTC = 한국시간 09:00).
  *     { "path": "/api/cron/issue-birthday-coupons", "schedule": "0 0 * * *" }
  *   재개 전 확인할 것: 고객 조회 1,000건 제한(페이지 나눠 읽기 필요), 문자 발송 방식
- *   (현재 문자는 관리자가 엑셀 명단으로 알리고에서 직접 보냄), 손님 화면의 생일 혜택 안내 문구 복구.
+ *   (현재 문자는 관리자가 엑셀 명단으로 알리고에서 직접 보냄), 손님 화면의 생일 혜택 안내 문구 복구,
+ *   customer_rewards.issued_store_id가 NOT NULL이라 발급 매장(예: 가입 매장)을 함께 넣어야 저장됨.
  *
  * CRON_SECRET 환경변수를 설정해두면 Vercel이 크론 요청의 Authorization 헤더에
  * 자동으로 그 값을 담아 보내므로, 여기서 대조해 외부의 무단 호출을 막습니다.

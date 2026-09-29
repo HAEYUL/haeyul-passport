@@ -86,6 +86,16 @@ export default function WelcomeScreen() {
           <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />
         </section>
 
+        {/* 가입 축하 할인권 — 가입 즉시 발급, 다음 방문부터 사용 */}
+        {data.signupGift && (
+          <section className="bg-[#F1EAFB] border-2 border-[#D2BFF0] rounded-2xl p-4 space-y-0.5 text-center">
+            <p className="text-lg font-extrabold text-[#5B3A96]">
+              🎁 가입 축하 {data.signupGift.amount.toLocaleString()}원 할인권이 담겼어요
+            </p>
+            <p className="text-[15px] font-semibold text-[#5B3A96]">다음 방문부터 1개월 동안 사용하실 수 있어요</p>
+          </section>
+        )}
+
         {/* 받을 수 있는 할인권 */}
         <section className="bg-[#FFF3D6] border-2 border-[#DFBE5C] rounded-2xl p-4 space-y-1.5">
           {nextCoupon && (

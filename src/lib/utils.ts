@@ -287,3 +287,11 @@ export function estimateSmsByteLength(text: string): number {
   }
   return bytes;
 }
+
+/**
+ * 가입 축하 할인권이 아직 사용할 수 없는 상태인지 — 가입(발급)한 날(한국 날짜)에는 쓸 수 없고
+ * 다음 날부터 사용할 수 있습니다.
+ */
+export function isSignupCouponLocked(source: string | null | undefined, issuedAt: string): boolean {
+  return source === 'signup' && toKSTDateString(issuedAt) >= getTodayKST();
+}

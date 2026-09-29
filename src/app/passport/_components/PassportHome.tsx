@@ -55,6 +55,13 @@ function getCouponLine(data: PassportData, justRecorded: boolean): CouponLine {
     return { title: `🎫 사용할 수 있는 할인권 ${availableRewards}장` };
   }
 
+  if (data.signupGift?.locked) {
+    return {
+      title: `🎁 가입 축하 ${data.signupGift.amount.toLocaleString()}원 할인권이 준비됐어요`,
+      sub: '다음 방문부터 사용하실 수 있어요',
+    };
+  }
+
   if (data.allStoresGiftAmount && !data.allStoresGiftReceived) {
     const counts = new Map(data.storeVisitBreakdown.map((s) => [s.storeName, s.count]));
     const notVisited = STORE_NAMES.filter((name) => (counts.get(name) ?? 0) === 0);

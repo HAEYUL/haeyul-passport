@@ -118,12 +118,14 @@ export interface RewardRule {
   is_comeback: boolean;
   /** 세 매장 완주 선물 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
   is_all_stores: boolean;
+  /** 가입 축하 할인권 전용 규칙이면 true. 방문 횟수 자동발급 대상에서 제외됨 */
+  is_signup: boolean;
   created_at: string;
   updated_at: string;
 }
 
-/** 할인권 종류: 방문 기준 · 생일축하 · 컴백 · 세 매장 완주 */
-export type RewardSource = 'visit' | 'birthday' | 'comeback' | 'all_stores';
+/** 할인권 종류: 방문 기준 · 생일축하 · 컴백 · 세 매장 완주 · 가입 축하 */
+export type RewardSource = 'visit' | 'birthday' | 'comeback' | 'all_stores' | 'signup';
 
 /** customer_rewards 테이블 */
 export interface CustomerReward {
