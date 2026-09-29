@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { getRewardCatalog, getAllStoresGiftAmount, type RewardRuleCatalogItem } from '@/app/actions';
 import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
-import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
+import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE } from '@/lib/constants';
 
 const tiers = getAllTiers();
 
@@ -182,7 +182,11 @@ export default function PassportGuide() {
           <h2 className="text-[17px] font-bold text-[#333331]">할인권 사용 방법</h2>
           <ul className="bg-white rounded-2xl shadow-sm border border-[#E8E4DA] divide-y divide-[#F0EDE6] text-[15px] font-medium text-[#44443C]">
             <li className="px-4 py-3">세 매장 어디서나 사용하실 수 있어요.</li>
-            <li className="px-4 py-3">한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.</li>
+            <li className="px-4 py-3">
+              1인 최대 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.
+              <br />
+              여러 분이 함께 사용하셔도 할인 합계는 테이블당 결제 금액의 {MAX_DISCOUNT_PERCENT_PER_TABLE}%까지예요.
+            </li>
             <li className="px-4 py-3">매장에서 식사하실 때 사용하실 수 있어요. (포장은 사용 불가)</li>
             <li className="px-4 py-3">결제 전에 할인권함을 열어 직원에게 보여주세요.</li>
           </ul>

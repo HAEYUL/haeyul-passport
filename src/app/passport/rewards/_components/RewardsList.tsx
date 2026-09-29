@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { getRewards, confirmRewardsUse, type RewardItem } from '@/app/actions';
 import { formatDateKR } from '@/lib/utils';
 import { getTierUpDefinition } from '@/lib/tiers';
-import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
+import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE } from '@/lib/constants';
 
 /**
  * 할인권 카드를 종류별로 다르게 보이게 하기 위한 스타일 세트.
@@ -182,7 +182,7 @@ export default function RewardsList() {
             해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
           </p>
           <p className="mt-1 text-[15px] font-bold text-[#8A5800]">
-            사용할 할인권을 골라 직원에게 보여주세요. (한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지)
+            사용할 할인권을 골라 직원에게 보여주세요.
           </p>
         </div>
 
@@ -287,6 +287,9 @@ export default function RewardsList() {
             <p className="text-center text-[17px] font-bold text-[#2D5A3D]">
               {selectedIds.length}장 선택 · 합계 {selectedTotal.toLocaleString()}원
             </p>
+            <p className="text-center text-sm font-semibold text-[#7A4A16]">
+              1인 {MAX_REWARDS_PER_PAYMENT}장까지 · 테이블당 결제 금액의 {MAX_DISCOUNT_PERCENT_PER_TABLE}%까지
+            </p>
             <button
               type="button"
               onClick={() => setConfirming(true)}
@@ -305,8 +308,16 @@ export default function RewardsList() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-6 py-8">
           <div className="w-full max-w-sm bg-white rounded-2xl p-6 space-y-5 shadow-lg">
             <div className="space-y-2">
-              <p className="text-xl font-bold text-[#2D5A3D]">
-                할인권 {selectedIds.length}장, 합계 {selectedTotal.toLocaleString()}원을 사용하시겠습니까?
+              {/* 직원이 결제 금액과 바로 비교할 수 있게 사용 합계를 가장 크게 보여줍니다 */}
+              <div className="rounded-xl bg-[#F0F7F2] border-2 border-[#8FC49F] px-4 py-3 text-center">
+                <p className="text-[15px] font-bold text-[#1F4A2E]">사용 할인권 합계</p>
+                <p className="text-3xl font-extrabold text-[#1F4A2E]">{selectedTotal.toLocaleString()}원</p>
+                <p className="mt-1 text-[15px] font-bold text-[#8A4517]">
+                  할인은 테이블당 결제 금액의 {MAX_DISCOUNT_PERCENT_PER_TABLE}%까지 가능해요
+                </p>
+              </div>
+              <p className="text-lg font-bold text-[#2D5A3D]">
+                할인권 {selectedIds.length}장을 사용하시겠습니까?
               </p>
               <ul className="space-y-1 text-[15px] font-semibold text-[#44443C]">
                 {selectedRewards.map((r) => (
@@ -317,7 +328,8 @@ export default function RewardsList() {
               </ul>
               <p className="text-[15px] font-medium text-[#7A4A16] bg-[#FFF3E4] border border-[#EAC28E] rounded-xl px-4 py-3">
                 사용 후에는 취소할 수 없습니다.<br />
-                한 번 결제에 {MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요. (포장 불가)
+                1인 {MAX_REWARDS_PER_PAYMENT}장까지 사용할 수 있어요.<br />
+                포장 주문에는 사용할 수 없어요.
               </p>
             </div>
             <div className="flex gap-3">

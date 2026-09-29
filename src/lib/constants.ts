@@ -21,8 +21,11 @@ export const COMEBACK_ABSENCE_DAYS = 45;         // 마지막 방문 후 이 기
 export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
 export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
 
-// 할인권 사용 한도 — 한 번 결제(같은 날 같은 매장)에 쓸 수 있는 최대 장수 (금액 무관)
+// 할인권 사용 한도 — 손님 1인이 한 번 결제(같은 날 같은 매장)에 쓸 수 있는 최대 장수 (금액 무관)
 export const MAX_REWARDS_PER_PAYMENT = 2;
+// 할인 합계 상한 — 테이블당 결제 금액의 이 비율(%)까지. 결제 금액은 앱이 모르므로 직원이 확인합니다.
+// (혼자 오신 손님, 여러 분이 함께 사용하는 경우 모두 적용)
+export const MAX_DISCOUNT_PERCENT_PER_TABLE = 30;
 
 // 세 매장 완주 선물 대상 매장 (stores.store_code). 발급·회수는 DB 트리거
 // (022_all_stores_coupon.sql)가 담당하며, 화면 표시·관리자 목록이 같은 기준을 씁니다.
