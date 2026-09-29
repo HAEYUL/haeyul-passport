@@ -39,7 +39,11 @@ export async function GET(request: Request) {
     }
 
     const todayKST = getTodayKST();
-    const [, month, day] = todayKST.split('-');
+    const [yearStr, month, day] = todayKST.split('-');
+    // 2월 29일생은 윤년이 아닌 해에는 2월 28일에 함께 발급합니다.
+    const year = Number(yearStr);
+    const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const includeFeb29 = month === '02' && day === '28' && !isLeapYear;
 
     const { data: candidates, error: candidatesError } = await supabase
       .from('customers')
@@ -53,7 +57,7 @@ export async function GET(request: Request) {
 
     const todaysBirthdayCustomers = (candidates || []).filter((c) => {
       const [, m, d] = (c.birth_date as string).split('-');
-      return m === month && d === day;
+      return (m === month && d === day) || (includeFeb29 && m === '02' && d === '29');
     });
 
     if (todaysBirthdayCustomers.length === 0) {
