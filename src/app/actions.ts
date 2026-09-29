@@ -25,7 +25,6 @@ import {
   LOCATION_ABUSE_THRESHOLD,
   SUSPICIOUS_ACTIVITY_TYPE,
   MAX_REWARDS_PER_PAYMENT,
-  BIRTHDAY_COUPON_AMOUNT,
 } from '@/lib/constants';
 import { verifyLocation } from '@/lib/geo';
 import { isReferralSourceKey } from '@/lib/referralSource';
@@ -1240,27 +1239,6 @@ export async function getAllStoresGiftAmount(): Promise<number | null> {
     return data?.amount ?? null;
   } catch (error) {
     console.error('getAllStoresGiftAmount 오류:', error);
-    return null;
-  }
-}
-
-/**
- * 생일 선물 할인권 금액(원). 생일 규칙이 꺼져 있으면 null — 이용 안내에 사용합니다.
- * (실제 발급 금액은 생일 발급 배치와 같은 BIRTHDAY_COUPON_AMOUNT를 씁니다)
- */
-export async function getBirthdayGiftAmount(): Promise<number | null> {
-  try {
-    const supabase = createAdminClient();
-    const { data } = await supabase
-      .from('reward_rules')
-      .select('id')
-      .eq('is_birthday', true)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-    return data ? BIRTHDAY_COUPON_AMOUNT : null;
-  } catch (error) {
-    console.error('getBirthdayGiftAmount 오류:', error);
     return null;
   }
 }
