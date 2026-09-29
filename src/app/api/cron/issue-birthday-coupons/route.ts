@@ -7,8 +7,13 @@ import { BIRTHDAY_COUPON_AMOUNT, BIRTHDAY_COUPON_VALID_MONTHS, AUDIT_ACTION } fr
 export const dynamic = 'force-dynamic';
 
 /**
- * 매일 1회 실행되는 생일축하 쿠폰 자동 발급 배치.
- * vercel.json의 크론 설정이 매일 00:00 UTC(=한국시간 09:00)에 이 경로를 호출합니다.
+ * 생일축하 쿠폰 자동 발급 배치.
+ *
+ * ※ 초기 운영에서는 발급 보류 중 — vercel.json 크론에서 빼 두어 자동 실행되지 않습니다.
+ *   다시 시작할 때는 vercel.json crons에 아래 항목을 추가하세요 (00:00 UTC = 한국시간 09:00).
+ *     { "path": "/api/cron/issue-birthday-coupons", "schedule": "0 0 * * *" }
+ *   재개 전 확인할 것: 고객 조회 1,000건 제한(페이지 나눠 읽기 필요), 문자 발송 방식
+ *   (현재 문자는 관리자가 엑셀 명단으로 알리고에서 직접 보냄), 손님 화면의 생일 혜택 안내 문구 복구.
  *
  * CRON_SECRET 환경변수를 설정해두면 Vercel이 크론 요청의 Authorization 헤더에
  * 자동으로 그 값을 담아 보내므로, 여기서 대조해 외부의 무단 호출을 막습니다.
@@ -16,12 +21,11 @@ export const dynamic = 'force-dynamic';
  * 변경 없이 바로 적용됩니다.)
  */
 export async function GET(request: Request) {
+  // CRON_SECRET이 설정돼 있고 일치할 때만 실행합니다. (설정이 없으면 누구도 실행할 수 없게 막습니다)
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const authHeader = request.headers.get('authorization');
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

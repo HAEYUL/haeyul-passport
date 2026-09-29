@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { createSignedValue, readSignedValue } from '@/lib/signedCookie';
 
 const SESSION_COOKIE = 'haeyul_admin';
 const SESSION_MAX_AGE = 60 * 60 * 8; // 8시간
@@ -15,7 +16,7 @@ interface AdminSessionData {
  */
 export async function setAdminSession(data: AdminSessionData) {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, JSON.stringify(data), {
+  cookieStore.set(SESSION_COOKIE, createSignedValue(data, SESSION_MAX_AGE), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -25,19 +26,14 @@ export async function setAdminSession(data: AdminSessionData) {
 }
 
 /**
- * 관리자 세션 조회
+ * 관리자 세션 조회 — 서명이 맞고 만료되지 않은 쿠키만 인정합니다 (위조 쿠키 차단).
  */
 export async function getAdminSession(): Promise<AdminSessionData | null> {
   const cookieStore = await cookies();
   const cookie = cookieStore.get(SESSION_COOKIE);
 
-  if (!cookie?.value) return null;
-
-  try {
-    return JSON.parse(cookie.value) as AdminSessionData;
-  } catch {
-    return null;
-  }
+  const data = readSignedValue<AdminSessionData>(cookie?.value);
+  return data?.adminId ? data : null;
 }
 
 /**

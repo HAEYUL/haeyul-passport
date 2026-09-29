@@ -8,10 +8,8 @@ import {
   updateCustomer,
   deleteCustomer,
   updateCustomerAdminNote,
-  getCustomerSmsHistory,
   getCustomerAuditHistory,
   type CustomerDetail as CustomerDetailData,
-  type CustomerSmsHistoryItem,
   type CustomerAuditHistoryItem,
 } from '@/app/admin/actions';
 import { formatDateKR } from '@/lib/utils';
@@ -74,7 +72,6 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState('');
 
-  const [smsHistory, setSmsHistory] = useState<CustomerSmsHistoryItem[] | null>(null);
   const [auditHistory, setAuditHistory] = useState<CustomerAuditHistoryItem[] | null>(null);
 
   const fetchDetail = useCallback(async () => {
@@ -87,11 +84,7 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
   }, [customerId]);
 
   const fetchHistory = useCallback(async () => {
-    const [smsResult, auditResult] = await Promise.all([
-      getCustomerSmsHistory(customerId),
-      getCustomerAuditHistory(customerId),
-    ]);
-    if (smsResult.success && smsResult.data) setSmsHistory(smsResult.data);
+    const auditResult = await getCustomerAuditHistory(customerId);
     if (auditResult.success && auditResult.data) setAuditHistory(auditResult.data);
   }, [customerId]);
 
@@ -519,31 +512,6 @@ export default function CustomerDetail({ customerId }: CustomerDetailProps) {
               )}
             </div>
 
-            {/* 문자 발송 이력 */}
-            <div className="space-y-2">
-              <h2 className="text-base font-semibold text-[#555]">문자 발송 이력</h2>
-              {!smsHistory ? (
-                <div className="h-16 rounded-xl bg-[#E8E8E0] animate-pulse" />
-              ) : smsHistory.length === 0 ? (
-                <p className="text-[15px] text-[#6B6B5E] py-2">발송된 문자가 없습니다.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {smsHistory.map((s) => (
-                    <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-[#F0EDE6]">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-[#2D5A3D]">
-                          {AUDIT_ACTION_LABELS[s.action] || s.action}
-                        </span>
-                        <span className="text-xs text-[#6B6B5E]">{formatDateKR(s.sentAt)}</span>
-                      </div>
-                      {s.message && (
-                        <p className="mt-1 text-sm text-[#555] whitespace-pre-line">{s.message}</p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
 
             {/* 정보 변경 이력 */}
             <div className="space-y-2">

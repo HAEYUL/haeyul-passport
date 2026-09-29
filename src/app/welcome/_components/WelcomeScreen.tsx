@@ -99,7 +99,6 @@ export default function WelcomeScreen() {
               🏅 세 매장 모두 오시면 {allStoresGiftAmount.toLocaleString()}원 완주 선물
             </p>
           )}
-          <p className="text-[15px] font-medium text-[#8A5800]">🎂 생일에도 할인권을 드려요</p>
         </section>
 
         {/* 아직 안 가본 매장 소개 */}

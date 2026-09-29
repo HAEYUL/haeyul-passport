@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  getCustomerList,
+  getCustomerListPage,
+  exportCustomerList,
   getTierBreakdown,
   updateCustomerAdminNote,
   type CustomerListItem,
@@ -16,7 +17,6 @@ import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import { getStoreAdminColor } from '@/lib/storeColors';
 import AdminNav from '../../_components/AdminNav';
 import StoreFilterBar from '../../_components/StoreFilterBar';
-import SmsComposeModal from './SmsComposeModal';
 import ManualRegisterModal from './ManualRegisterModal';
 
 function AdminNoteCell({
@@ -135,7 +135,7 @@ const FILTER_INFO: Record<CustomerListFilter, { title: string; description: stri
   },
   missingBirthDate: {
     title: '생년월일 미입력 고객',
-    description: '생년월일을 등록하지 않아 생일쿠폰을 받을 수 없는 고객 목록입니다. 등록을 유도하는 안내 문자에 활용하세요.',
+    description: '생년월일을 등록하지 않은 고객 목록입니다. 생년월일은 본인 확인에 쓰이므로 등록을 유도하는 안내 문자에 활용하세요.',
   },
   tierUpThisMonth: {
     title: '이번달 등급 승급 고객',
@@ -253,22 +253,44 @@ export default function CustomerList() {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [marketingConsent, setMarketingConsent] = useState<boolean | null>(null);
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
   const [tierBreakdown, setTierBreakdown] = useState<TierBreakdownItem[] | null>(null);
   const [error, setError] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showSmsModal, setShowSmsModal] = useState(false);
   const [showManualRegisterModal, setShowManualRegisterModal] = useState(false);
 
   const fetchCustomers = useCallback(async (q: string) => {
     setCustomers(null);
-    const result = await getCustomerList(q, filter, longAbsentDays, tierKey, storeId, marketingConsent);
+    setTotalCount(null);
+    setExportMessage('');
+    const result = await getCustomerListPage(q, filter, longAbsentDays, tierKey, storeId, marketingConsent);
     if (result.success && result.data) {
-      setCustomers(result.data);
+      setCustomers(result.data.items);
+      setTotalCount(result.data.totalCount);
       setError('');
     } else if (!result.success) {
       setError(result.error || '고객 목록을 불러올 수 없습니다.');
     }
   }, [filter, longAbsentDays, tierKey, storeId, marketingConsent]);
+
+  // 엑셀 저장은 화면에 보이는 목록이 아니라, 지금 조건에 맞는 고객 전체를 받아 저장합니다.
+  async function handleExport() {
+    setExporting(true);
+    setExportMessage('');
+    const result = await exportCustomerList(query, filter, longAbsentDays, tierKey, storeId, marketingConsent);
+    setExporting(false);
+    if (result.success && result.data) {
+      if (result.data.length === 0) {
+        setExportMessage('저장할 고객이 없습니다.');
+        return;
+      }
+      exportCustomersCsv(result.data, filter);
+      setExportMessage(`총 ${result.data.length.toLocaleString()}명을 엑셀로 저장했습니다.`);
+    } else {
+      setExportMessage(result.error || '엑셀 저장 중 오류가 발생했습니다.');
+    }
+  }
 
   const fetchTierBreakdown = useCallback(async () => {
     setTierBreakdown(null);
@@ -296,30 +318,6 @@ export default function CustomerList() {
     }, 300);
     return () => clearTimeout(timer);
   }, [query, fetchCustomers, isTierMenu]);
-
-  // 새 목록이 로드되면 기본값으로 전체 선택 상태로 만듭니다.
-  useEffect(() => {
-    if (customers) {
-      setSelectedIds(new Set(customers.map((c) => c.id)));
-    }
-  }, [customers]);
-
-  function toggleSelectAll() {
-    if (!customers) return;
-    setSelectedIds((prev) => (prev.size === customers.length ? new Set() : new Set(customers.map((c) => c.id))));
-  }
-
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
 
   let title = FILTER_INFO[filter].title;
   let description = FILTER_INFO[filter].description;
@@ -507,7 +505,15 @@ export default function CustomerList() {
           )
         ) : (
           <>
-            <div className="flex justify-end gap-2.5">
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              {totalCount != null && (
+                <p className="mr-auto text-sm text-[#6B6B5E]">
+                  총 <b className="text-[#2D5A3D]">{totalCount.toLocaleString()}명</b>
+                  {customers && totalCount > customers.length && (
+                    <> · 화면에는 {customers.length.toLocaleString()}명만 표시 (엑셀 저장 시 전체 포함)</>
+                  )}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => setShowManualRegisterModal(true)}
@@ -518,21 +524,12 @@ export default function CustomerList() {
               </button>
               <button
                 type="button"
-                onClick={() => customers && customers.length > 0 && exportCustomersCsv(customers, filter)}
-                disabled={!customers || customers.length === 0}
+                onClick={handleExport}
+                disabled={!customers || customers.length === 0 || exporting}
                 className="px-5 py-3 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border border-[#E8E4DA]
                            hover:bg-[#F5F5EC] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-sm"
               >
-                📊 엑셀 저장
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSmsModal(true)}
-                disabled={selectedIds.size === 0}
-                className="px-5 py-3 rounded-xl text-sm font-semibold bg-[#2D5A3D] text-white
-                           hover:bg-[#245032] hover:shadow-md transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                💬 문자 ({selectedIds.size})
+                {exporting ? '명단 만드는 중...' : '📊 엑셀 저장'}
               </button>
               <button
                 type="button"
@@ -544,6 +541,7 @@ export default function CustomerList() {
                 💭 톡
               </button>
             </div>
+            {exportMessage && <p className="text-right text-sm font-semibold text-[#2D5A3D]">{exportMessage}</p>}
 
             {!customers ? (
               <div className="space-y-2">
@@ -564,15 +562,6 @@ export default function CustomerList() {
                 <table className="w-full text-sm min-w-[1020px]">
                   <thead>
                     <tr className="border-b border-[#F0EDE6] text-left text-xs text-[#6B6B5E]">
-                      <th className="px-4 py-3 font-medium w-10">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.size === customers.length}
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 accent-[#2D5A3D]"
-                          aria-label="전체 선택"
-                        />
-                      </th>
                       <th className="px-4 py-3 font-medium">성함</th>
                       <th className="px-4 py-3 font-medium">여권번호</th>
                       <th className="px-4 py-3 font-medium">연락처</th>
@@ -609,15 +598,6 @@ export default function CustomerList() {
                                      hover:bg-[#F5F5EC] transition-colors duration-200"
                           style={{ borderLeftColor: storeColor.border }}
                         >
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(c.id)}
-                              onChange={() => toggleSelect(c.id)}
-                              className="w-4 h-4 accent-[#2D5A3D]"
-                              aria-label={`${c.name} 선택`}
-                            />
-                          </td>
                           <td className="px-4 py-3 font-bold text-[#2D5A3D] whitespace-nowrap">{c.name}</td>
                           <td className="px-4 py-3 text-[#555] whitespace-nowrap">{c.customerNumber}</td>
                           <td className="px-4 py-3 font-bold text-[#232320] whitespace-nowrap">{maskPhone(c.phone)}</td>
@@ -689,13 +669,6 @@ export default function CustomerList() {
         )}
       </div>
 
-      {showSmsModal && customers && (
-        <SmsComposeModal
-          customerIds={[...selectedIds]}
-          consentedCount={customers.filter((c) => selectedIds.has(c.id) && c.marketingConsent).length}
-          onClose={() => setShowSmsModal(false)}
-        />
-      )}
 
       {showManualRegisterModal && (
         <ManualRegisterModal

@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { createSignedValue, readSignedValue } from '@/lib/signedCookie';
 
 const SESSION_COOKIE = 'haeyul_customer';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 60; // 60일 (활동이 있을 때마다 다시 60일로 연장되는 슬라이딩 세션)
@@ -16,7 +17,7 @@ interface SessionData {
  */
 export async function setSession(data: SessionData) {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, JSON.stringify(data), {
+  cookieStore.set(SESSION_COOKIE, createSignedValue(data, SESSION_MAX_AGE), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -26,19 +27,14 @@ export async function setSession(data: SessionData) {
 }
 
 /**
- * 고객 세션 조회
+ * 고객 세션 조회 — 서명이 맞고 만료되지 않은 쿠키만 인정합니다 (위조 쿠키 차단).
  */
 export async function getSession(): Promise<SessionData | null> {
   const cookieStore = await cookies();
   const cookie = cookieStore.get(SESSION_COOKIE);
 
-  if (!cookie?.value) return null;
-
-  try {
-    return JSON.parse(cookie.value) as SessionData;
-  } catch {
-    return null;
-  }
+  const data = readSignedValue<SessionData>(cookie?.value);
+  return data?.customerId ? data : null;
 }
 
 /**

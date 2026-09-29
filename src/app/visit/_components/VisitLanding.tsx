@@ -150,8 +150,7 @@ export default function VisitLanding({ storeName, isOpen }: VisitLandingProps) {
             {/* 안내 문구 */}
             <div className="px-2 space-y-2">
               <p className="text-[15px] font-medium text-[#55534A] leading-relaxed">
-                방문할수록 할인권이 쌓이고,<br />
-                생일에도 할인권을 드려요.
+                방문할수록 할인권이 쌓여요.
               </p>
               <p className="text-sm text-[#8C8C80] leading-relaxed">
                 앱 설치 없이 바로 쓸 수 있어요.<br />
