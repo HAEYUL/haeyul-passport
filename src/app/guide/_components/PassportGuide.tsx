@@ -3,10 +3,15 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getRewardCatalog, getAllStoresGiftAmount, type RewardRuleCatalogItem } from '@/app/actions';
+import {
+  getRewardCatalog,
+  getAllStoresGiftAmount,
+  getBirthdayGiftAmount,
+  type RewardRuleCatalogItem,
+} from '@/app/actions';
 import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
-import { MAX_REWARDS_PER_PAYMENT } from '@/lib/constants';
+import { MAX_REWARDS_PER_PAYMENT, BIRTHDAY_COUPON_VALID_MONTHS } from '@/lib/constants';
 
 const tiers = getAllTiers();
 
@@ -46,6 +51,7 @@ export default function PassportGuide() {
   const router = useRouter();
   const [rewards, setRewards] = useState<RewardRuleCatalogItem[] | null>(null);
   const [allStoresGiftAmount, setAllStoresGiftAmount] = useState<number | null>(null);
+  const [birthdayGiftAmount, setBirthdayGiftAmount] = useState<number | null>(null);
 
   useEffect(() => {
     getRewardCatalog().then((result) => {
@@ -54,6 +60,7 @@ export default function PassportGuide() {
       }
     });
     getAllStoresGiftAmount().then(setAllStoresGiftAmount);
+    getBirthdayGiftAmount().then(setBirthdayGiftAmount);
   }, []);
 
   return (
@@ -173,6 +180,24 @@ export default function PassportGuide() {
             <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
               해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕을 모두 방문해 기록하시면 완주 선물이 할인권함에
               자동으로 담깁니다. 고객님 한 분께 한 번만 드리며, 유효기간은 발급일로부터 6개월입니다.
+            </p>
+          </section>
+        )}
+
+        {/* 생일 선물 */}
+        {birthdayGiftAmount && (
+          <section className="space-y-3">
+            <h2 className="text-[17px] font-bold text-[#333331]">생일 선물</h2>
+            <div className="bg-[#FDEFF3] border-2 border-[#F0B8C8] rounded-xl px-4 py-3.5 flex items-center gap-3">
+              <span className="text-2xl leading-none">🎂</span>
+              <div className="flex-1">
+                <p className="text-2xl font-extrabold text-[#9A2E4E]">{birthdayGiftAmount.toLocaleString()}원</p>
+                <p className="text-[13px] font-bold text-[#9A2E4E]">생일날 아침에 할인권함으로 보내드려요</p>
+              </div>
+            </div>
+            <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
+              내 정보에 등록된 생년월일을 기준으로, 생일 당일 오전 9시에 할인권함에 자동으로 담기고 문자로도
+              알려드립니다. 1년에 한 번 드리며, 유효기간은 발급일로부터 {BIRTHDAY_COUPON_VALID_MONTHS}개월입니다.
             </p>
           </section>
         )}
