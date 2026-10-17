@@ -22,8 +22,9 @@ export const COMEBACK_COUPON_AMOUNT = 2000;      // 할인 금액(원)
 export const COMEBACK_COUPON_VALID_DAYS = 14;    // 유효기간(발급일로부터, 일)
 
 // 가입 축하 할인권 — 금액·발급은 DB(reward_rules.is_signup, 024 마이그레이션)에서 관리합니다.
-// 유효기간은 발급일로부터 1개월이며, 가입한 날에는 쓸 수 없고 다음 방문(다음 날)부터 사용합니다.
-export const SIGNUP_COUPON_VALID_MONTHS = 1;
+// 유효기간은 발급일로부터 2개월이며, 가입한 날에는 쓸 수 없고 다음 방문(다음 날)부터 사용합니다.
+// (실제 만료일은 DB 트리거가 정합니다 — 025 마이그레이션과 같은 값이어야 합니다)
+export const SIGNUP_COUPON_VALID_MONTHS = 2;
 
 // 할인권 사용 한도 — 손님 1인이 한 번 결제(같은 날 같은 매장)에 쓸 수 있는 최대 장수 (금액 무관)
 export const MAX_REWARDS_PER_PAYMENT = 2;

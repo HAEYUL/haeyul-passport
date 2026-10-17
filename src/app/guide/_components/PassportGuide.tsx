@@ -7,6 +7,7 @@ import { getRewardCatalog, getAllStoresGiftAmount, getSignupGiftAmount, type Rew
 import { getAllTiers, getTierUpDefinition } from '@/lib/tiers';
 import BrandLogo from '@/components/BrandLogo';
 import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE, SIGNUP_COUPON_VALID_MONTHS } from '@/lib/constants';
+import { STORE_NAMES, IS_SINGLE_STORE } from '@/lib/storeAccents';
 
 const tiers = getAllTiers();
 
@@ -79,8 +80,14 @@ export default function PassportGuide() {
           <div>
             <h1 className="text-xl font-bold text-[#2D5A3D]">이용 안내</h1>
             <p className="mt-1 text-[15px] font-medium text-[#55534A]">
-              해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
-              세 매장에서 함께 쓰는 방문여권입니다.
+              {IS_SINGLE_STORE ? (
+                <>{STORE_NAMES[0]}에서 쓰는 방문여권입니다.</>
+              ) : (
+                <>
+                  해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕<br />
+                  세 매장에서 함께 쓰는 방문여권입니다.
+                </>
+              )}
             </p>
             <p className="mt-1 text-[15px] font-medium text-[#55534A]">
               방문할수록 등급이 오르고, 할인권도 받으실 수 있어요.
@@ -155,8 +162,8 @@ export default function PassportGuide() {
             </ul>
           )}
           <p className="text-[13px] font-medium text-[#6B6B5E] leading-relaxed">
-            할인권은 해당 방문 횟수를 달성하면 자동으로 할인권함에 담기며, 3개 매장 어디서든 사용하실 수
-            있습니다. 사용하지 않으면 할인권함에 계속 남아있으니, 매장에서 언제든 직원에게 보여주고
+            할인권은 해당 방문 횟수를 달성하면 자동으로 할인권함에 담기며,{' '}
+            {IS_SINGLE_STORE ? `${STORE_NAMES[0]}에서` : '3개 매장 어디서든'} 사용하실 수 있습니다. 사용하지 않으면 할인권함에 계속 남아있으니, 매장에서 언제든 직원에게 보여주고
             사용하실 수 있습니다. 할인권의 유효기간은 발급일로부터 6개월입니다.
           </p>
         </section>
@@ -179,8 +186,8 @@ export default function PassportGuide() {
           </section>
         )}
 
-        {/* 세 매장 완주 선물 */}
-        {allStoresGiftAmount && (
+        {/* 세 매장 완주 선물 (한 매장만 운영할 때는 받을 수 없으므로 숨김) */}
+        {!IS_SINGLE_STORE && allStoresGiftAmount && (
           <section className="space-y-3">
             <h2 className="text-[17px] font-bold text-[#333331]">세 매장 완주 선물</h2>
             <div className="bg-[#EEF5FB] border-2 border-[#A9C8E4] rounded-xl px-4 py-3.5 flex items-center gap-3">
@@ -201,7 +208,9 @@ export default function PassportGuide() {
         <section className="space-y-3">
           <h2 className="text-[17px] font-bold text-[#333331]">할인권 사용 방법</h2>
           <ul className="bg-white rounded-2xl shadow-sm border border-[#E8E4DA] divide-y divide-[#F0EDE6] text-[15px] font-medium text-[#44443C]">
-            <li className="px-4 py-3">세 매장 어디서나 사용하실 수 있어요.</li>
+            <li className="px-4 py-3">
+              {IS_SINGLE_STORE ? `${STORE_NAMES[0]}에서 사용하실 수 있어요.` : '세 매장 어디서나 사용하실 수 있어요.'}
+            </li>
             <li className="px-4 py-3">
               1인 최대 {MAX_REWARDS_PER_PAYMENT}장까지 사용하실 수 있어요.
               <br />

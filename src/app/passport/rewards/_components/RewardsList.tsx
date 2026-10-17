@@ -6,6 +6,7 @@ import { getRewards, confirmRewardsUse, type RewardItem } from '@/app/actions';
 import { formatDateKR, isSignupCouponLocked } from '@/lib/utils';
 import { getTierUpDefinition } from '@/lib/tiers';
 import { MAX_REWARDS_PER_PAYMENT, MAX_DISCOUNT_PERCENT_PER_TABLE } from '@/lib/constants';
+import { STORE_NAMES, IS_SINGLE_STORE } from '@/lib/storeAccents';
 
 /**
  * 할인권 카드를 종류별로 다르게 보이게 하기 위한 스타일 세트.
@@ -204,7 +205,9 @@ export default function RewardsList() {
         <div>
           <h1 className="text-2xl font-bold text-[#2D5A3D]">내 할인권함</h1>
           <p className="mt-1 text-[15px] font-medium text-[#55534A]">
-            해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.
+            {IS_SINGLE_STORE
+              ? `${STORE_NAMES[0]}에서 식사하실 때 사용하실 수 있습니다.`
+              : '해율만두전골 · 곤드레밥집 · 정담명가 남원추어탕 어느 매장에서든 사용하실 수 있습니다.'}
           </p>
           <p className="mt-1 text-[15px] font-bold text-[#8A5800]">
             사용할 할인권을 골라 직원에게 보여주세요.
@@ -264,7 +267,8 @@ export default function RewardsList() {
                   </div>
 
                   <p className={`text-sm font-semibold ${isUsable ? style.accentText : 'text-[#6B6B5E]'}`}>
-                    세 매장 어디서나 사용 <span className="font-normal">(포장은 사용 불가)</span>
+                    {IS_SINGLE_STORE ? `${STORE_NAMES[0]}에서 사용` : '세 매장 어디서나 사용'}{' '}
+                    <span className="font-normal">(포장은 사용 불가)</span>
                   </p>
 
                   <div className={`text-sm font-medium space-y-0.5 border-t pt-2 ${isUsable ? `${style.borderTop} ${style.subText}` : 'border-[#E0E0D0] text-[#6B6B5E]'}`}>

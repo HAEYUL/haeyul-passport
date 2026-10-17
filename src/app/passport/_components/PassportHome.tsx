@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { getPassportData, registerVisit, logout, type PassportData } from '@/app/actions';
 import { getCurrentPositionWithRetry } from '@/lib/geolocation';
 import { getTierUpDefinition, type VisitTierInfo } from '@/lib/tiers';
-import { STORE_NAMES, HOMEPAGE_URL } from '@/lib/storeAccents';
+import { STORE_NAMES, HOMEPAGE_URL, IS_SINGLE_STORE, BRAND_SUBTITLE } from '@/lib/storeAccents';
 import VisitHistory from './VisitHistory';
 import MyInfo from './MyInfo';
 import NoticeDetail from './NoticeDetail';
@@ -62,7 +62,7 @@ function getCouponLine(data: PassportData, justRecorded: boolean): CouponLine {
     };
   }
 
-  if (data.allStoresGiftAmount && !data.allStoresGiftReceived) {
+  if (!IS_SINGLE_STORE && data.allStoresGiftAmount && !data.allStoresGiftReceived) {
     const counts = new Map(data.storeVisitBreakdown.map((s) => [s.storeName, s.count]));
     const notVisited = STORE_NAMES.filter((name) => (counts.get(name) ?? 0) === 0);
     if (notVisited.length === 1) {
@@ -83,6 +83,36 @@ function getCouponLine(data: PassportData, justRecorded: boolean): CouponLine {
   }
 
   return { title: '🎫 방문할수록 할인권이 쌓여요' };
+}
+
+/**
+ * 다음 등급까지 남은 방문 횟수 — 한 매장만 운영할 때 세 매장 도장 칸 자리에 보여줍니다.
+ */
+function TierProgress({ tier }: { tier: VisitTierInfo }) {
+  if (tier.isMaxTier) {
+    return (
+      <p className="rounded-xl bg-[#F1EAFB] px-4 py-2.5 text-center text-[15px] font-bold text-[#5B3A96]">
+        👑 {tier.label} 고객님, 늘 감사합니다
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-xl bg-[#F0F7F2] px-4 py-3 space-y-2">
+      <p className="text-center text-[15px] font-bold text-[#1F4A2E]">
+        🌱 {tier.nextTierLabel} 등급까지 {tier.visitsUntilNext}번 남았어요
+      </p>
+      <div
+        className="h-2.5 rounded-full bg-[#D9E8DD] overflow-hidden"
+        role="progressbar"
+        aria-label={`${tier.nextTierLabel} 등급까지 진행률`}
+        aria-valuenow={Math.round(tier.progressPercent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className="h-full rounded-full bg-[#2D5A3D]" style={{ width: `${tier.progressPercent}%` }} />
+      </div>
+    </div>
+  );
 }
 
 export default function PassportHome() {
@@ -261,7 +291,7 @@ export default function PassportHome() {
         {/* 헤더 — 가입 첫 화면과 같은 로고·문구 */}
         <header className="text-center space-y-2">
           <BrandLogo height={64} textClassName="text-3xl" />
-          <p className="text-lg font-bold text-[#44443C]">해율푸드의 세 가지 건강한 한식</p>
+          <p className="text-lg font-bold text-[#44443C]">{BRAND_SUBTITLE}</p>
         </header>
 
         {/* A. 매장 QR 확인 → 방문 기록하기 (가장 먼저) */}
@@ -350,7 +380,7 @@ export default function PassportHome() {
           </section>
         )}
 
-        {/* 고객 카드 — 이름 · 등급 · 총 방문 · 세 매장 도장 */}
+        {/* 고객 카드 — 이름 · 등급 · 총 방문 · 세 매장 도장 (한 매장만 운영할 때는 다음 등급까지 남은 횟수) */}
         <section className="bg-white rounded-2xl p-4 shadow-sm border-2 border-[#A8A296] space-y-3">
           <div className="flex items-center gap-3">
             <Image src={data.tier.iconSrc} alt={data.tier.label} width={48} height={48} priority className="flex-shrink-0" />
@@ -362,7 +392,11 @@ export default function PassportHome() {
               </p>
             </div>
           </div>
-          <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />
+          {IS_SINGLE_STORE ? (
+            <TierProgress tier={data.tier} />
+          ) : (
+            <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />
+          )}
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={openHistory}
@@ -420,18 +454,26 @@ export default function PassportHome() {
             )}
 
             <StoreMealList
-              title={data.qrVerified ? '해율푸드의 세 가지 밥상' : '오늘은 어떤 한 끼가 생각나세요?'}
+              title={
+                IS_SINGLE_STORE
+                  ? `${STORE_NAMES[0]} 둘러보기`
+                  : data.qrVerified
+                    ? '해율푸드의 세 가지 밥상'
+                    : '오늘은 어떤 한 끼가 생각나세요?'
+              }
               todayStoreNames={data.todayVisitedStoreNames}
             />
-            <a
-              href={HOMEPAGE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center w-full min-h-[48px] rounded-xl bg-white border-2 border-[#D4D0C8]
-                         text-[#2D5A3D] text-base font-bold hover:bg-[#F5F5EC] active:scale-[0.98] transition-all duration-200"
-            >
-              세 매장 둘러보기
-            </a>
+            {!IS_SINGLE_STORE && (
+              <a
+                href={HOMEPAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center w-full min-h-[48px] rounded-xl bg-white border-2 border-[#D4D0C8]
+                           text-[#2D5A3D] text-base font-bold hover:bg-[#F5F5EC] active:scale-[0.98] transition-all duration-200"
+              >
+                세 매장 둘러보기
+              </a>
+            )}
           </>
         )}
 

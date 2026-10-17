@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+import { STORE_NAMES, IS_SINGLE_STORE } from "@/lib/storeAccents";
 
 const notoSansKR = Noto_Sans_KR({
   subsets: ["latin"],
@@ -11,8 +12,10 @@ const notoSansKR = Noto_Sans_KR({
 
 export const metadata: Metadata = {
   title: "해율푸드 방문여권",
-  description:
-    "음식은 달라도, 정성은 같습니다. 해율만두전골·곤드레밥집·정담명가 남원추어탕 방문여권입니다.",
+  // 카카오톡 등에 링크를 보낼 때 보이는 소개 문구
+  description: IS_SINGLE_STORE
+    ? `자연의 흐름을 맛으로 전하다. ${STORE_NAMES[0]} 방문여권입니다.`
+    : "음식은 달라도, 정성은 같습니다. 해율만두전골·곤드레밥집·정담명가 남원추어탕 방문여권입니다.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

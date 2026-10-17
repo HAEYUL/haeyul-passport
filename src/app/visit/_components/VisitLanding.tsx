@@ -5,7 +5,8 @@ import RegisterForm from './RegisterForm';
 import LoginForm from './LoginForm';
 import BrandLogo from '@/components/BrandLogo';
 import { getCurrentPositionWithRetry, type GeoCoords } from '@/lib/geolocation';
-import { STORE_NAMES, STORE_ACCENTS, DEFAULT_STORE_ACCENT } from '@/lib/storeAccents';
+import { STORE_NAMES, STORE_ACCENTS, DEFAULT_STORE_ACCENT, IS_SINGLE_STORE, BRAND_SUBTITLE } from '@/lib/storeAccents';
+import { SIGNUP_COUPON_VALID_MONTHS } from '@/lib/constants';
 
 interface VisitLandingProps {
   /** QR 스캔으로 확인된 매장 이름. 확인 안 됐으면 null */
@@ -17,7 +18,7 @@ interface VisitLandingProps {
 }
 
 /**
- * 가입 첫 화면 세 매장 안내 문구 — 어떤 음식을 파는 곳인지 한 줄로.
+ * 가입 첫 화면 매장 안내 문구 — 어떤 음식을 파는 곳인지 한 줄로.
  * 앞부분(음식 소개)은 보통 굵기, 상호는 더 굵고 크게 보여줍니다.
  */
 const LANDING_STORE_LABELS: Record<string, { lead: string; name: string }> = {
@@ -66,7 +67,7 @@ export default function VisitLanding({ storeName, isOpen, signupGiftAmount }: Vi
             <BrandLogo height={64} textClassName="text-3xl" />
           </h1>
           <p className="text-lg font-bold text-[#44443C]">
-            해율푸드의 세 가지 건강한 한식
+            {BRAND_SUBTITLE}
           </p>
         </header>
 
@@ -76,11 +77,14 @@ export default function VisitLanding({ storeName, isOpen, signupGiftAmount }: Vi
           </p>
         )}
 
-        {/* 세 매장 안내 — 세 매장 방문기록이 한 여권에 함께 쌓인다는 사실만 짧게 보여줍니다 */}
+        {/* 매장 안내 — 세 매장이면 방문기록이 한 여권에 함께 쌓인다는 사실만 짧게,
+            한 매장(시범 운영)이면 그 매장과 여권이 하는 일을 한 줄로 보여줍니다 */}
         <section className="bg-white rounded-2xl border-2 border-[#E0DCD0] px-4 py-4 space-y-3">
-          <p className="text-[17px] font-bold text-[#2C2C2C] leading-snug">
-            세 매장 방문기록이 함께 쌓여요
-          </p>
+          {!IS_SINGLE_STORE && (
+            <p className="text-[17px] font-bold text-[#2C2C2C] leading-snug">
+              세 매장 방문기록이 함께 쌓여요
+            </p>
+          )}
           <ul className="space-y-2">
             {STORE_NAMES.map((name) => {
               const accent = STORE_ACCENTS[name] ?? DEFAULT_STORE_ACCENT;
@@ -108,9 +112,16 @@ export default function VisitLanding({ storeName, isOpen, signupGiftAmount }: Vi
               );
             })}
           </ul>
-          <p className="text-lg font-extrabold text-[#2D5A3D]">
-            음식은 달라도, 정성은 같습니다.
-          </p>
+          {IS_SINGLE_STORE ? (
+            <p className="text-base font-bold text-[#2D5A3D] leading-snug">
+              방문할 때마다 여권에 기록되고<br />
+              할인권이 차곡차곡 쌓여요
+            </p>
+          ) : (
+            <p className="text-lg font-extrabold text-[#2D5A3D]">
+              음식은 달라도, 정성은 같습니다.
+            </p>
+          )}
         </section>
 
         {/* 가입 즉시 혜택 — 가입을 망설이는 손님에게 잘 보이도록 가입 버튼 바로 위에 둡니다 (운영시간 밖에도 안내) */}
@@ -119,7 +130,9 @@ export default function VisitLanding({ storeName, isOpen, signupGiftAmount }: Vi
             <p className="text-lg font-extrabold text-[#5B3A96]">
               🎁 지금 가입하면 {signupGiftAmount.toLocaleString()}원 할인권을 드려요
             </p>
-            <p className="text-sm font-semibold text-[#5B3A96]">다음 방문부터 1개월 동안 사용하실 수 있어요</p>
+            <p className="text-sm font-semibold text-[#5B3A96]">
+              다음 방문부터 {SIGNUP_COUPON_VALID_MONTHS}개월 동안 사용하실 수 있어요
+            </p>
           </div>
         )}
 
