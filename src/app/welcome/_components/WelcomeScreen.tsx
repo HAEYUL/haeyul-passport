@@ -5,8 +5,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { getPassportData, updateReferralSource, type PassportData } from '@/app/actions';
 import { REFERRAL_SOURCE_OPTIONS, type ReferralSourceKey } from '@/lib/referralSource';
-import { STORE_NAMES } from '@/lib/storeAccents';
+import { STORE_NAMES, IS_SINGLE_STORE } from '@/lib/storeAccents';
 import { getTierUpDefinition } from '@/lib/tiers';
+import { SIGNUP_COUPON_VALID_MONTHS } from '@/lib/constants';
 import StoreStamps from '@/components/passport/StoreStamps';
 import StoreMealList from '@/components/passport/StoreMealList';
 import { useAddToHome } from '@/components/passport/useAddToHome';
@@ -75,7 +76,7 @@ export default function WelcomeScreen() {
           </p>
         </div>
 
-        {/* 등급 + 세 매장 도장 */}
+        {/* 등급 + 세 매장 도장 (한 매장만 운영할 때는 도장 칸 없이 등급만) */}
         <section className="bg-white rounded-2xl p-4 shadow-sm border-2 border-[#A8A296] space-y-3">
           <div className="flex items-center gap-3">
             <Image src={tier.iconSrc} alt="" width={44} height={44} />
@@ -83,7 +84,7 @@ export default function WelcomeScreen() {
               {tier.label} · {data.customer.visit_count <= 1 ? '첫 번째 방문' : `총 ${data.customer.visit_count}회 방문`}
             </p>
           </div>
-          <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />
+          {!IS_SINGLE_STORE && <StoreStamps counts={visitCounts} todayStoreNames={data.todayVisitedStoreNames} />}
         </section>
 
         {/* 가입 축하 할인권 — 가입 즉시 발급, 다음 방문부터 사용 */}
@@ -92,7 +93,9 @@ export default function WelcomeScreen() {
             <p className="text-lg font-extrabold text-[#5B3A96]">
               🎁 가입 축하 {data.signupGift.amount.toLocaleString()}원 할인권이 담겼어요
             </p>
-            <p className="text-[15px] font-semibold text-[#5B3A96]">다음 방문부터 1개월 동안 사용하실 수 있어요</p>
+            <p className="text-[15px] font-semibold text-[#5B3A96]">
+              다음 방문부터 {SIGNUP_COUPON_VALID_MONTHS}개월 동안 사용하실 수 있어요
+            </p>
           </section>
         )}
 
@@ -104,7 +107,7 @@ export default function WelcomeScreen() {
               {nextTierUp && ` + ${nextTierUp.label} 등급`}
             </p>
           )}
-          {allStoresGiftAmount && !data.allStoresGiftReceived && (
+          {!IS_SINGLE_STORE && allStoresGiftAmount && !data.allStoresGiftReceived && (
             <p className="text-[17px] font-bold text-[#204A6E]">
               🏅 세 매장 모두 오시면 {allStoresGiftAmount.toLocaleString()}원 완주 선물
             </p>

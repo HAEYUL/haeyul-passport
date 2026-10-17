@@ -9,8 +9,21 @@ export interface StoreAccent {
   text: string;
 }
 
-/** 고객 화면에서 세 매장을 나열할 때의 순서 */
-export const STORE_NAMES = ['해율만두전골', '곤드레밥집', '정담명가 남원추어탕'] as const;
+/**
+ * 지금 해율여권을 쓰는 매장 — 고객 화면에는 이 매장들만, 이 순서로 보입니다.
+ * 해율만두전골에서 먼저 시범 운영하고, 정담명가·곤드레밥집을 차례로 여기에 추가합니다.
+ * 세 매장 모두: ['해율만두전골', '곤드레밥집', '정담명가 남원추어탕']
+ */
+export const STORE_NAMES: readonly string[] = ['해율만두전골'];
+
+/**
+ * 한 매장만 운영 중인지 — true면 세 매장 도장 칸·완주 선물·다른 매장 소개를 숨기고
+ * 그 매장 기준 문구를 보여줍니다. 매장을 추가하면 세 매장 화면이 그대로 다시 나타납니다.
+ */
+export const IS_SINGLE_STORE = STORE_NAMES.length === 1;
+
+/** 고객 화면 머리 문구 (가입 첫 화면·여권 홈) */
+export const BRAND_SUBTITLE = IS_SINGLE_STORE ? '자연의 흐름을 맛으로 전하다' : '해율푸드의 세 가지 건강한 한식';
 
 export const STORE_ACCENTS: Record<string, StoreAccent> = {
   '해율만두전골': { border: '#2D5A3D', bg: '#F1F8F3', text: '#1F4A2E' },
