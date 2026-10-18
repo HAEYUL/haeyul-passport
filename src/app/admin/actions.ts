@@ -16,6 +16,7 @@ import { AUDIT_ACTION, SUSPICIOUS_ACTIVITY_TYPE_LABELS, ALL_STORES_CODES } from 
 import { getAllTiers, getVisitTierInfo, type VisitTierKey } from '@/lib/tiers';
 import { REFERRAL_SOURCE_OPTIONS, getReferralSourceLabel, type ReferralSourceKey } from '@/lib/referralSource';
 import { getOrCreateStoreQrSettings, reissueStoreQrToken } from '@/lib/qrSettings';
+import { sendSms, getAligoRemain, getOutboundIp, isAligoProxyConfigured } from '@/lib/sms';
 import {
   setAdminSession,
   getAdminSession,
@@ -2540,6 +2541,100 @@ export async function updateStoreLocation(
   } catch (error) {
     console.error('updateStoreLocation 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+// ============================================================
+// 문자 발송 연결 확인 (알리고 · 고정 IP 중계)
+// ============================================================
+
+export interface SmsConnectionStatus {
+  /** Vercel에 ALIGO_PROXY_URL(중계 서비스)이 설정돼 있는지 */
+  proxyConfigured: boolean;
+  /** 알리고로 나가는 IP (중계 서비스를 쓰면 그 고정 IP). 확인 실패 시 null */
+  outboundIp: string | null;
+  /** 알리고 잔액으로 보낼 수 있는 단문 건수. 연결 실패 시 null */
+  remainSms: number | null;
+  /** 장문 건수. 연결 실패 시 null */
+  remainLms: number | null;
+  /** 알리고 연결 실패 사유 (성공이면 null) */
+  aligoError: string | null;
+}
+
+/**
+ * 문자를 보내지 않고 알리고 연결만 확인합니다 — 나가는 IP와 잔액 조회 결과를 돌려줍니다.
+ * 잔액이 조회되면 IP 등록·API 키가 모두 맞는 것입니다.
+ */
+export async function checkSmsConnection(): Promise<ApiResponse<SmsConnectionStatus>> {
+  const admin = await getAdminSession();
+  if (!admin) {
+    return { success: false, error: '관리자 로그인이 필요합니다.' };
+  }
+
+  let outboundIp: string | null = null;
+  try {
+    outboundIp = await getOutboundIp();
+  } catch (error) {
+    console.error('checkSmsConnection IP 확인 오류:', error);
+  }
+
+  try {
+    const remain = await getAligoRemain();
+    return {
+      success: true,
+      data: {
+        proxyConfigured: isAligoProxyConfigured(),
+        outboundIp,
+        remainSms: remain.sms,
+        remainLms: remain.lms,
+        aligoError: null,
+      },
+    };
+  } catch (error) {
+    return {
+      success: true,
+      data: {
+        proxyConfigured: isAligoProxyConfigured(),
+        outboundIp,
+        remainSms: null,
+        remainLms: null,
+        aligoError: error instanceof Error ? error.message : '알리고 연결 중 오류가 발생했습니다.',
+      },
+    };
+  }
+}
+
+const TEST_SMS_MESSAGE = '[해율여권] 문자 발송 테스트입니다. 이 문자를 받으셨다면 자동 발송 연결이 정상입니다.';
+
+/** 입력한 번호로 테스트 문자 1건을 보냅니다. (실제 발송 — 알리고 잔액이 차감됩니다) */
+export async function sendTestSms(rawPhone: string): Promise<ApiResponse<null>> {
+  const admin = await getAdminSession();
+  if (!admin) {
+    return { success: false, error: '관리자 로그인이 필요합니다.' };
+  }
+  if (!isValidPhone(rawPhone)) {
+    return { success: false, error: '올바른 휴대전화 번호를 입력해 주세요.' };
+  }
+
+  const phone = normalizePhone(rawPhone).replace(/\D/g, '');
+  try {
+    const result = await sendSms({ receivers: [phone], message: TEST_SMS_MESSAGE });
+    if (result.successCount < 1) {
+      return { success: false, error: '알리고가 발송을 받아들이지 않았습니다. 번호를 확인해 주세요.' };
+    }
+
+    const supabase = createAdminClient();
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.SMS_SEND,
+      target_type: 'sms_test',
+      after_data: { kind: 'test', receiver_last4: phone.slice(-4) },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('sendTestSms 오류:', error);
+    return { success: false, error: error instanceof Error ? error.message : '문자 발송 중 오류가 발생했습니다.' };
   }
 }
 
