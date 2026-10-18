@@ -4,6 +4,7 @@
  *
  * 알리고는 미리 등록한 서버 IP에서 온 요청만 받습니다. Vercel은 요청마다 나가는 IP가 바뀌므로,
  * ALIGO_PROXY_URL(고정 IP 중계 서비스, 예: Fixie)이 설정돼 있으면 알리고 요청만 그 중계를 거쳐 보냅니다.
+ * Fixie를 Vercel 연동으로 설치하면 자동으로 들어가는 FIXIE_URL도 함께 인식합니다.
  * 중계 서비스의 고정 IP를 알리고 관리 화면에 등록해 두어야 합니다.
  * (HTTPS 그대로 터널링하므로 중계 서비스는 내용을 볼 수 없습니다)
  */
@@ -18,16 +19,21 @@ const OUTBOUND_IP_URL = 'https://api.ipify.org?format=json';
 
 let cachedProxy: { url: string; agent: ProxyAgent } | null = null;
 
-/** ALIGO_PROXY_URL이 있으면 그 중계 서비스를 쓰는 연결을, 없으면 undefined(바로 연결)를 돌려줍니다. */
+/** 중계 서비스 주소 — ALIGO_PROXY_URL을 먼저 보고, 없으면 Fixie Vercel 연동의 FIXIE_URL */
+function getProxyUrl(): string | undefined {
+  return process.env.ALIGO_PROXY_URL?.trim() || process.env.FIXIE_URL?.trim() || undefined;
+}
+
+/** 중계 서비스 주소가 있으면 그 중계를 쓰는 연결을, 없으면 undefined(바로 연결)를 돌려줍니다. */
 function getProxyAgent(): ProxyAgent | undefined {
-  const proxyUrl = process.env.ALIGO_PROXY_URL?.trim();
+  const proxyUrl = getProxyUrl();
   if (!proxyUrl) return undefined;
   if (cachedProxy?.url !== proxyUrl) {
     try {
       new URL(proxyUrl);
     } catch {
       // 주소에 비밀번호가 들어 있으므로 오류 메시지에 주소를 남기지 않습니다.
-      throw new Error('ALIGO_PROXY_URL 형식이 올바르지 않습니다. (예: http://아이디:비밀번호@주소:80)');
+      throw new Error('ALIGO_PROXY_URL(또는 FIXIE_URL) 형식이 올바르지 않습니다. (예: http://아이디:비밀번호@주소:80)');
     }
     cachedProxy = { url: proxyUrl, agent: new ProxyAgent(proxyUrl) };
   }
@@ -36,7 +42,7 @@ function getProxyAgent(): ProxyAgent | undefined {
 
 /** 중계 서비스 주소가 설정돼 있는지 */
 export function isAligoProxyConfigured(): boolean {
-  return Boolean(process.env.ALIGO_PROXY_URL?.trim());
+  return Boolean(getProxyUrl());
 }
 
 /** 알리고(또는 IP 확인) 요청 — 중계 서비스가 설정돼 있으면 그쪽을 거칩니다. */
@@ -68,7 +74,7 @@ function getAligoCredentials() {
 export function explainAligoError(message: string): string {
   const raw = message || '알 수 없는 오류';
   if (/IP/i.test(raw)) {
-    return `알리고에 등록되지 않은 IP에서 보냈습니다. 중계 서비스의 고정 IP(2개)를 알리고 발송 서버 IP에 등록했는지, Vercel에 ALIGO_PROXY_URL을 넣었는지 확인해 주세요. (알리고: ${raw})`;
+    return `알리고에 등록되지 않은 IP에서 보냈습니다. 중계 서비스의 고정 IP(2개)를 알리고 발송 서버 IP에 등록했는지, Vercel에 ALIGO_PROXY_URL(또는 Fixie 연동의 FIXIE_URL)이 있는지 확인해 주세요. (알리고: ${raw})`;
   }
   if (/잔액|포인트|충전/.test(raw)) {
     return `알리고 충전 잔액이 부족합니다. 알리고에서 충전해 주세요. (알리고: ${raw})`;

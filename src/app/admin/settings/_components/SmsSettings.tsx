@@ -70,8 +70,8 @@ export default function SmsSettings() {
             <dt className="font-semibold text-[#44443C]">중계 서비스</dt>
             <dd className={status.proxyConfigured ? 'text-[#1F4A2E] font-semibold' : 'text-[#B3261E] font-semibold'}>
               {status.proxyConfigured
-                ? '설정됨 (ALIGO_PROXY_URL)'
-                : '설정 안 됨 — Vercel 환경변수에 ALIGO_PROXY_URL을 넣고 다시 배포해 주세요'}
+                ? '설정됨'
+                : '설정 안 됨 — Vercel 환경변수에 ALIGO_PROXY_URL(또는 Fixie 연동의 FIXIE_URL)이 있는지 확인하고 다시 배포해 주세요'}
             </dd>
 
             <dt className="font-semibold text-[#44443C]">나가는 IP</dt>

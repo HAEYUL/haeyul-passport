@@ -2549,7 +2549,7 @@ export async function updateStoreLocation(
 // ============================================================
 
 export interface SmsConnectionStatus {
-  /** Vercel에 ALIGO_PROXY_URL(중계 서비스)이 설정돼 있는지 */
+  /** Vercel에 중계 서비스 주소(ALIGO_PROXY_URL 또는 FIXIE_URL)가 설정돼 있는지 */
   proxyConfigured: boolean;
   /** 알리고로 나가는 IP (중계 서비스를 쓰면 그 고정 IP). 확인 실패 시 null */
   outboundIp: string | null;
