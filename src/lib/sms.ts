@@ -92,6 +92,10 @@ export interface SendSmsParams {
   /** 수신번호 목록 (하이픈 없이). 최대 1,000명. */
   receivers: string[];
   message: string;
+  /** 장문(LMS) 제목. 장문일 때만 쓰입니다. */
+  title?: string;
+  /** true면 길이와 상관없이 장문(LMS)으로 보냅니다. */
+  forceLms?: boolean;
   testMode?: boolean;
 }
 
@@ -100,10 +104,16 @@ export interface SendSmsResult {
   errorCount: number;
 }
 
-export async function sendSms({ receivers, message, testMode = false }: SendSmsParams): Promise<SendSmsResult> {
+export async function sendSms({
+  receivers,
+  message,
+  title,
+  forceLms = false,
+  testMode = false,
+}: SendSmsParams): Promise<SendSmsResult> {
   const { apiKey, userId, sender } = getAligoCredentials();
 
-  const msgType = estimateSmsByteLength(message) > SMS_BYTE_LIMIT ? 'LMS' : 'SMS';
+  const msgType = forceLms || estimateSmsByteLength(message) > SMS_BYTE_LIMIT ? 'LMS' : 'SMS';
 
   const body = new URLSearchParams({
     key: apiKey,
@@ -114,6 +124,7 @@ export async function sendSms({ receivers, message, testMode = false }: SendSmsP
     msg_type: msgType,
     testmode_yn: testMode ? 'Y' : 'N',
   });
+  if (msgType === 'LMS' && title) body.set('title', title);
 
   const data = await outboundFetch(ALIGO_SEND_URL, body);
 

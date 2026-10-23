@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { adminLogout } from '@/app/admin/actions';
 
 interface AdminNavProps {
-  active: 'dashboard' | 'customers' | 'visits' | 'rewards' | 'settings';
+  active: 'dashboard' | 'customers' | 'visits' | 'reservations' | 'rewards' | 'settings';
 }
 
 /**
@@ -15,6 +15,7 @@ const TABS: { key: AdminNavProps['active'] | 'vip'; href: string; label: string;
   { key: 'dashboard', href: '/admin', label: '대시보드', icon: '📊' },
   { key: 'customers', href: '/admin/customers', label: '고객관리', icon: '👥' },
   { key: 'visits', href: '/admin/visits', label: '방문관리', icon: '📍' },
+  { key: 'reservations', href: '/admin/reservations', label: '예약관리', icon: '📅' },
   { key: 'rewards', href: '/admin/rewards', label: '할인권관리', icon: '🎁' },
   { key: 'vip', href: '/admin/customers?filter=vip', label: 'VIP관리', icon: '⭐' },
   { key: 'settings', href: '/admin/settings', label: '설정', icon: '⚙️' },

@@ -87,7 +87,16 @@ export default function PrivacyPolicyPage() {
             </p>
           </div>
           <div>
-            <p className="font-semibold text-[#333] mb-1">8. 문의처</p>
+            <p className="font-semibold text-[#333] mb-1">8. 전화 예약 고객의 개인정보</p>
+            <p>
+              전화로 예약하신 고객의 예약자명·휴대폰번호·예약 일시·인원은 예약 확인과 예약 안내
+              문자 발송을 위해서만 이용하며, 방문여권 회원 정보와 별도로 보관합니다. 같은
+              휴대폰번호의 마지막 예약일로부터 3년이 지나면 자동으로 파기하며, 홍보 목적의
+              문자 발송에는 이용하지 않습니다.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-[#333] mb-1">9. 문의처</p>
             <p>개인정보와 관련한 문의는 아래로 연락해 주시기 바랍니다.</p>
             <ul className="space-y-1 list-disc list-inside">
               <li>상호: 해율만두전골, 곤드레밥집, 정담명가 남원추어탕</li>
