@@ -5,7 +5,7 @@ import { createSignedValue, readSignedValue } from '@/lib/signedCookie';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const SESSION_COOKIE = 'haeyul_admin';
-const SESSION_MAX_AGE = 60 * 60 * 8; // 8시간
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30일 (관리자·매니저 공통, 로그아웃하면 바로 끝남)
 
 /** owner: 전체 관리자 / manager: 예약관리만 쓰는 매니저 계정 (027 마이그레이션) */
 export type AdminRole = 'owner' | 'manager';
@@ -13,6 +13,8 @@ export type AdminRole = 'owner' | 'manager';
 interface AdminSessionData {
   adminId: string;
   username: string;
+  /** 로그인할 때의 계정 로그인 버전 — 비밀번호를 바꾸면 DB 버전이 올라 이전 로그인이 끊깁니다 (028) */
+  sessionVersion?: number;
 }
 
 export interface StaffSessionData extends AdminSessionData {
@@ -35,7 +37,7 @@ export async function setAdminSession(data: AdminSessionData) {
 
 /**
  * 로그인한 관리자·매니저 — 서명이 맞고 만료되지 않은 쿠키만 인정하고(위조 쿠키 차단),
- * 계정이 아직 사용 중인지와 역할을 DB에서 확인합니다. (사용 중지하면 바로 막힙니다)
+ * 계정이 아직 사용 중인지와 역할을 DB에서 확인합니다. (사용 중지하거나 비밀번호를 바꾸면 바로 막힙니다)
  */
 export async function getStaffSession(): Promise<StaffSessionData | null> {
   const cookieStore = await cookies();
@@ -54,10 +56,14 @@ export async function getStaffSession(): Promise<StaffSessionData | null> {
     return null;
   }
   if (!account || !account.is_active) return null;
+  // 비밀번호를 바꾼 뒤에는 그 전에 로그인한 기기를 로그아웃시킵니다. (session_version 칸은 028 마이그레이션부터)
+  if (typeof account.session_version === 'number' && (data.sessionVersion ?? 0) !== account.session_version) {
+    return null;
+  }
 
   // role 칸이 없으면(027 마이그레이션 전) 기존 계정은 모두 전체 관리자입니다.
   const role: AdminRole = account.role === 'manager' ? 'manager' : 'owner';
-  return { adminId: data.adminId, username: data.username, role };
+  return { adminId: data.adminId, username: data.username, sessionVersion: data.sessionVersion, role };
 }
 
 /**

@@ -231,7 +231,11 @@ export async function adminLogin(
       )
       .eq('id', admin.id);
 
-    await setAdminSession({ adminId: admin.id, username: admin.username });
+    await setAdminSession({
+      adminId: admin.id,
+      username: admin.username,
+      sessionVersion: typeof admin.session_version === 'number' ? admin.session_version : 0,
+    });
 
     return { success: true, data: { role: admin.role === 'manager' ? 'manager' : 'owner' } };
   } catch (error) {
@@ -282,6 +286,14 @@ export async function changeAdminPassword(
     if (!changed) {
       return { success: false, error: '현재 비밀번호가 일치하지 않습니다.' };
     }
+
+    // 비밀번호를 바꾸면 로그인 버전이 올라 다른 기기는 로그아웃됩니다. 지금 이 기기는 새 버전으로 로그인을 이어갑니다.
+    const { data: account } = await supabase.from('admin_users').select('*').eq('id', admin.adminId).single();
+    await setAdminSession({
+      adminId: admin.adminId,
+      username: admin.username,
+      sessionVersion: typeof account?.session_version === 'number' ? account.session_version : 0,
+    });
 
     return { success: true };
   } catch (error) {
