@@ -7,6 +7,7 @@ import {
   resendReservationSms,
   updateReservation,
   cancelReservation,
+  deleteReservation,
   getReservations,
   getReservationSmsTemplate,
   updateReservationSmsTemplate,
@@ -288,6 +289,22 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     loadList(scope);
   }
 
+  async function handleDelete(item: ReservationItem) {
+    if (
+      !window.confirm(
+        `${item.customerName}님 ${formatReservationDate(item.reservedDate)} 예약을 명단에서 완전히 삭제할까요?\n삭제하면 되돌릴 수 없습니다. (손님께 문자는 가지 않습니다)`
+      )
+    ) {
+      return;
+    }
+    setBusyId(item.id);
+    setRowMessage(null);
+    const result = await deleteReservation(item.id);
+    setBusyId(null);
+    setRowMessage(result.success ? { ok: true, text: '예약을 삭제했습니다.' } : { ok: false, text: result.error || '처리 중 오류가 발생했습니다.' });
+    loadList(scope);
+  }
+
   function startEdit(item: ReservationItem) {
     setEditError('');
     setEditing({
@@ -438,27 +455,16 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
           ) : visibleItems.length === 0 ? (
             <p className="text-sm text-[#6B6B5E]">{scope === 'upcoming' ? '다가오는 예약이 없습니다.' : '지난 예약이 없습니다.'}</p>
           ) : (
-            <div className="overflow-x-auto -mx-6 px-6">
-              <p className="mb-2 text-xs text-[#6B6B5E] sm:hidden">← 옆으로 밀어서 전체를 볼 수 있어요</p>
-              {/* 한 줄에 한 예약 — 칸이 좁아도 줄바꿈하지 않고 옆으로 스크롤합니다. 예약일시 칸은 왼쪽에 고정 */}
-              <table className="min-w-[980px] w-full text-sm whitespace-nowrap">
-                <thead>
-                  <tr className="border-b-2 border-[#E0DCD0] text-left text-[#6B6B5E]">
-                    <th className="sticky left-0 z-10 bg-white py-2 pr-4 font-semibold">예약일시</th>
-                    <th className="py-2 pr-4 font-semibold">예약자</th>
-                    <th className="py-2 pr-4 font-semibold">휴대폰번호</th>
-                    <th className="py-2 pr-4 font-semibold">인원</th>
-                    <th className="py-2 pr-4 font-semibold">메모</th>
-                    <th className="py-2 pr-4 font-semibold">안내 문자</th>
-                    <th className="py-2 font-semibold">관리</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleItems.map((r) => {
-                    const cancelled = r.status === 'cancelled';
-                    return (
-                      <tr key={r.id} className={`border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
-                        <td className="sticky left-0 z-10 bg-white py-2.5 pr-4">
+            <div>
+              <p className="mb-2 text-xs text-[#6B6B5E] sm:hidden">← 줄을 옆으로 밀면 나머지 내용이 보여요</p>
+              {/* 한 줄에 한 예약 — 줄마다 따로 옆으로 스크롤됩니다 (밀어 본 줄만 움직임) */}
+              <ul className="border-t border-[#F0EDE6] text-sm">
+                {visibleItems.map((r) => {
+                  const cancelled = r.status === 'cancelled';
+                  return (
+                    <li key={r.id} className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
+                      <div className="flex w-max items-center gap-4 whitespace-nowrap py-2.5 pr-2">
+                        <span>
                           <span className="font-semibold">{formatReservationDate(r.reservedDate)}</span>{' '}
                           {formatReservationTime(r.reservedTime)}
                           {cancelled && (
@@ -466,34 +472,36 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                               취소
                             </span>
                           )}
-                        </td>
-                        <td className="py-2.5 pr-4">
+                        </span>
+                        <span>
                           <span className="font-semibold">{r.customerName}</span>
                           {r.isPassportMember && (
                             <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
                               여권회원
                             </span>
                           )}
-                        </td>
-                        <td className="py-2.5 pr-4">{r.phone}</td>
-                        <td className="py-2.5 pr-4">{r.partySize}명</td>
-                        <td className="py-2.5 pr-4 max-w-[200px] truncate" title={r.memo ?? ''}>
-                          {r.memo}
-                        </td>
-                        <td className="py-2.5 pr-4">
+                        </span>
+                        <span>{r.phone}</span>
+                        <span>{r.partySize}명</span>
+                        {r.memo && (
+                          <span className="max-w-[220px] truncate text-[#55534A]" title={r.memo}>
+                            메모: {r.memo}
+                          </span>
+                        )}
+                        <span>
                           {r.smsStatus === 'sent' && (
                             <span className="text-[#1F4A2E] font-semibold">✓ 발송 {r.smsSentAt && formatSentAt(r.smsSentAt)}</span>
                           )}
                           {r.smsStatus === 'failed' && (
                             <span className="text-[#B3261E] font-semibold" title={r.smsError ?? ''}>
-                              ✕ 실패
+                              ✕ 문자 실패
                             </span>
                           )}
-                          {!r.smsStatus && <span className="text-[#6B6B5E]">-</span>}
-                        </td>
-                        <td className="py-2.5">
+                          {!r.smsStatus && <span className="text-[#6B6B5E]">문자 -</span>}
+                        </span>
+                        <span className="flex flex-nowrap gap-1.5">
                           {!cancelled && (
-                            <div className="flex flex-nowrap gap-1.5">
+                            <>
                               <button
                                 type="button"
                                 onClick={() => startEdit(r)}
@@ -518,14 +526,22 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                               >
                                 취소
                               </button>
-                            </div>
+                            </>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r)}
+                            disabled={busyId === r.id}
+                            className="px-3 py-1.5 rounded-lg bg-[#FBEAEA] border border-[#E8B4B0] text-[#8A241A] font-semibold hover:bg-[#F6DCDA] disabled:opacity-40"
+                          >
+                            삭제
+                          </button>
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
           <p className="text-xs text-[#6B6B5E]">
