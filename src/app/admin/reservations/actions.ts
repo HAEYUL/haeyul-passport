@@ -258,7 +258,7 @@ export async function resendReservationSms(reservationId: string): Promise<ApiRe
   }
 }
 
-/** 예약 내용 수정 (문자는 보내지 않음 — 필요하면 '문자 다시 보내기') */
+/** 예약 내용 수정 (문자는 보내지 않음 — 필요하면 '문자재전송') */
 export async function updateReservation(reservationId: string, input: ReservationInput): Promise<ApiResponse<null>> {
   const admin = await getStaffSession();
   if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
