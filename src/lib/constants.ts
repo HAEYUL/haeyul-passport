@@ -82,6 +82,9 @@ export const AUDIT_ACTION = {
   RESERVATION_CANCEL: 'reservation_cancel',
   RESERVATION_SMS_RESEND: 'reservation_sms_resend',
   RESERVATION_SMS_TEMPLATE_UPDATE: 'reservation_sms_template_update',
+  MANAGER_CREATE: 'manager_create',
+  MANAGER_PASSWORD_RESET: 'manager_password_reset',
+  MANAGER_UPDATE: 'manager_update',
 } as const;
 
 // 감사 로그 액션 한글 라벨 (관리자 화면 여러 곳에서 공용으로 사용)
@@ -114,4 +117,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   [AUDIT_ACTION.RESERVATION_CANCEL]: '전화 예약 취소',
   [AUDIT_ACTION.RESERVATION_SMS_RESEND]: '예약 안내 문자 재발송',
   [AUDIT_ACTION.RESERVATION_SMS_TEMPLATE_UPDATE]: '예약 안내 문자 문구 수정',
+  [AUDIT_ACTION.MANAGER_CREATE]: '매니저 계정 생성',
+  [AUDIT_ACTION.MANAGER_PASSWORD_RESET]: '매니저 계정 비밀번호 변경',
+  [AUDIT_ACTION.MANAGER_UPDATE]: '매니저 계정 사용 설정 변경',
 };

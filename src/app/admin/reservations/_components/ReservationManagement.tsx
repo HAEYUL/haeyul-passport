@@ -187,7 +187,7 @@ function ReservationFields({
   );
 }
 
-export default function ReservationManagement() {
+export default function ReservationManagement({ isOwner }: { isOwner: boolean }) {
   const [template, setTemplate] = useState<ReservationSmsTemplate | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [sending, setSending] = useState(false);
@@ -338,7 +338,7 @@ export default function ReservationManagement() {
           </p>
         </header>
 
-        <AdminNav active="reservations" />
+        <AdminNav active="reservations" isManager={!isOwner} />
 
         {/* 1. 예약 입력 · 문자 보내기 */}
         <section className="bg-white rounded-2xl border-2 border-[#E0DCD0] p-6 space-y-4">
@@ -398,14 +398,16 @@ export default function ReservationManagement() {
                   {label}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => downloadReservationsCsv(visibleItems, scope)}
-                disabled={visibleItems.length === 0}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC] disabled:opacity-40"
-              >
-                엑셀 다운로드
-              </button>
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => downloadReservationsCsv(visibleItems, scope)}
+                  disabled={visibleItems.length === 0}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#2D5A3D] border-2 border-[#D4D0C8] hover:bg-[#F5F5EC] disabled:opacity-40"
+                >
+                  엑셀 다운로드
+                </button>
+              )}
             </div>
           </div>
 
@@ -485,14 +487,16 @@ export default function ReservationManagement() {
                         <td className="py-3">
                           {!cancelled && (
                             <div className="flex flex-wrap gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => startEdit(r)}
-                                disabled={busyId === r.id}
-                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                              >
-                                수정
-                              </button>
+                              {isOwner && (
+                                <button
+                                  type="button"
+                                  onClick={() => startEdit(r)}
+                                  disabled={busyId === r.id}
+                                  className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+                                >
+                                  수정
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleResend(r)}
@@ -501,14 +505,16 @@ export default function ReservationManagement() {
                               >
                                 문자 다시 보내기
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCancel(r)}
-                                disabled={busyId === r.id}
-                                className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
-                              >
-                                취소
-                              </button>
+                              {isOwner && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancel(r)}
+                                  disabled={busyId === r.id}
+                                  className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
+                                >
+                                  취소
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -525,7 +531,7 @@ export default function ReservationManagement() {
         </section>
 
         {/* 3. 문구 수정 */}
-        {template && <TemplateEditor template={template} onSaved={loadTemplate} />}
+        {isOwner && template && <TemplateEditor template={template} onSaved={loadTemplate} />}
       </div>
 
       {/* 예약 수정 창 */}

@@ -10,8 +10,9 @@ import AdminAccountSettings from './AdminAccountSettings';
 import AuditLogView from './AuditLogView';
 import DataBackup from './DataBackup';
 import SmsSettings from './SmsSettings';
+import ManagerAccountSettings from './ManagerAccountSettings';
 
-type Section = 'qr' | 'location' | 'notice' | 'sms' | 'stats' | 'account' | 'audit' | 'backup';
+type Section = 'qr' | 'location' | 'notice' | 'sms' | 'stats' | 'account' | 'manager' | 'audit' | 'backup';
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'qr', label: 'QR 관리' },
@@ -20,6 +21,7 @@ const SECTIONS: { key: Section; label: string }[] = [
   { key: 'sms', label: '문자 발송' },
   { key: 'stats', label: '통계' },
   { key: 'account', label: '계정' },
+  { key: 'manager', label: '매니저 계정' },
   { key: 'audit', label: '활동이력' },
   { key: 'backup', label: '데이터 백업' },
 ];
@@ -89,6 +91,7 @@ export default function AdminSettings() {
         )}
         {section === 'stats' && <StatsOverview />}
         {section === 'account' && <AdminAccountSettings />}
+        {section === 'manager' && <ManagerAccountSettings />}
         {section === 'audit' && <AuditLogView />}
         {section === 'backup' && <DataBackup />}
       </div>

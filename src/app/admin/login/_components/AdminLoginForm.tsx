@@ -20,7 +20,7 @@ export default function AdminLoginForm() {
     setLoading(false);
 
     if (result.success) {
-      window.location.href = '/admin';
+      window.location.href = result.data?.role === 'manager' ? '/admin/reservations' : '/admin';
     } else {
       setError(result.error || '로그인 중 오류가 발생했습니다.');
     }
@@ -35,7 +35,7 @@ export default function AdminLoginForm() {
         </header>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-[15px]">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-[15px] whitespace-pre-line">
             {error}
           </div>
         )}

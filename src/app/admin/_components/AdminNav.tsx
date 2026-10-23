@@ -5,6 +5,8 @@ import { adminLogout } from '@/app/admin/actions';
 
 interface AdminNavProps {
   active: 'dashboard' | 'customers' | 'visits' | 'reservations' | 'rewards' | 'settings';
+  /** 매니저 계정이면 예약관리 메뉴만 보여줍니다 (다른 화면은 서버에서도 막혀 있음) */
+  isManager?: boolean;
 }
 
 /**
@@ -21,7 +23,9 @@ const TABS: { key: AdminNavProps['active'] | 'vip'; href: string; label: string;
   { key: 'settings', href: '/admin/settings', label: '설정', icon: '⚙️' },
 ];
 
-export default function AdminNav({ active }: AdminNavProps) {
+export default function AdminNav({ active, isManager = false }: AdminNavProps) {
+  const tabs = isManager ? TABS.filter((tab) => tab.key === 'reservations') : TABS;
+
   async function handleLogout() {
     await adminLogout();
     window.location.href = '/admin/login';
@@ -30,7 +34,7 @@ export default function AdminNav({ active }: AdminNavProps) {
   return (
     <nav className="flex flex-wrap items-center justify-between gap-y-3 border-b border-[#E8E4DA] pb-5">
       <div className="flex flex-wrap gap-2.5">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <Link
             key={tab.key}
             href={tab.href}
