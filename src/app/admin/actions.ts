@@ -168,10 +168,13 @@ async function countVisitedAllStores(
 // 관리자 로그인 / 세션
 // ============================================================
 
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCK_MINUTES = 15;
+
 export async function adminLogin(
   username: string,
   password: string
-): Promise<ApiResponse<null>> {
+): Promise<ApiResponse<{ role: 'owner' | 'manager' }>> {
   try {
     if (!username || !password) {
       return { success: false, error: '아이디와 비밀번호를 입력해 주세요.' };
@@ -179,9 +182,10 @@ export async function adminLogin(
 
     const supabase = createAdminClient();
 
+    // role·로그인 잠금 칸은 027 마이그레이션 전에는 없을 수 있어 전체(*)를 읽습니다.
     const { data: admin } = await supabase
       .from('admin_users')
-      .select('id, username')
+      .select('*')
       .eq('username', username)
       .eq('is_active', true)
       .single();
@@ -190,23 +194,46 @@ export async function adminLogin(
       return { success: false, error: '아이디 또는 비밀번호가 일치하지 않습니다.' };
     }
 
+    // 비밀번호를 여러 번 틀리면 잠시 잠급니다 (짧은 비밀번호를 무작위로 맞혀 보는 것을 막기 위해)
+    if (admin.locked_until && new Date(admin.locked_until) > new Date()) {
+      return {
+        success: false,
+        error: `비밀번호를 여러 번 틀려 로그인이 잠겼습니다.\n${LOGIN_LOCK_MINUTES}분 뒤에 다시 시도해 주세요.`,
+      };
+    }
+
     const { data: verified } = await supabase.rpc('verify_admin_password', {
       p_admin_id: admin.id,
       p_password: password,
     });
 
     if (!verified) {
+      if (typeof admin.failed_login_count === 'number') {
+        const failures = admin.failed_login_count + 1;
+        const lock = failures >= LOGIN_MAX_FAILURES;
+        await supabase
+          .from('admin_users')
+          .update({
+            failed_login_count: lock ? 0 : failures,
+            locked_until: lock ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000).toISOString() : null,
+          })
+          .eq('id', admin.id);
+      }
       return { success: false, error: '아이디 또는 비밀번호가 일치하지 않습니다.' };
     }
 
     await supabase
       .from('admin_users')
-      .update({ last_login_at: new Date().toISOString() })
+      .update(
+        typeof admin.failed_login_count === 'number'
+          ? { last_login_at: new Date().toISOString(), failed_login_count: 0, locked_until: null }
+          : { last_login_at: new Date().toISOString() }
+      )
       .eq('id', admin.id);
 
     await setAdminSession({ adminId: admin.id, username: admin.username });
 
-    return { success: true };
+    return { success: true, data: { role: admin.role === 'manager' ? 'manager' : 'owner' } };
   } catch (error) {
     console.error('adminLogin 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
@@ -261,6 +288,131 @@ export async function changeAdminPassword(
     console.error('changeAdminPassword 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
+}
+
+// ============================================================
+// 매니저 계정 (예약관리만 쓰는 공용 계정) — 전체 관리자만 관리
+// ============================================================
+
+export interface ManagerAccountItem {
+  id: string;
+  username: string;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+const MANAGER_PASSWORD_MIN_LENGTH = 4;
+
+export async function getManagerAccounts(): Promise<ApiResponse<ManagerAccountItem[]>> {
+  const admin = await getAdminSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('admin_users')
+    .select('id, username, is_active, last_login_at, created_at')
+    .eq('role', 'manager')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('getManagerAccounts 오류:', error);
+    return { success: false, error: '매니저 계정을 불러오지 못했습니다. (027 마이그레이션을 실행했는지 확인해 주세요)' };
+  }
+  return {
+    success: true,
+    data: (data || []).map((a) => ({
+      id: a.id,
+      username: a.username,
+      isActive: a.is_active,
+      lastLoginAt: a.last_login_at,
+      createdAt: a.created_at,
+    })),
+  };
+}
+
+export async function createManagerAccount(username: string, password: string): Promise<ApiResponse<null>> {
+  const admin = await getAdminSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  const name = username.trim();
+  if (!/^[A-Za-z0-9_.-]{3,30}$/.test(name)) {
+    return { success: false, error: '아이디는 영문·숫자 3~30자로 입력해 주세요.' };
+  }
+  if (password.length < MANAGER_PASSWORD_MIN_LENGTH) {
+    return { success: false, error: `비밀번호는 ${MANAGER_PASSWORD_MIN_LENGTH}자 이상으로 입력해 주세요.` };
+  }
+
+  const supabase = createAdminClient();
+  const { data: newId, error } = await supabase.rpc('create_manager_account', {
+    p_username: name,
+    p_password: password,
+  });
+  if (error) {
+    if (error.code === '23505') return { success: false, error: '이미 사용 중인 아이디입니다.' };
+    console.error('createManagerAccount 오류:', error);
+    return { success: false, error: '계정 생성 중 오류가 발생했습니다. (027 마이그레이션을 실행했는지 확인해 주세요)' };
+  }
+
+  await supabase.from('audit_logs').insert({
+    admin_id: admin.adminId,
+    action: AUDIT_ACTION.MANAGER_CREATE,
+    target_type: 'admin_user',
+    target_id: newId,
+    after_data: { username: name, role: 'manager' },
+  });
+  return { success: true };
+}
+
+export async function resetManagerPassword(managerId: string, newPassword: string): Promise<ApiResponse<null>> {
+  const admin = await getAdminSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+  if (newPassword.length < MANAGER_PASSWORD_MIN_LENGTH) {
+    return { success: false, error: `비밀번호는 ${MANAGER_PASSWORD_MIN_LENGTH}자 이상으로 입력해 주세요.` };
+  }
+
+  const supabase = createAdminClient();
+  const { data: changed, error } = await supabase.rpc('reset_manager_password', {
+    p_admin_id: managerId,
+    p_new_password: newPassword,
+  });
+  if (error || !changed) {
+    console.error('resetManagerPassword 오류:', error);
+    return { success: false, error: '비밀번호 변경 중 오류가 발생했습니다.' };
+  }
+
+  await supabase.from('audit_logs').insert({
+    admin_id: admin.adminId,
+    action: AUDIT_ACTION.MANAGER_PASSWORD_RESET,
+    target_type: 'admin_user',
+    target_id: managerId,
+  });
+  return { success: true };
+}
+
+export async function setManagerActive(managerId: string, active: boolean): Promise<ApiResponse<null>> {
+  const admin = await getAdminSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from('admin_users')
+    .update({ is_active: active })
+    .eq('id', managerId)
+    .eq('role', 'manager');
+  if (error) {
+    console.error('setManagerActive 오류:', error);
+    return { success: false, error: '처리 중 오류가 발생했습니다.' };
+  }
+
+  await supabase.from('audit_logs').insert({
+    admin_id: admin.adminId,
+    action: AUDIT_ACTION.MANAGER_UPDATE,
+    target_type: 'admin_user',
+    target_id: managerId,
+    after_data: { is_active: active },
+  });
+  return { success: true };
 }
 
 // ============================================================
