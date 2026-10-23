@@ -253,7 +253,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     if (result.data?.smsError) {
       setSendResult({
         ok: false,
-        text: `예약은 명단에 저장됐지만 문자를 보내지 못했습니다. 아래 명단에서 「문자재전송」를 눌러 주세요.\n(${result.data.smsError})`,
+        text: `예약은 명단에 저장됐지만 문자를 보내지 못했습니다. 아래 명단에서 「문자재전송」을 눌러 주세요.\n(${result.data.smsError})`,
       });
     } else {
       setSendResult({ ok: true, text: `${form.customerName.trim()}님께 예약 안내 문자를 보냈습니다.` });
@@ -317,7 +317,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
       return;
     }
     setEditing(null);
-    setRowMessage({ ok: true, text: '예약을 수정했습니다. 손님께 바뀐 내용을 알리려면 「문자재전송」를 눌러 주세요.' });
+    setRowMessage({ ok: true, text: '예약을 수정했습니다. 손님께 바뀐 내용을 알리려면 「문자재전송」을 눌러 주세요.' });
     loadList(scope);
   }
 
@@ -547,7 +547,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
               onChange={(next) => setEditing({ ...editing, form: next })}
               idPrefix="edit"
             />
-            <p className="text-sm text-[#6B6B5E]">저장만 하고 문자는 보내지 않습니다. 손님께 알리려면 저장 후 「문자재전송」를 눌러 주세요.</p>
+            <p className="text-sm text-[#6B6B5E]">저장만 하고 문자는 보내지 않습니다. 손님께 알리려면 저장 후 「문자재전송」을 눌러 주세요.</p>
             {editError && <p className="text-sm font-semibold text-[#B3261E]">{editError}</p>}
             <div className="flex gap-3">
               <button
