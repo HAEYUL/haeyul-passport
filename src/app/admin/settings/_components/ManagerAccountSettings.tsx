@@ -76,7 +76,7 @@ export default function ManagerAccountSettings() {
     const result = await resetManagerPassword(account.id, resetPassword);
     setBusy(false);
     if (result.success) {
-      setMessage({ ok: true, text: `「${account.username}」 비밀번호를 바꿨습니다.` });
+      setMessage({ ok: true, text: `「${account.username}」 비밀번호를 바꿨습니다. 로그인되어 있던 기기는 모두 로그아웃됩니다.` });
       setResetTarget(null);
       setResetPassword('');
     } else {
@@ -107,7 +107,7 @@ export default function ManagerAccountSettings() {
         <h2 className="text-lg font-bold text-[#2D5A3D]">매니저 계정 (예약관리 전용)</h2>
         <p className="text-sm text-[#6B6B5E] leading-relaxed">
           매니저 계정으로 로그인하면 <strong>예약관리 화면만</strong> 보입니다. 예약 입력·안내 문자 보내기·명단 보기·예약
-          수정·취소를 할 수 있고, 문구 수정·엑셀 다운로드와 다른 관리자 메뉴는 쓸 수 없습니다. 비밀번호를 5번 틀리면 15분간 로그인이 잠깁니다.
+          수정·취소를 할 수 있고, 문구 수정·엑셀 다운로드와 다른 관리자 메뉴는 쓸 수 없습니다. 로그인은 한 달 유지되며, 비밀번호를 바꾸면 로그인되어 있던 기기가 모두 로그아웃됩니다. 비밀번호를 5번 틀리면 15분간 로그인이 잠깁니다.
         </p>
       </div>
 

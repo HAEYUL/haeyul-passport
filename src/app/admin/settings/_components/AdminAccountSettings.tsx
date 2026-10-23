@@ -29,7 +29,7 @@ export default function AdminAccountSettings() {
     setSaving(false);
 
     if (result.success) {
-      setSuccessMessage('비밀번호가 변경되었습니다.');
+      setSuccessMessage('비밀번호가 변경되었습니다. 이 기기 말고 다른 기기에 로그인되어 있던 관리자 계정은 로그아웃됩니다.');
       setCurrentPassword('');
       setNewPassword('');
       setNewPasswordConfirm('');
