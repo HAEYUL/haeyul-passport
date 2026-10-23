@@ -322,9 +322,13 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
   }
 
   const keyword = search.trim().replace(/-/g, '');
-  const visibleItems = (items || []).filter(
-    (r) => !keyword || r.customerName.includes(search.trim()) || r.phone.replace(/-/g, '').includes(keyword)
-  );
+  // 예약일시 순 — 다가오는 예약은 가까운 순, 지난 예약은 최근 순
+  const visibleItems = (items || [])
+    .filter((r) => !keyword || r.customerName.includes(search.trim()) || r.phone.replace(/-/g, '').includes(keyword))
+    .sort((a, b) => {
+      const diff = `${a.reservedDate} ${a.reservedTime}`.localeCompare(`${b.reservedDate} ${b.reservedTime}`);
+      return scope === 'upcoming' ? diff : -diff;
+    });
 
   const preview = template ? previewMessage(template.body, form) : '';
 
@@ -434,15 +438,18 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
           ) : visibleItems.length === 0 ? (
             <p className="text-sm text-[#6B6B5E]">{scope === 'upcoming' ? '다가오는 예약이 없습니다.' : '지난 예약이 없습니다.'}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-6 px-6">
+              <p className="mb-2 text-xs text-[#6B6B5E] sm:hidden">← 옆으로 밀어서 전체를 볼 수 있어요</p>
+              {/* 한 줄에 한 예약 — 칸이 좁아도 줄바꿈하지 않고 옆으로 스크롤합니다. 예약일시 칸은 왼쪽에 고정 */}
+              <table className="min-w-[980px] w-full text-sm whitespace-nowrap">
                 <thead>
                   <tr className="border-b-2 border-[#E0DCD0] text-left text-[#6B6B5E]">
-                    <th className="py-2 pr-3 font-semibold">예약일시</th>
-                    <th className="py-2 pr-3 font-semibold">예약자</th>
-                    <th className="py-2 pr-3 font-semibold">인원</th>
-                    <th className="py-2 pr-3 font-semibold">메모</th>
-                    <th className="py-2 pr-3 font-semibold">안내 문자</th>
+                    <th className="sticky left-0 z-10 bg-white py-2 pr-4 font-semibold">예약일시</th>
+                    <th className="py-2 pr-4 font-semibold">예약자</th>
+                    <th className="py-2 pr-4 font-semibold">휴대폰번호</th>
+                    <th className="py-2 pr-4 font-semibold">인원</th>
+                    <th className="py-2 pr-4 font-semibold">메모</th>
+                    <th className="py-2 pr-4 font-semibold">안내 문자</th>
                     <th className="py-2 font-semibold">관리</th>
                   </tr>
                 </thead>
@@ -450,30 +457,30 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                   {visibleItems.map((r) => {
                     const cancelled = r.status === 'cancelled';
                     return (
-                      <tr key={r.id} className={`border-b border-[#F0EDE6] align-top ${cancelled ? 'text-[#9C988B]' : ''}`}>
-                        <td className="py-3 pr-3 whitespace-nowrap">
-                          <p className="font-semibold">{formatReservationDate(r.reservedDate)}</p>
-                          <p>{formatReservationTime(r.reservedTime)}</p>
+                      <tr key={r.id} className={`border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
+                        <td className="sticky left-0 z-10 bg-white py-2.5 pr-4">
+                          <span className="font-semibold">{formatReservationDate(r.reservedDate)}</span>{' '}
+                          {formatReservationTime(r.reservedTime)}
                           {cancelled && (
-                            <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0EFE9] text-[#6B6B5E] border border-[#D4D0C8]">
+                            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0EFE9] text-[#6B6B5E] border border-[#D4D0C8]">
                               취소
                             </span>
                           )}
                         </td>
-                        <td className="py-3 pr-3">
-                          <p className="font-semibold">
-                            {r.customerName}
-                            {r.isPassportMember && (
-                              <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
-                                여권회원
-                              </span>
-                            )}
-                          </p>
-                          <p className="whitespace-nowrap">{r.phone}</p>
+                        <td className="py-2.5 pr-4">
+                          <span className="font-semibold">{r.customerName}</span>
+                          {r.isPassportMember && (
+                            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
+                              여권회원
+                            </span>
+                          )}
                         </td>
-                        <td className="py-3 pr-3 whitespace-nowrap">{r.partySize}명</td>
-                        <td className="py-3 pr-3 min-w-[120px]">{r.memo}</td>
-                        <td className="py-3 pr-3 whitespace-nowrap">
+                        <td className="py-2.5 pr-4">{r.phone}</td>
+                        <td className="py-2.5 pr-4">{r.partySize}명</td>
+                        <td className="py-2.5 pr-4 max-w-[200px] truncate" title={r.memo ?? ''}>
+                          {r.memo}
+                        </td>
+                        <td className="py-2.5 pr-4">
                           {r.smsStatus === 'sent' && (
                             <span className="text-[#1F4A2E] font-semibold">✓ 발송 {r.smsSentAt && formatSentAt(r.smsSentAt)}</span>
                           )}
@@ -484,9 +491,9 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                           )}
                           {!r.smsStatus && <span className="text-[#6B6B5E]">-</span>}
                         </td>
-                        <td className="py-3">
+                        <td className="py-2.5">
                           {!cancelled && (
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-nowrap gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => startEdit(r)}
