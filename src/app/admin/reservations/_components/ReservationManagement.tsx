@@ -7,6 +7,7 @@ import {
   resendReservationSms,
   updateReservation,
   cancelReservation,
+  deleteReservation,
   getReservations,
   getReservationSmsTemplate,
   updateReservationSmsTemplate,
@@ -288,6 +289,22 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     loadList(scope);
   }
 
+  async function handleDelete(item: ReservationItem) {
+    if (
+      !window.confirm(
+        `${item.customerName}님 ${formatReservationDate(item.reservedDate)} 예약을 명단에서 완전히 삭제할까요?\n삭제하면 되돌릴 수 없습니다. (손님께 문자는 가지 않습니다)`
+      )
+    ) {
+      return;
+    }
+    setBusyId(item.id);
+    setRowMessage(null);
+    const result = await deleteReservation(item.id);
+    setBusyId(null);
+    setRowMessage(result.success ? { ok: true, text: '예약을 삭제했습니다.' } : { ok: false, text: result.error || '처리 중 오류가 발생했습니다.' });
+    loadList(scope);
+  }
+
   function startEdit(item: ReservationItem) {
     setEditError('');
     setEditing({
@@ -482,34 +499,44 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                           )}
                           {!r.smsStatus && <span className="text-[#6B6B5E]">문자 -</span>}
                         </span>
-                        {!cancelled && (
-                          <span className="flex flex-nowrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => startEdit(r)}
-                              disabled={busyId === r.id}
-                              className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                            >
-                              수정
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleResend(r)}
-                              disabled={busyId === r.id}
-                              className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                            >
-                              문자재전송
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCancel(r)}
-                              disabled={busyId === r.id}
-                              className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
-                            >
-                              취소
-                            </button>
-                          </span>
-                        )}
+                        <span className="flex flex-nowrap gap-1.5">
+                          {!cancelled && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => startEdit(r)}
+                                disabled={busyId === r.id}
+                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleResend(r)}
+                                disabled={busyId === r.id}
+                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+                              >
+                                문자재전송
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancel(r)}
+                                disabled={busyId === r.id}
+                                className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
+                              >
+                                취소
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(r)}
+                            disabled={busyId === r.id}
+                            className="px-3 py-1.5 rounded-lg bg-[#FBEAEA] border border-[#E8B4B0] text-[#8A241A] font-semibold hover:bg-[#F6DCDA] disabled:opacity-40"
+                          >
+                            삭제
+                          </button>
+                        </span>
                       </div>
                     </li>
                   );

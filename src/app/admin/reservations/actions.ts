@@ -17,7 +17,7 @@ import type { ApiResponse } from '@/types/database';
 /**
  * 전화 예약자 명단 · 예약 안내 문자 (026 마이그레이션)
  * 여권 회원 명단과 분리된 별도 명단이며, 예약 안내(정보성) 목적으로만 씁니다.
- * 예약 입력·문자 보내기·명단 보기·예약 수정·취소는 매니저 계정도 쓸 수 있고(getStaffSession),
+ * 예약 입력·문자 보내기·명단 보기·예약 수정·취소·삭제는 매니저 계정도 쓸 수 있고(getStaffSession),
  * 문구 수정은 전체 관리자만 할 수 있습니다(getAdminSession).
  */
 
@@ -305,6 +305,37 @@ export async function updateReservation(reservationId: string, input: Reservatio
     return { success: true };
   } catch (error) {
     console.error('updateReservation 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/** 예약 삭제 — 예약자 명단에서 완전히 지웁니다 (되돌릴 수 없음). 활동이력에는 전화번호 없이 일시·인원만 남깁니다. */
+export async function deleteReservation(reservationId: string): Promise<ApiResponse<null>> {
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  try {
+    const supabase = createAdminClient();
+    const { data: before } = await supabase
+      .from('reservations')
+      .select('reserved_date, reserved_time, party_size, status')
+      .eq('id', reservationId)
+      .single();
+    if (!before) return { success: false, error: '예약을 찾을 수 없습니다.' };
+
+    const { error } = await supabase.from('reservations').delete().eq('id', reservationId);
+    if (error) return { success: false, error: '예약 삭제 중 오류가 발생했습니다.' };
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.RESERVATION_DELETE,
+      target_type: 'reservation',
+      target_id: reservationId,
+      before_data: before,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('deleteReservation 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
