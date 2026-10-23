@@ -487,16 +487,14 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                         <td className="py-3">
                           {!cancelled && (
                             <div className="flex flex-wrap gap-1.5">
-                              {isOwner && (
-                                <button
-                                  type="button"
-                                  onClick={() => startEdit(r)}
-                                  disabled={busyId === r.id}
-                                  className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                                >
-                                  수정
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => startEdit(r)}
+                                disabled={busyId === r.id}
+                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+                              >
+                                수정
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleResend(r)}
@@ -505,16 +503,14 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                               >
                                 문자 다시 보내기
                               </button>
-                              {isOwner && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCancel(r)}
-                                  disabled={busyId === r.id}
-                                  className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
-                                >
-                                  취소
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleCancel(r)}
+                                disabled={busyId === r.id}
+                                className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
+                              >
+                                취소
+                              </button>
                             </div>
                           )}
                         </td>

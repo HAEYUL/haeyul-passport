@@ -25,7 +25,7 @@ const INPUT_CLASS =
 
 /**
  * 매니저 계정 관리 — 예약관리 화면만 쓰는 공용 계정을 만들고, 비밀번호를 바꾸고, 사용을 중지합니다.
- * 매니저 계정은 다른 관리자 메뉴에 들어갈 수 없고, 예약 수정·취소·문구 수정·엑셀 다운로드도 할 수 없습니다.
+ * 매니저 계정은 다른 관리자 메뉴에 들어갈 수 없고, 문구 수정·엑셀 다운로드도 할 수 없습니다.
  */
 export default function ManagerAccountSettings() {
   const [accounts, setAccounts] = useState<ManagerAccountItem[] | null>(null);
@@ -106,8 +106,8 @@ export default function ManagerAccountSettings() {
       <div className="space-y-1">
         <h2 className="text-lg font-bold text-[#2D5A3D]">매니저 계정 (예약관리 전용)</h2>
         <p className="text-sm text-[#6B6B5E] leading-relaxed">
-          매니저 계정으로 로그인하면 <strong>예약관리 화면만</strong> 보입니다. 예약 입력·안내 문자 보내기·명단 보기만 할 수 있고, 예약
-          수정·취소·문구 수정·엑셀 다운로드와 다른 관리자 메뉴는 쓸 수 없습니다. 비밀번호를 5번 틀리면 15분간 로그인이 잠깁니다.
+          매니저 계정으로 로그인하면 <strong>예약관리 화면만</strong> 보입니다. 예약 입력·안내 문자 보내기·명단 보기·예약
+          수정·취소를 할 수 있고, 문구 수정·엑셀 다운로드와 다른 관리자 메뉴는 쓸 수 없습니다. 비밀번호를 5번 틀리면 15분간 로그인이 잠깁니다.
         </p>
       </div>
 

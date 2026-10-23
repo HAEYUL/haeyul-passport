@@ -17,8 +17,8 @@ import type { ApiResponse } from '@/types/database';
 /**
  * 전화 예약자 명단 · 예약 안내 문자 (026 마이그레이션)
  * 여권 회원 명단과 분리된 별도 명단이며, 예약 안내(정보성) 목적으로만 씁니다.
- * 예약 입력·문자 보내기·명단 보기는 매니저 계정도 쓸 수 있고(getStaffSession),
- * 예약 수정·취소·문구 수정은 전체 관리자만 할 수 있습니다(getAdminSession).
+ * 예약 입력·문자 보내기·명단 보기·예약 수정·취소는 매니저 계정도 쓸 수 있고(getStaffSession),
+ * 문구 수정은 전체 관리자만 할 수 있습니다(getAdminSession).
  */
 
 const TEMPLATE_TITLE_KEY = 'reservation_sms_title';
@@ -260,8 +260,8 @@ export async function resendReservationSms(reservationId: string): Promise<ApiRe
 
 /** 예약 내용 수정 (문자는 보내지 않음 — 필요하면 '문자 다시 보내기') */
 export async function updateReservation(reservationId: string, input: ReservationInput): Promise<ApiResponse<null>> {
-  const admin = await getAdminSession();
-  if (!admin) return { success: false, error: '예약 수정은 전체 관리자만 할 수 있습니다.' };
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
 
   const checked = validateInput(input);
   if ('error' in checked) return { success: false, error: checked.error };
@@ -311,8 +311,8 @@ export async function updateReservation(reservationId: string, input: Reservatio
 
 /** 예약 취소 (명단에는 '취소'로 남습니다) */
 export async function cancelReservation(reservationId: string): Promise<ApiResponse<null>> {
-  const admin = await getAdminSession();
-  if (!admin) return { success: false, error: '예약 취소는 전체 관리자만 할 수 있습니다.' };
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
 
   try {
     const supabase = createAdminClient();
