@@ -112,6 +112,87 @@ function downloadReservationsCsv(items: ReservationItem[], scope: ReservationLis
 const INPUT_CLASS =
   'w-full min-h-[44px] px-3 rounded-xl border-2 border-[#D4D0C8] bg-white text-base focus:border-[#2D5A3D] focus:outline-none';
 
+/** 예약 받는 시간 — 오전 11시 ~ 오후 8시 (24시간제 시) */
+const RESERVATION_HOURS = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const RESERVATION_MINUTES = ['00', '10', '20', '30', '40', '50'];
+
+const SELECT_CLASS =
+  'min-h-[44px] rounded-xl border-2 border-[#D4D0C8] bg-white px-2 text-base focus:border-[#2D5A3D] focus:outline-none';
+
+/**
+ * 예약시간 고르기 — 휴대폰 기본 시계(동그란 시곗바늘) 대신 오전/오후 · 시 · 분 목록에서 고릅니다.
+ * 값은 'HH:MM'(24시간제). 예전에 저장된 범위 밖 시간도 수정할 때 사라지지 않도록 목록에 넣어 둡니다.
+ */
+function TimeSelect({ idPrefix, value, onChange }: { idPrefix: string; value: string; onChange: (value: string) => void }) {
+  const [h, m] = value.split(':');
+  const hour = Number(h) || 12;
+  const minute = m ?? '00';
+  const isPm = hour >= 12;
+
+  const hours = RESERVATION_HOURS.includes(hour) ? RESERVATION_HOURS : [...RESERVATION_HOURS, hour].sort((a, b) => a - b);
+  const minutes = RESERVATION_MINUTES.includes(minute) ? RESERVATION_MINUTES : [...RESERVATION_MINUTES, minute].sort();
+  const periodHours = hours.filter((x) => (x >= 12) === isPm);
+  const toValue = (nextHour: number, nextMinute: string) => `${String(nextHour).padStart(2, '0')}:${nextMinute}`;
+
+  function changePeriod(pm: boolean) {
+    if (pm === isPm) return;
+    const candidates = hours.filter((x) => (x >= 12) === pm);
+    if (candidates.length === 0) return;
+    // 같은 시(예: 오전 11시 ↔ 오후 11시)가 범위에 없으면 그 쪽의 첫 시간으로
+    const same = pm ? hour + 12 : hour - 12;
+    onChange(toValue(candidates.includes(same) ? same : candidates[0], minute));
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <label htmlFor={`${idPrefix}-period`} className="sr-only">
+        오전 또는 오후
+      </label>
+      <select
+        id={`${idPrefix}-period`}
+        value={isPm ? 'pm' : 'am'}
+        onChange={(e) => changePeriod(e.target.value === 'pm')}
+        className={SELECT_CLASS}
+      >
+        {hours.some((x) => x < 12) && <option value="am">오전</option>}
+        {hours.some((x) => x >= 12) && <option value="pm">오후</option>}
+      </select>
+      <label htmlFor={`${idPrefix}-hour`} className="sr-only">
+        시
+      </label>
+      <select
+        id={`${idPrefix}-hour`}
+        value={hour}
+        onChange={(e) => onChange(toValue(Number(e.target.value), minute))}
+        className={SELECT_CLASS}
+      >
+        {periodHours.map((x) => (
+          <option key={x} value={x}>
+            {x % 12 === 0 ? 12 : x % 12}
+          </option>
+        ))}
+      </select>
+      <span className="text-base text-[#44443C]">시</span>
+      <label htmlFor={`${idPrefix}-minute`} className="sr-only">
+        분
+      </label>
+      <select
+        id={`${idPrefix}-minute`}
+        value={minute}
+        onChange={(e) => onChange(toValue(hour, e.target.value))}
+        className={SELECT_CLASS}
+      >
+        {minutes.map((x) => (
+          <option key={x} value={x}>
+            {x}
+          </option>
+        ))}
+      </select>
+      <span className="text-base text-[#44443C]">분</span>
+    </div>
+  );
+}
+
 function ReservationFields({
   form,
   onChange,
@@ -152,19 +233,14 @@ function ReservationFields({
         </label>
         <input id={`${idPrefix}-date`} type="date" value={form.reservedDate} onChange={set('reservedDate')} className={INPUT_CLASS} />
       </div>
-      <div className="space-y-1">
-        <label htmlFor={`${idPrefix}-time`} className="text-sm font-semibold text-[#44443C]">
-          예약시간
-        </label>
-        <input
-          id={`${idPrefix}-time`}
-          type="time"
-          step={600}
+      <fieldset className="space-y-1">
+        <legend className="text-sm font-semibold text-[#44443C]">예약시간</legend>
+        <TimeSelect
+          idPrefix={`${idPrefix}-time`}
           value={form.reservedTime}
-          onChange={set('reservedTime')}
-          className={INPUT_CLASS}
+          onChange={(reservedTime) => onChange({ ...form, reservedTime })}
         />
-      </div>
+      </fieldset>
       <div className="space-y-1">
         <label htmlFor={`${idPrefix}-party`} className="text-sm font-semibold text-[#44443C]">
           인원
