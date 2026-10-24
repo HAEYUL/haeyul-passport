@@ -366,6 +366,24 @@ export async function cancelReservation(reservationId: string): Promise<ApiRespo
   }
 }
 
+/** 예약 목록의 전화번호 중 여권 회원 번호 */
+async function findPassportMemberPhones(
+  supabase: ReturnType<typeof createAdminClient>,
+  rows: ReservationRow[]
+): Promise<Set<string>> {
+  const phones = [...new Set(rows.map((r) => r.phone))];
+  const memberPhones = new Set<string>();
+  for (let i = 0; i < phones.length; i += 200) {
+    const { data: members } = await supabase
+      .from('customers')
+      .select('phone')
+      .eq('is_active', true)
+      .in('phone', phones.slice(i, i + 200));
+    (members || []).forEach((m) => memberPhones.add(m.phone as string));
+  }
+  return memberPhones;
+}
+
 export type ReservationListScope = 'upcoming' | 'past';
 
 /**
@@ -401,20 +419,43 @@ export async function getReservations(scope: ReservationListScope): Promise<ApiR
     }
 
     const rows = (data || []) as ReservationRow[];
-    const phones = [...new Set(rows.map((r) => r.phone))];
-    const memberPhones = new Set<string>();
-    for (let i = 0; i < phones.length; i += 200) {
-      const { data: members } = await supabase
-        .from('customers')
-        .select('phone')
-        .eq('is_active', true)
-        .in('phone', phones.slice(i, i + 200));
-      (members || []).forEach((m) => memberPhones.add(m.phone as string));
-    }
+    const memberPhones = await findPassportMemberPhones(supabase, rows);
 
     return { success: true, data: rows.map((r) => toItem(r, memberPhones)) };
   } catch (error) {
     console.error('getReservations 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/** 달력 보기 — 기간(보통 한 달) 안의 예약 전체 (취소 포함, 날짜·시간 순) */
+export async function getReservationsInRange(from: string, to: string): Promise<ApiResponse<ReservationItem[]>> {
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return { success: false, error: '기간이 올바르지 않습니다.' };
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('*')
+      .gte('reserved_date', from)
+      .lte('reserved_date', to)
+      .order('reserved_date', { ascending: true })
+      .order('reserved_time', { ascending: true });
+
+    if (error) {
+      console.error('getReservationsInRange 오류:', error);
+      return { success: false, error: '예약을 불러오지 못했습니다.' };
+    }
+
+    const rows = (data || []) as ReservationRow[];
+    const memberPhones = await findPassportMemberPhones(supabase, rows);
+    return { success: true, data: rows.map((r) => toItem(r, memberPhones)) };
+  } catch (error) {
+    console.error('getReservationsInRange 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }

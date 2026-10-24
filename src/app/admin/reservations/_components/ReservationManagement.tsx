@@ -9,6 +9,7 @@ import {
   cancelReservation,
   deleteReservation,
   getReservations,
+  getReservationsInRange,
   getReservationSmsTemplate,
   updateReservationSmsTemplate,
   type ReservationItem,
@@ -188,6 +189,250 @@ function ReservationFields({
   );
 }
 
+/** 그 달의 첫날·마지막 날 ('YYYY-MM-DD') */
+function monthRange(year: number, month: number): { from: string; to: string } {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const mm = String(month).padStart(2, '0');
+  return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+}
+
+const CALENDAR_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+interface ReservationCalendarProps {
+  year: number;
+  month: number;
+  items: ReservationItem[] | null;
+  selectedDate: string | null;
+  onSelectDate: (date: string) => void;
+  onMonthChange: (year: number, month: number) => void;
+  renderRow: (r: ReservationItem) => React.ReactNode;
+}
+
+/** 달력 보기 — 날짜마다 예약 건수(취소 제외)만 보여주고, 날짜를 누르면 그날 예약이 아래에 나옵니다 */
+function ReservationCalendar({ year, month, items, selectedDate, onSelectDate, onMonthChange, renderRow }: ReservationCalendarProps) {
+  const today = getTodayKST();
+  const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const mm = String(month).padStart(2, '0');
+
+  const countByDate = new Map<string, number>();
+  for (const r of items || []) {
+    if (r.status === 'cancelled') continue;
+    countByDate.set(r.reservedDate, (countByDate.get(r.reservedDate) ?? 0) + 1);
+  }
+  const monthTotal = [...countByDate.values()].reduce((sum, n) => sum + n, 0);
+
+  const cells: (string | null)[] = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: lastDay }, (_, i) => `${year}-${mm}-${String(i + 1).padStart(2, '0')}`),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const dayItems = selectedDate
+    ? (items || [])
+        .filter((r) => r.reservedDate === selectedDate)
+        .sort((a, b) => a.reservedTime.localeCompare(b.reservedTime))
+    : [];
+
+  function move(delta: number) {
+    const d = new Date(Date.UTC(year, month - 1 + delta, 1));
+    onMonthChange(d.getUTCFullYear(), d.getUTCMonth() + 1);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => move(-1)}
+          aria-label="이전 달"
+          className="min-w-[44px] min-h-[44px] rounded-xl border-2 border-[#D4D0C8] text-[#2D5A3D] font-bold hover:bg-[#F5F5EC]"
+        >
+          ◀
+        </button>
+        <div className="text-center">
+          <p className="text-lg font-bold text-[#2D5A3D]">
+            {year}년 {month}월
+          </p>
+          <p className="text-xs text-[#6B6B5E]">{items === null ? '불러오는 중...' : `예약 ${monthTotal}건 (취소 제외)`}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => move(1)}
+          aria-label="다음 달"
+          className="min-w-[44px] min-h-[44px] rounded-xl border-2 border-[#D4D0C8] text-[#2D5A3D] font-bold hover:bg-[#F5F5EC]"
+        >
+          ▶
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {CALENDAR_WEEKDAYS.map((w, i) => (
+          <div
+            key={w}
+            className={`py-1 text-xs font-bold ${i === 0 ? 'text-[#B3261E]' : i === 6 ? 'text-[#2B5D8A]' : 'text-[#6B6B5E]'}`}
+          >
+            {w}
+          </div>
+        ))}
+        {cells.map((date, i) => {
+          if (!date) return <div key={`empty-${i}`} />;
+          const day = Number(date.slice(8));
+          const count = countByDate.get(date) ?? 0;
+          const selected = date === selectedDate;
+          const isToday = date === today;
+          const weekday = i % 7;
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => onSelectDate(date)}
+              aria-pressed={selected}
+              aria-label={`${month}월 ${day}일 예약 ${count}건`}
+              className={`min-h-[64px] rounded-xl border-2 p-1 flex flex-col items-center justify-start gap-1 transition-colors ${
+                selected
+                  ? 'border-[#2D5A3D] bg-[#F0F7F2]'
+                  : isToday
+                    ? 'border-[#DFBE5C] bg-[#FFFBEF] hover:bg-[#FFF3D6]'
+                    : 'border-[#F0EDE6] hover:bg-[#F5F5EC]'
+              }`}
+            >
+              <span
+                className={`text-sm font-semibold ${
+                  weekday === 0 ? 'text-[#B3261E]' : weekday === 6 ? 'text-[#2B5D8A]' : 'text-[#333]'
+                }`}
+              >
+                {day}
+              </span>
+              {count > 0 && (
+                <span className="rounded-full bg-[#2D5A3D] px-1.5 py-0.5 text-[11px] font-bold leading-none text-white whitespace-nowrap">
+                  {count}건
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedDate && (
+        <div className="space-y-2">
+          <p className="text-base font-bold text-[#2D5A3D]">
+            {formatReservationDate(selectedDate)} 예약 {dayItems.filter((r) => r.status !== 'cancelled').length}건
+          </p>
+          {dayItems.length === 0 ? (
+            <p className="text-sm text-[#6B6B5E]">이 날은 예약이 없습니다.</p>
+          ) : (
+            <>
+              <p className="text-xs text-[#6B6B5E] sm:hidden">← 줄을 옆으로 밀면 나머지 내용이 보여요</p>
+              <ul className="border-t border-[#F0EDE6] text-sm">{dayItems.map((r) => renderRow(r))}</ul>
+            </>
+          )}
+        </div>
+      )}
+      {!selectedDate && <p className="text-sm text-[#6B6B5E]">날짜를 누르면 그날 예약이 아래에 나옵니다.</p>}
+    </div>
+  );
+}
+
+interface ReservationRowProps {
+  r: ReservationItem;
+  busy: boolean;
+  /** 달력에서 날짜를 고른 뒤 보여줄 때는 날짜를 빼고 시간만 */
+  showDate?: boolean;
+  onEdit: (r: ReservationItem) => void;
+  onResend: (r: ReservationItem) => void;
+  onCancel: (r: ReservationItem) => void;
+  onDelete: (r: ReservationItem) => void;
+}
+
+/** 예약 한 줄 — 줄마다 따로 옆으로 스크롤됩니다 (밀어 본 줄만 움직임) */
+function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, onDelete }: ReservationRowProps) {
+  const cancelled = r.status === 'cancelled';
+  return (
+    <li className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
+      <div className="flex w-max items-center gap-4 whitespace-nowrap py-2.5 pr-2">
+        <span>
+          {showDate && (
+            <>
+              <span className="font-semibold">{formatReservationDate(r.reservedDate)}</span>{' '}
+            </>
+          )}
+          <span className={showDate ? '' : 'font-semibold'}>{formatReservationTime(r.reservedTime)}</span>
+          {cancelled && (
+            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0EFE9] text-[#6B6B5E] border border-[#D4D0C8]">
+              취소
+            </span>
+          )}
+        </span>
+        <span>
+          <span className="font-semibold">{r.customerName}</span>
+          {r.isPassportMember && (
+            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
+              여권회원
+            </span>
+          )}
+        </span>
+        <span>{r.phone}</span>
+        <span>{r.partySize}명</span>
+        {r.memo && (
+          <span className="max-w-[220px] truncate text-[#55534A]" title={r.memo}>
+            메모: {r.memo}
+          </span>
+        )}
+        <span>
+          {r.smsStatus === 'sent' && (
+            <span className="text-[#1F4A2E] font-semibold">✓ 발송 {r.smsSentAt && formatSentAt(r.smsSentAt)}</span>
+          )}
+          {r.smsStatus === 'failed' && (
+            <span className="text-[#B3261E] font-semibold" title={r.smsError ?? ''}>
+              ✕ 문자 실패
+            </span>
+          )}
+          {!r.smsStatus && <span className="text-[#6B6B5E]">문자 -</span>}
+        </span>
+        <span className="flex flex-nowrap gap-1.5">
+          {!cancelled && (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(r)}
+                disabled={busy}
+                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+              >
+                수정
+              </button>
+              <button
+                type="button"
+                onClick={() => onResend(r)}
+                disabled={busy}
+                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
+              >
+                문자재전송
+              </button>
+              <button
+                type="button"
+                onClick={() => onCancel(r)}
+                disabled={busy}
+                className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
+              >
+                취소
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => onDelete(r)}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-lg bg-[#FBEAEA] border border-[#E8B4B0] text-[#8A241A] font-semibold hover:bg-[#F6DCDA] disabled:opacity-40"
+          >
+            삭제
+          </button>
+        </span>
+      </div>
+    </li>
+  );
+}
+
 export default function ReservationManagement({ isOwner }: { isOwner: boolean }) {
   const [template, setTemplate] = useState<ReservationSmsTemplate | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -203,6 +448,14 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
 
   const [editing, setEditing] = useState<{ id: string; form: FormState } | null>(null);
   const [editError, setEditError] = useState('');
+
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const [y, m] = getTodayKST().split('-').map(Number);
+    return { year: y, month: m };
+  });
+  const [calendarItems, setCalendarItems] = useState<ReservationItem[] | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const loadTemplate = useCallback(() => {
     getReservationSmsTemplate().then((result) => {
@@ -226,9 +479,32 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     });
   }, []);
 
+  const loadCalendar = useCallback((year: number, month: number) => {
+    const { from, to } = monthRange(year, month);
+    getReservationsInRange(from, to).then((result) => {
+      if (result.success && result.data) {
+        setCalendarItems(result.data);
+        setListError('');
+      } else {
+        setCalendarItems([]);
+        setListError(result.error || '예약을 불러오지 못했습니다.');
+      }
+    });
+  }, []);
+
   useEffect(() => {
     loadTemplate();
   }, [loadTemplate]);
+
+  useEffect(() => {
+    if (view === 'calendar') loadCalendar(calendarMonth.year, calendarMonth.month);
+  }, [view, calendarMonth, loadCalendar]);
+
+  /** 예약을 보내거나 고친 뒤 목록·달력을 다시 불러옵니다 */
+  function refreshLists() {
+    loadList(scope);
+    if (view === 'calendar') loadCalendar(calendarMonth.year, calendarMonth.month);
+  }
 
   useEffect(() => {
     loadList(scope);
@@ -260,7 +536,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
       setSendResult({ ok: true, text: `${form.customerName.trim()}님께 예약 안내 문자를 보냈습니다.` });
       setForm(emptyForm());
     }
-    loadList(scope);
+    refreshLists();
   }
 
   async function handleResend(item: ReservationItem) {
@@ -276,7 +552,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     } else {
       setRowMessage({ ok: true, text: `${item.customerName}님께 예약 안내 문자를 다시 보냈습니다.` });
     }
-    loadList(scope);
+    refreshLists();
   }
 
   async function handleCancel(item: ReservationItem) {
@@ -286,7 +562,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     const result = await cancelReservation(item.id);
     setBusyId(null);
     setRowMessage(result.success ? { ok: true, text: '예약을 취소로 바꿨습니다.' } : { ok: false, text: result.error || '처리 중 오류가 발생했습니다.' });
-    loadList(scope);
+    refreshLists();
   }
 
   async function handleDelete(item: ReservationItem) {
@@ -302,7 +578,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     const result = await deleteReservation(item.id);
     setBusyId(null);
     setRowMessage(result.success ? { ok: true, text: '예약을 삭제했습니다.' } : { ok: false, text: result.error || '처리 중 오류가 발생했습니다.' });
-    loadList(scope);
+    refreshLists();
   }
 
   function startEdit(item: ReservationItem) {
@@ -335,8 +611,10 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     }
     setEditing(null);
     setRowMessage({ ok: true, text: '예약을 수정했습니다. 손님께 바뀐 내용을 알리려면 「문자재전송」을 눌러 주세요.' });
-    loadList(scope);
+    refreshLists();
   }
+
+  const rowHandlers = { onEdit: startEdit, onResend: handleResend, onCancel: handleCancel, onDelete: handleDelete };
 
   const keyword = search.trim().replace(/-/g, '');
   // 예약일시 순 — 다가오는 예약은 가까운 순, 지난 예약은 최근 순
@@ -399,6 +677,15 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-[#2D5A3D]">예약자 명단</h2>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setView(view === 'list' ? 'calendar' : 'list')}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#FFF3D6] text-[#8A5800] border-2 border-[#DFBE5C] hover:bg-[#FCE9BC]"
+              >
+                {view === 'list' ? '📅 달력 보기' : '☰ 목록 보기'}
+              </button>
+              {view === 'list' && (
+                <>
               {(
                 [
                   ['upcoming', '다가오는 예약'],
@@ -429,9 +716,32 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
                   엑셀 다운로드
                 </button>
               )}
+                </>
+              )}
             </div>
           </div>
 
+          {rowMessage && (
+            <p className={`text-sm font-semibold ${rowMessage.ok ? 'text-[#1F4A2E]' : 'text-[#B3261E]'}`}>{rowMessage.text}</p>
+          )}
+          {listError && <p className="text-sm font-semibold text-[#B3261E]">{listError}</p>}
+
+          {view === 'calendar' ? (
+            <ReservationCalendar
+              year={calendarMonth.year}
+              month={calendarMonth.month}
+              items={calendarItems}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onMonthChange={(year, month) => {
+                setCalendarItems(null);
+                setSelectedDate(null);
+                setCalendarMonth({ year, month });
+              }}
+              renderRow={(r) => <ReservationRow key={r.id} r={r} busy={busyId === r.id} showDate={false} {...rowHandlers} />}
+            />
+          ) : (
+            <>
           <div>
             <label htmlFor="reservation-search" className="sr-only">
               예약자명 또는 전화번호 검색
@@ -444,12 +754,6 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
               className={INPUT_CLASS}
             />
           </div>
-
-          {rowMessage && (
-            <p className={`text-sm font-semibold ${rowMessage.ok ? 'text-[#1F4A2E]' : 'text-[#B3261E]'}`}>{rowMessage.text}</p>
-          )}
-          {listError && <p className="text-sm font-semibold text-[#B3261E]">{listError}</p>}
-
           {items === null ? (
             <p className="text-sm text-[#6B6B5E]">불러오는 중...</p>
           ) : visibleItems.length === 0 ? (
@@ -459,90 +763,13 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
               <p className="mb-2 text-xs text-[#6B6B5E] sm:hidden">← 줄을 옆으로 밀면 나머지 내용이 보여요</p>
               {/* 한 줄에 한 예약 — 줄마다 따로 옆으로 스크롤됩니다 (밀어 본 줄만 움직임) */}
               <ul className="border-t border-[#F0EDE6] text-sm">
-                {visibleItems.map((r) => {
-                  const cancelled = r.status === 'cancelled';
-                  return (
-                    <li key={r.id} className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
-                      <div className="flex w-max items-center gap-4 whitespace-nowrap py-2.5 pr-2">
-                        <span>
-                          <span className="font-semibold">{formatReservationDate(r.reservedDate)}</span>{' '}
-                          {formatReservationTime(r.reservedTime)}
-                          {cancelled && (
-                            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0EFE9] text-[#6B6B5E] border border-[#D4D0C8]">
-                              취소
-                            </span>
-                          )}
-                        </span>
-                        <span>
-                          <span className="font-semibold">{r.customerName}</span>
-                          {r.isPassportMember && (
-                            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
-                              여권회원
-                            </span>
-                          )}
-                        </span>
-                        <span>{r.phone}</span>
-                        <span>{r.partySize}명</span>
-                        {r.memo && (
-                          <span className="max-w-[220px] truncate text-[#55534A]" title={r.memo}>
-                            메모: {r.memo}
-                          </span>
-                        )}
-                        <span>
-                          {r.smsStatus === 'sent' && (
-                            <span className="text-[#1F4A2E] font-semibold">✓ 발송 {r.smsSentAt && formatSentAt(r.smsSentAt)}</span>
-                          )}
-                          {r.smsStatus === 'failed' && (
-                            <span className="text-[#B3261E] font-semibold" title={r.smsError ?? ''}>
-                              ✕ 문자 실패
-                            </span>
-                          )}
-                          {!r.smsStatus && <span className="text-[#6B6B5E]">문자 -</span>}
-                        </span>
-                        <span className="flex flex-nowrap gap-1.5">
-                          {!cancelled && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => startEdit(r)}
-                                disabled={busyId === r.id}
-                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                              >
-                                수정
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleResend(r)}
-                                disabled={busyId === r.id}
-                                className="px-3 py-1.5 rounded-lg border border-[#D4D0C8] text-[#2D5A3D] font-semibold hover:bg-[#F5F5EC] disabled:opacity-40"
-                              >
-                                문자재전송
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCancel(r)}
-                                disabled={busyId === r.id}
-                                className="px-3 py-1.5 rounded-lg border border-[#F0D4B8] text-[#B3261E] font-semibold hover:bg-[#FFF8F0] disabled:opacity-40"
-                              >
-                                취소
-                              </button>
-                            </>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(r)}
-                            disabled={busyId === r.id}
-                            className="px-3 py-1.5 rounded-lg bg-[#FBEAEA] border border-[#E8B4B0] text-[#8A241A] font-semibold hover:bg-[#F6DCDA] disabled:opacity-40"
-                          >
-                            삭제
-                          </button>
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
+                {visibleItems.map((r) => (
+                  <ReservationRow key={r.id} r={r} busy={busyId === r.id} {...rowHandlers} />
+                ))}
               </ul>
             </div>
+          )}
+            </>
           )}
           <p className="text-xs text-[#6B6B5E]">
             예약자 명단은 같은 번호의 마지막 예약일로부터 3년이 지나면 자동으로 삭제됩니다. 홍보 문자 대상으로는 쓸 수 없습니다.
