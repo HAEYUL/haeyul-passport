@@ -434,11 +434,11 @@ function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, 
       className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''} ${paid && !cancelled ? 'bg-[#F4FAF5]' : ''}`}
     >
       <div className="flex w-max items-center gap-4 whitespace-nowrap py-2.5 pr-2">
-        {/* 입금 확인 — 줄 맨 앞, 손가락으로 누르기 쉽게 크게 */}
+        {/* 입금 확인 — 줄 맨 앞, 손가락으로 누르기 쉽게 크게. 좁은 화면에서도 이름이 보이도록 글자 없이 체크박스만 */}
         <label
           htmlFor={checkboxId}
           title={paid && r.depositPaidAt ? `입금 확인 ${formatSentAt(r.depositPaidAt)}` : '입금이 확인되면 체크해 주세요'}
-          className={`flex min-h-[44px] min-w-[64px] cursor-pointer items-center gap-1.5 rounded-lg px-2 ${busy ? 'opacity-50' : ''}`}
+          className={`flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-lg ${busy ? 'opacity-50' : ''}`}
         >
           <input
             id={checkboxId}
@@ -448,8 +448,16 @@ function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, 
             onChange={(e) => onToggleDeposit(r, e.target.checked)}
             className="h-6 w-6 cursor-pointer accent-[#2D5A3D]"
           />
-          <span className={`text-sm font-bold ${paid ? 'text-[#1F4A2E]' : 'text-[#B3261E]'}`}>{paid ? '입금' : '미입금'}</span>
+          <span className="sr-only">{r.customerName}님 입금 확인</span>
         </label>
+        <span>
+          <span className="font-semibold">{r.customerName}</span>
+          {r.isPassportMember && (
+            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
+              여권회원
+            </span>
+          )}
+        </span>
         <span>
           {showDate && (
             <>
@@ -460,14 +468,6 @@ function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, 
           {cancelled && (
             <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0EFE9] text-[#6B6B5E] border border-[#D4D0C8]">
               취소
-            </span>
-          )}
-        </span>
-        <span>
-          <span className="font-semibold">{r.customerName}</span>
-          {r.isPassportMember && (
-            <span className="ml-1.5 inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-[#F0F7F2] text-[#1F4A2E] border border-[#8FC49F]">
-              여권회원
             </span>
           )}
         </span>
