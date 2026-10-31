@@ -8,6 +8,7 @@ import {
   updateReservation,
   cancelReservation,
   deleteReservation,
+  setReservationDepositPaid,
   getReservations,
   getReservationsInRange,
   getReservationSmsTemplate,
@@ -84,7 +85,7 @@ function csvCell(value: string): string {
 const BOM = String.fromCharCode(0xfeff);
 
 function downloadReservationsCsv(items: ReservationItem[], scope: ReservationListScope) {
-  const headers = ['예약날짜', '예약시간', '예약자명', '휴대폰번호', '인원', '메모', '상태', '여권회원', '문자발송', '발송시각'];
+  const headers = ['예약날짜', '예약시간', '예약자명', '휴대폰번호', '인원', '메모', '상태', '입금확인', '여권회원', '문자발송', '발송시각'];
   const rows = items.map((r) => [
     r.reservedDate,
     r.reservedTime,
@@ -93,6 +94,7 @@ function downloadReservationsCsv(items: ReservationItem[], scope: ReservationLis
     String(r.partySize),
     r.memo ?? '',
     r.status === 'cancelled' ? '취소' : '예약',
+    r.depositPaidAt ? `입금 ${formatSentAt(r.depositPaidAt)}` : '',
     r.isPassportMember ? 'Y' : '',
     r.smsStatus === 'sent' ? '발송' : r.smsStatus === 'failed' ? '실패' : '',
     r.smsSentAt ? formatSentAt(r.smsSentAt) : '',
@@ -419,14 +421,35 @@ interface ReservationRowProps {
   onResend: (r: ReservationItem) => void;
   onCancel: (r: ReservationItem) => void;
   onDelete: (r: ReservationItem) => void;
+  onToggleDeposit: (r: ReservationItem, paid: boolean) => void;
 }
 
 /** 예약 한 줄 — 줄마다 따로 옆으로 스크롤됩니다 (밀어 본 줄만 움직임) */
-function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, onDelete }: ReservationRowProps) {
+function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, onDelete, onToggleDeposit }: ReservationRowProps) {
   const cancelled = r.status === 'cancelled';
+  const paid = Boolean(r.depositPaidAt);
+  const checkboxId = `deposit-${r.id}${showDate ? '' : '-cal'}`;
   return (
-    <li className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''}`}>
+    <li
+      className={`overflow-x-auto border-b border-[#F0EDE6] ${cancelled ? 'text-[#9C988B]' : ''} ${paid && !cancelled ? 'bg-[#F4FAF5]' : ''}`}
+    >
       <div className="flex w-max items-center gap-4 whitespace-nowrap py-2.5 pr-2">
+        {/* 입금 확인 — 줄 맨 앞, 손가락으로 누르기 쉽게 크게 */}
+        <label
+          htmlFor={checkboxId}
+          title={paid && r.depositPaidAt ? `입금 확인 ${formatSentAt(r.depositPaidAt)}` : '입금이 확인되면 체크해 주세요'}
+          className={`flex min-h-[44px] min-w-[64px] cursor-pointer items-center gap-1.5 rounded-lg px-2 ${busy ? 'opacity-50' : ''}`}
+        >
+          <input
+            id={checkboxId}
+            type="checkbox"
+            checked={paid}
+            disabled={busy}
+            onChange={(e) => onToggleDeposit(r, e.target.checked)}
+            className="h-6 w-6 cursor-pointer accent-[#2D5A3D]"
+          />
+          <span className={`text-sm font-bold ${paid ? 'text-[#1F4A2E]' : 'text-[#B3261E]'}`}>{paid ? '입금' : '미입금'}</span>
+        </label>
         <span>
           {showDate && (
             <>
@@ -521,6 +544,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowMessage, setRowMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
 
   const [editing, setEditing] = useState<{ id: string; form: FormState } | null>(null);
   const [editError, setEditError] = useState('');
@@ -657,6 +681,29 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     refreshLists();
   }
 
+  /** 입금 확인 체크 — 화면에 바로 반영하고, 저장에 실패하면 되돌립니다 */
+  async function handleToggleDeposit(item: ReservationItem, paid: boolean) {
+    const applyLocal = (depositPaidAt: string | null) => {
+      const update = (list: ReservationItem[] | null) =>
+        list ? list.map((r) => (r.id === item.id ? { ...r, depositPaidAt } : r)) : list;
+      setItems(update);
+      setCalendarItems(update);
+    };
+    if (!paid && !window.confirm(`${item.customerName}님 입금 확인을 해제할까요?`)) return;
+
+    applyLocal(paid ? new Date().toISOString() : null);
+    setBusyId(item.id);
+    setRowMessage(null);
+    const result = await setReservationDepositPaid(item.id, paid);
+    setBusyId(null);
+    if (result.success) {
+      applyLocal(result.data?.depositPaidAt ?? null);
+    } else {
+      applyLocal(item.depositPaidAt);
+      setRowMessage({ ok: false, text: result.error || '입금 확인 저장 중 오류가 발생했습니다.' });
+    }
+  }
+
   function startEdit(item: ReservationItem) {
     setEditError('');
     setEditing({
@@ -690,16 +737,27 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     refreshLists();
   }
 
-  const rowHandlers = { onEdit: startEdit, onResend: handleResend, onCancel: handleCancel, onDelete: handleDelete };
+  const rowHandlers = {
+    onEdit: startEdit,
+    onResend: handleResend,
+    onCancel: handleCancel,
+    onDelete: handleDelete,
+    onToggleDeposit: handleToggleDeposit,
+  };
 
   const keyword = search.trim().replace(/-/g, '');
   // 예약일시 순 — 다가오는 예약은 가까운 순, 지난 예약은 최근 순
   const visibleItems = (items || [])
     .filter((r) => !keyword || r.customerName.includes(search.trim()) || r.phone.replace(/-/g, '').includes(keyword))
+    .filter((r) => !unpaidOnly || (r.status !== 'cancelled' && !r.depositPaidAt))
     .sort((a, b) => {
       const diff = `${a.reservedDate} ${a.reservedTime}`.localeCompare(`${b.reservedDate} ${b.reservedTime}`);
       return scope === 'upcoming' ? diff : -diff;
     });
+  // 입금 현황 (취소 제외)
+  const activeItems = (items || []).filter((r) => r.status !== 'cancelled');
+  const paidCount = activeItems.filter((r) => r.depositPaidAt).length;
+  const unpaidCount = activeItems.length - paidCount;
 
   const preview = template ? previewMessage(template.body, form) : '';
 
@@ -830,10 +888,35 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
               className={INPUT_CLASS}
             />
           </div>
+          {items !== null && activeItems.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-[#44443C]">
+                입금 확인 <span className="font-bold text-[#1F4A2E]">{paidCount}건</span> · 미입금{' '}
+                <span className="font-bold text-[#B3261E]">{unpaidCount}건</span>{' '}
+                <span className="text-[#6B6B5E]">(취소 제외)</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setUnpaidOnly((v) => !v)}
+                aria-pressed={unpaidOnly}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                  unpaidOnly ? 'bg-[#B3261E] text-white' : 'bg-white text-[#B3261E] border-2 border-[#E8B4B0] hover:bg-[#FFF8F0]'
+                }`}
+              >
+                {unpaidOnly ? '전체 보기' : '미입금만 보기'}
+              </button>
+            </div>
+          )}
           {items === null ? (
             <p className="text-sm text-[#6B6B5E]">불러오는 중...</p>
           ) : visibleItems.length === 0 ? (
-            <p className="text-sm text-[#6B6B5E]">{scope === 'upcoming' ? '다가오는 예약이 없습니다.' : '지난 예약이 없습니다.'}</p>
+            <p className="text-sm text-[#6B6B5E]">
+              {unpaidOnly
+                ? '미입금 예약이 없습니다.'
+                : scope === 'upcoming'
+                  ? '다가오는 예약이 없습니다.'
+                  : '지난 예약이 없습니다.'}
+            </p>
           ) : (
             <div>
               <p className="mb-2 text-xs text-[#6B6B5E] sm:hidden">← 줄을 옆으로 밀면 나머지 내용이 보여요</p>

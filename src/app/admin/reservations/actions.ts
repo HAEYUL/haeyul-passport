@@ -39,6 +39,8 @@ export interface ReservationItem {
   smsStatus: 'sent' | 'failed' | null;
   smsSentAt: string | null;
   smsError: string | null;
+  /** 예약금 입금 확인을 체크한 시각 (null이면 미입금) */
+  depositPaidAt: string | null;
   createdAt: string;
   /** 같은 번호의 여권 회원이 있는지 */
   isPassportMember: boolean;
@@ -70,6 +72,8 @@ interface ReservationRow {
   sms_status: 'sent' | 'failed' | null;
   sms_sent_at: string | null;
   sms_error: string | null;
+  /** 029 마이그레이션 전에는 없음 */
+  deposit_paid_at?: string | null;
   created_at: string;
 }
 
@@ -86,6 +90,7 @@ function toItem(row: ReservationRow, memberPhones: Set<string>): ReservationItem
     smsStatus: row.sms_status,
     smsSentAt: row.sms_sent_at,
     smsError: row.sms_error,
+    depositPaidAt: row.deposit_paid_at ?? null,
     createdAt: row.created_at,
     isPassportMember: memberPhones.has(row.phone),
   };
@@ -362,6 +367,43 @@ export async function cancelReservation(reservationId: string): Promise<ApiRespo
     return { success: true };
   } catch (error) {
     console.error('cancelReservation 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
+/** 예약금 입금 확인 체크 / 해제. 성공하면 저장된 입금 확인 시각(해제면 null)을 돌려줍니다. */
+export async function setReservationDepositPaid(
+  reservationId: string,
+  paid: boolean
+): Promise<ApiResponse<{ depositPaidAt: string | null }>> {
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  try {
+    const supabase = createAdminClient();
+    const depositPaidAt = paid ? new Date().toISOString() : null;
+    const { data, error } = await supabase
+      .from('reservations')
+      .update({ deposit_paid_at: depositPaidAt, deposit_checked_by: paid ? admin.adminId : null })
+      .eq('id', reservationId)
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      console.error('setReservationDepositPaid 오류:', error);
+      return { success: false, error: '입금 확인 저장 중 오류가 발생했습니다. (029 마이그레이션을 실행했는지 확인해 주세요)' };
+    }
+    if (!data) return { success: false, error: '예약을 찾을 수 없습니다.' };
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.RESERVATION_DEPOSIT_CHECK,
+      target_type: 'reservation',
+      target_id: reservationId,
+      after_data: { deposit: paid ? 'paid' : 'unpaid' },
+    });
+    return { success: true, data: { depositPaidAt } };
+  } catch (error) {
+    console.error('setReservationDepositPaid 오류:', error);
     return { success: false, error: '서버 오류가 발생했습니다.' };
   }
 }
