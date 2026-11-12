@@ -7,6 +7,7 @@ import {
   resendReservationSms,
   updateReservation,
   cancelReservation,
+  restoreReservation,
   deleteReservation,
   setReservationDepositPaid,
   getReservations,
@@ -420,12 +421,13 @@ interface ReservationRowProps {
   onEdit: (r: ReservationItem) => void;
   onResend: (r: ReservationItem) => void;
   onCancel: (r: ReservationItem) => void;
+  onRestore: (r: ReservationItem) => void;
   onDelete: (r: ReservationItem) => void;
   onToggleDeposit: (r: ReservationItem, paid: boolean) => void;
 }
 
 /** 예약 한 줄 — 줄마다 따로 옆으로 스크롤됩니다 (밀어 본 줄만 움직임) */
-function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, onDelete, onToggleDeposit }: ReservationRowProps) {
+function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, onRestore, onDelete, onToggleDeposit }: ReservationRowProps) {
   const cancelled = r.status === 'cancelled';
   const paid = Boolean(r.depositPaidAt);
   const checkboxId = `deposit-${r.id}${showDate ? '' : '-cal'}`;
@@ -517,6 +519,16 @@ function ReservationRow({ r, busy, showDate = true, onEdit, onResend, onCancel, 
                 취소
               </button>
             </>
+          )}
+          {cancelled && (
+            <button
+              type="button"
+              onClick={() => onRestore(r)}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-lg border border-[#8FC49F] bg-[#F0F7F2] text-[#1F4A2E] font-semibold hover:bg-[#E3F0E7] disabled:opacity-40"
+            >
+              취소 복구
+            </button>
           )}
           <button
             type="button"
@@ -665,6 +677,16 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     refreshLists();
   }
 
+  async function handleRestore(item: ReservationItem) {
+    if (!window.confirm(`${item.customerName}님 ${formatReservationDate(item.reservedDate)} 예약을 다시 '예약' 상태로 되돌릴까요?\n(손님께 문자는 가지 않습니다)`)) return;
+    setBusyId(item.id);
+    setRowMessage(null);
+    const result = await restoreReservation(item.id);
+    setBusyId(null);
+    setRowMessage(result.success ? { ok: true, text: '취소를 되돌려 예약 상태로 복구했습니다.' } : { ok: false, text: result.error || '처리 중 오류가 발생했습니다.' });
+    refreshLists();
+  }
+
   async function handleDelete(item: ReservationItem) {
     if (
       !window.confirm(
@@ -741,6 +763,7 @@ export default function ReservationManagement({ isOwner }: { isOwner: boolean })
     onEdit: startEdit,
     onResend: handleResend,
     onCancel: handleCancel,
+    onRestore: handleRestore,
     onDelete: handleDelete,
     onToggleDeposit: handleToggleDeposit,
   };

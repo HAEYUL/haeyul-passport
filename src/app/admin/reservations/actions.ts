@@ -371,6 +371,36 @@ export async function cancelReservation(reservationId: string): Promise<ApiRespo
   }
 }
 
+/** 취소 복구 — 잘못 누른 취소를 되돌려 다시 '예약' 상태로 바꿉니다 (문자는 보내지 않음) */
+export async function restoreReservation(reservationId: string): Promise<ApiResponse<null>> {
+  const admin = await getStaffSession();
+  if (!admin) return { success: false, error: '관리자 로그인이 필요합니다.' };
+
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('reservations')
+      .update({ status: 'reserved' })
+      .eq('id', reservationId)
+      .eq('status', 'cancelled')
+      .select('id')
+      .maybeSingle();
+    if (error) return { success: false, error: '취소 복구 중 오류가 발생했습니다.' };
+    if (!data) return { success: false, error: '취소된 예약을 찾을 수 없습니다. (이미 복구됐거나 삭제됐을 수 있어요)' };
+
+    await supabase.from('audit_logs').insert({
+      admin_id: admin.adminId,
+      action: AUDIT_ACTION.RESERVATION_RESTORE,
+      target_type: 'reservation',
+      target_id: reservationId,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('restoreReservation 오류:', error);
+    return { success: false, error: '서버 오류가 발생했습니다.' };
+  }
+}
+
 /** 예약금 입금 확인 체크 / 해제. 성공하면 저장된 입금 확인 시각(해제면 null)을 돌려줍니다. */
 export async function setReservationDepositPaid(
   reservationId: string,
